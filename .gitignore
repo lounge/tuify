@@ -1,0 +1,16 @@
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+tuify
+
+# Test binary
+*.test
+
+# Go coverage
+*.out
+
+# Dependency directories
+vendor/
