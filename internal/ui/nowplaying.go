@@ -160,13 +160,13 @@ func (m nowPlayingModel) View() string {
 		}
 		shuffle := ""
 		if m.shuffling {
-			shuffle = " [shuffle]"
+			shuffle = "[shuffle] "
 		}
-		status = fmt.Sprintf("%s %s — %s%s",
+		status = fmt.Sprintf("%s %s%s — %s",
 			icon,
+			nowPlayingArtistStyle.Render(shuffle),
 			nowPlayingTrackStyle.Render(m.track),
 			nowPlayingArtistStyle.Render(m.artist),
-			nowPlayingArtistStyle.Render(shuffle),
 		)
 	} else {
 		status = nowPlayingArtistStyle.Render("No track playing")
