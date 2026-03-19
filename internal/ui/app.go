@@ -62,9 +62,10 @@ func (m Model) Init() tea.Cmd {
 }
 
 const (
-	// breadcrumb text + margin-bottom: 2 lines
-	// now-playing: border-top + status + progress + help + spacing: 5 lines
-	chromeHeight = 7
+	// now-playing: border-top + status + progress + help + spacing
+	nowPlayingHeight = 5
+	// breadcrumb text + margin-bottom: 2 lines + now-playing
+	chromeHeight = 2 + nowPlayingHeight
 )
 
 func (m Model) listHeight() int {
@@ -82,7 +83,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		h := m.listHeight()
 		switch m.currentView() {
 		case viewHome:
-			m.home.list.SetSize(msg.Width, h)
+			m.home.width = msg.Width
+			m.home.height = msg.Height - nowPlayingHeight
 		case viewPlaylists:
 			m.playlists.list.SetSize(msg.Width, h)
 		case viewTracks:
@@ -192,18 +194,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.currentView() {
 	case viewHome:
-		selected := m.home.list.SelectedItem()
-		if hi, ok := selected.(homeItem); ok {
-			switch hi.kind {
-			case viewPlaylists:
-				m.playlists = newPlaylistView(m.client, m.width, m.listHeight())
-				m.pushView(viewPlaylists)
-				return m, m.playlists.Init()
-			case viewPodcasts:
-				m.podcasts = newPodcastView(m.client, m.width, m.listHeight())
-				m.pushView(viewPodcasts)
-				return m, m.podcasts.Init()
-			}
+		hi := m.home.selectedItem()
+		switch hi.kind {
+		case viewPlaylists:
+			m.playlists = newPlaylistView(m.client, m.width, m.listHeight())
+			m.pushView(viewPlaylists)
+			return m, m.playlists.Init()
+		case viewPodcasts:
+			m.podcasts = newPodcastView(m.client, m.width, m.listHeight())
+			m.pushView(viewPodcasts)
+			return m, m.podcasts.Init()
 		}
 	case viewPlaylists:
 		selected := m.playlists.list.SelectedItem()
@@ -334,20 +334,22 @@ func (m Model) View() string {
 
 	var b strings.Builder
 
-	// Breadcrumb
-	crumbs := "Home"
-	switch m.currentView() {
-	case viewPlaylists:
-		crumbs = "Home > Playlists"
-	case viewTracks:
-		crumbs = fmt.Sprintf("Home > Playlists > %s", m.tracks.playlistName)
-	case viewPodcasts:
-		crumbs = "Home > Podcasts"
-	case viewEpisodes:
-		crumbs = fmt.Sprintf("Home > Podcasts > %s", m.episodes.showName)
+	// Breadcrumb (skip on home)
+	if m.currentView() != viewHome {
+		var crumbs string
+		switch m.currentView() {
+		case viewPlaylists:
+			crumbs = "Home > Playlists"
+		case viewTracks:
+			crumbs = fmt.Sprintf("Home > Playlists > %s", m.tracks.playlistName)
+		case viewPodcasts:
+			crumbs = "Home > Podcasts"
+		case viewEpisodes:
+			crumbs = fmt.Sprintf("Home > Podcasts > %s", m.episodes.showName)
+		}
+		b.WriteString(breadcrumbStyle.Render(crumbs))
+		b.WriteString("\n")
 	}
-	b.WriteString(breadcrumbStyle.Render(crumbs))
-	b.WriteString("\n")
 
 	// Current view
 	switch m.currentView() {

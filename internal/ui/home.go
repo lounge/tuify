@@ -1,8 +1,10 @@
 package ui
 
 import (
-	"github.com/charmbracelet/bubbles/list"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type homeItem struct {
@@ -10,35 +12,51 @@ type homeItem struct {
 	kind viewKind
 }
 
-func (i homeItem) Title() string       { return i.name }
-func (i homeItem) Description() string { return "" }
-func (i homeItem) FilterValue() string { return i.name }
+var homeItems = []homeItem{
+	{name: "Playlists", kind: viewPlaylists},
+	{name: "Podcasts", kind: viewPodcasts},
+}
 
 type homeView struct {
-	list list.Model
+	cursor int
+	width  int
+	height int
 }
 
 func newHomeView(width, height int) homeView {
-	items := []list.Item{
-		homeItem{name: "Playlists", kind: viewPlaylists},
-		homeItem{name: "Podcasts", kind: viewPodcasts},
-	}
-	delegate := list.NewDefaultDelegate()
-	l := list.New(items, delegate, width, height)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(false)
-
-	return homeView{list: l}
+	return homeView{width: width, height: height}
 }
 
 func (v homeView) Update(msg tea.Msg) (homeView, tea.Cmd) {
-	var cmd tea.Cmd
-	v.list, cmd = v.list.Update(msg)
-	return v, cmd
+	if msg, ok := msg.(tea.KeyMsg); ok {
+		switch msg.String() {
+		case "up", "k":
+			if v.cursor > 0 {
+				v.cursor--
+			}
+		case "down", "j":
+			if v.cursor < len(homeItems)-1 {
+				v.cursor++
+			}
+		}
+	}
+	return v, nil
+}
+
+func (v homeView) selectedItem() homeItem {
+	return homeItems[v.cursor]
 }
 
 func (v homeView) View() string {
-	return v.list.View()
+	var rows []string
+	for i, item := range homeItems {
+		if i == v.cursor {
+			rows = append(rows, homeSelectedStyle.Render(item.name))
+		} else {
+			rows = append(rows, homeNormalStyle.Render(item.name))
+		}
+	}
+
+	menu := homeMenuStyle.Render(strings.Join(rows, "\n"))
+	return lipgloss.Place(v.width, v.height, lipgloss.Center, lipgloss.Center, menu)
 }
