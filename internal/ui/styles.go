@@ -39,7 +39,7 @@ var breadcrumbStyle = lipgloss.NewStyle().
 var (
 	nowPlayingStyle = lipgloss.NewStyle().
 			Border(lipgloss.NormalBorder(), true, false, false, false).
-			BorderForeground(colorText).
+			BorderForeground(colorSecondary).
 			Padding(0, 1)
 
 	nowPlayingTrackStyle = lipgloss.NewStyle().

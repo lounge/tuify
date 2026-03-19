@@ -213,7 +213,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			return m, m.tracks.Init()
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.playlists.fetchMore()
+			return m, m.playlists.retryLoad()
 		}
 	case viewTracks:
 		selected := m.tracks.list.SelectedItem()
@@ -221,7 +221,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			return m, m.playItem(ti.uri, "spotify:playlist:"+m.tracks.playlistID)
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.tracks.fetchMore()
+			return m, m.tracks.retryLoad()
 		}
 	case viewPodcasts:
 		selected := m.podcasts.list.SelectedItem()
@@ -231,7 +231,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			return m, m.episodes.Init()
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.podcasts.fetchMore()
+			return m, m.podcasts.retryLoad()
 		}
 	case viewEpisodes:
 		selected := m.episodes.list.SelectedItem()
@@ -239,7 +239,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			return m, m.playItem(ei.uri, "spotify:show:"+m.episodes.showID)
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.episodes.fetchMore()
+			return m, m.episodes.retryLoad()
 		}
 	}
 	return m, nil

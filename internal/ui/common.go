@@ -7,6 +7,15 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 )
 
+func newList(width, height int) list.Model {
+	l := list.New(nil, newListDelegate(), width, height)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(false)
+	return l
+}
+
 type statusItem struct {
 	text    string
 	isError bool

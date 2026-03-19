@@ -44,14 +44,8 @@ type trackView struct {
 }
 
 func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int) trackView {
-	l := list.New(nil, newListDelegate(), width, height)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(false)
-
 	return trackView{
-		list:         l,
+		list:         newList(width, height),
 		client:       client,
 		playlistID:   playlistID,
 		playlistName: playlistName,
@@ -80,6 +74,7 @@ func (v trackView) Update(msg tea.Msg) (trackView, tea.Cmd) {
 		v.loading = false
 		v.items = removeStatusItems(v.items)
 		if msg.err != nil {
+			v.hasMore = false
 			v.items = append(v.items, statusItem{text: fmt.Sprintf("Failed to load: %v — press Enter to retry", msg.err), isError: true})
 			v.list.SetItems(v.items)
 			return v, nil
@@ -123,6 +118,15 @@ func (v trackView) Update(msg tea.Msg) (trackView, tea.Cmd) {
 	}
 
 	return v, tea.Batch(cmds...)
+}
+
+func (v *trackView) retryLoad() tea.Cmd {
+	v.hasMore = true
+	v.loading = true
+	v.items = removeStatusItems(v.items)
+	v.items = append(v.items, statusItem{text: "Loading..."})
+	v.list.SetItems(v.items)
+	return v.fetchMore()
 }
 
 func (v trackView) View() string {

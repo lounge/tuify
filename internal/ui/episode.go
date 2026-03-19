@@ -41,14 +41,8 @@ type episodeView struct {
 }
 
 func newEpisodeView(client *spotify.Client, showID, showName string, width, height int) episodeView {
-	l := list.New(nil, newListDelegate(), width, height)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(false)
-
 	return episodeView{
-		list:     l,
+		list:     newList(width, height),
 		client:   client,
 		showID:   showID,
 		showName: showName,
@@ -77,6 +71,7 @@ func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 		v.loading = false
 		v.items = removeStatusItems(v.items)
 		if msg.err != nil {
+			v.hasMore = false
 			v.items = append(v.items, statusItem{text: fmt.Sprintf("Failed to load: %v — press Enter to retry", msg.err), isError: true})
 			v.list.SetItems(v.items)
 			return v, nil
@@ -120,6 +115,15 @@ func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 	}
 
 	return v, tea.Batch(cmds...)
+}
+
+func (v *episodeView) retryLoad() tea.Cmd {
+	v.hasMore = true
+	v.loading = true
+	v.items = removeStatusItems(v.items)
+	v.items = append(v.items, statusItem{text: "Loading..."})
+	v.list.SetItems(v.items)
+	return v.fetchMore()
 }
 
 func (v episodeView) View() string {

@@ -107,8 +107,8 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 }
 
 func (m nowPlayingModel) renderProgressBar() string {
-	cur := formatMs(m.progressMs)
-	total := formatMs(m.durationMs)
+	cur := formatDuration(time.Duration(m.progressMs) * time.Millisecond)
+	total := formatDuration(time.Duration(m.durationMs) * time.Millisecond)
 
 	// content width inside nowPlayingStyle (padding 0,1 = 2 chars horizontal)
 	contentWidth := m.width - 2
@@ -131,11 +131,6 @@ func (m nowPlayingModel) renderProgressBar() string {
 		progressEmptyStyle.Render(strings.Repeat("─", empty))
 
 	return progressTimeStyle.Render(cur) + " " + bar + " " + progressTimeStyle.Render(total)
-}
-
-func formatMs(ms int) string {
-	s := ms / 1000
-	return fmt.Sprintf("%d:%02d", s/60, s%60)
 }
 
 func (m nowPlayingModel) SetError(msg string) (nowPlayingModel, tea.Cmd) {

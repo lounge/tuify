@@ -232,8 +232,17 @@ func (c *Client) apiGet(ctx context.Context, url string, result interface{}) err
 	return json.Unmarshal(body, result)
 }
 
-func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string) error {
+func playOpts(deviceID string) *sp.PlayOptions {
 	opts := &sp.PlayOptions{}
+	if deviceID != "" {
+		id := sp.ID(deviceID)
+		opts.DeviceID = &id
+	}
+	return opts
+}
+
+func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string) error {
+	opts := playOpts(deviceID)
 	if contextURI != "" {
 		uri := sp.URI(contextURI)
 		opts.PlaybackContext = &uri
@@ -241,37 +250,19 @@ func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string)
 	} else {
 		opts.URIs = []sp.URI{sp.URI(itemURI)}
 	}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
 	return c.sp.PlayOpt(ctx, opts)
 }
 
 func (c *Client) Resume(ctx context.Context, deviceID string) error {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
-	return c.sp.PlayOpt(ctx, opts)
+	return c.sp.PlayOpt(ctx, playOpts(deviceID))
 }
 
 func (c *Client) Pause(ctx context.Context, deviceID string) error {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
-	return c.sp.PauseOpt(ctx, opts)
+	return c.sp.PauseOpt(ctx, playOpts(deviceID))
 }
 
 func (c *Client) Stop(ctx context.Context, deviceID string) error {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
+	opts := playOpts(deviceID)
 	if err := c.sp.PauseOpt(ctx, opts); err != nil {
 		return err
 	}
@@ -279,39 +270,19 @@ func (c *Client) Stop(ctx context.Context, deviceID string) error {
 }
 
 func (c *Client) Next(ctx context.Context, deviceID string) error {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
-	return c.sp.NextOpt(ctx, opts)
+	return c.sp.NextOpt(ctx, playOpts(deviceID))
 }
 
 func (c *Client) Previous(ctx context.Context, deviceID string) error {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
-	return c.sp.PreviousOpt(ctx, opts)
+	return c.sp.PreviousOpt(ctx, playOpts(deviceID))
 }
 
 func (c *Client) Shuffle(ctx context.Context, state bool, deviceID string) error {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
-	return c.sp.ShuffleOpt(ctx, state, opts)
+	return c.sp.ShuffleOpt(ctx, state, playOpts(deviceID))
 }
 
 func (c *Client) Seek(ctx context.Context, positionMs int, deviceID string) error {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
-	return c.sp.SeekOpt(ctx, positionMs, opts)
+	return c.sp.SeekOpt(ctx, positionMs, playOpts(deviceID))
 }
 
 func (c *Client) FindDevice(ctx context.Context) (string, error) {
