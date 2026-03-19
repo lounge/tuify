@@ -21,7 +21,12 @@ type statusItem struct {
 	isError bool
 }
 
-func (i statusItem) Title() string       { return i.text }
+func (i statusItem) Title() string {
+	if i.isError {
+		return errorStyle.Render(i.text)
+	}
+	return i.text
+}
 func (i statusItem) Description() string { return "" }
 func (i statusItem) FilterValue() string { return "" }
 

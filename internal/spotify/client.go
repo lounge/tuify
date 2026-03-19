@@ -291,7 +291,7 @@ func (c *Client) FindDevice(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if len(devices) == 0 {
-		return "", fmt.Errorf("no Spotify devices found — open Spotify on any device")
+		return "", fmt.Errorf("No Spotify devices found — open Spotify on any device")
 	}
 	for _, d := range devices {
 		if d.Active {
