@@ -44,8 +44,7 @@ type trackView struct {
 }
 
 func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int) trackView {
-	delegate := list.NewDefaultDelegate()
-	l := list.New(nil, delegate, width, height)
+	l := list.New(nil, newListDelegate(), width, height)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)

@@ -51,9 +51,9 @@ func (v homeView) View() string {
 	var rows []string
 	for i, item := range homeItems {
 		if i == v.cursor {
-			rows = append(rows, homeSelectedStyle.Render(item.name))
+			rows = append(rows, selectedStyle.Render(item.name))
 		} else {
-			rows = append(rows, homeNormalStyle.Render(item.name))
+			rows = append(rows, normalStyle.Render(item.name))
 		}
 	}
 

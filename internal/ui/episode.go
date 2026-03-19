@@ -41,8 +41,7 @@ type episodeView struct {
 }
 
 func newEpisodeView(client *spotify.Client, showID, showName string, width, height int) episodeView {
-	delegate := list.NewDefaultDelegate()
-	l := list.New(nil, delegate, width, height)
+	l := list.New(nil, newListDelegate(), width, height)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)

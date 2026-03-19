@@ -37,8 +37,7 @@ type playlistView struct {
 }
 
 func newPlaylistView(client *spotify.Client, width, height int) playlistView {
-	delegate := list.NewDefaultDelegate()
-	l := list.New(nil, delegate, width, height)
+	l := list.New(nil, newListDelegate(), width, height)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)

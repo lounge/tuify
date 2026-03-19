@@ -163,8 +163,8 @@ func (m nowPlayingModel) View() string {
 			shuffle = "[shuffle] "
 		}
 		status = fmt.Sprintf("%s %s%s — %s",
-			icon,
-			nowPlayingArtistStyle.Render(shuffle),
+			nowPlayingIconStyle.Render(icon),
+			nowPlayingIconStyle.Render(shuffle),
 			nowPlayingTrackStyle.Render(m.track),
 			nowPlayingArtistStyle.Render(m.artist),
 		)

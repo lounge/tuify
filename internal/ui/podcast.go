@@ -35,8 +35,7 @@ type podcastView struct {
 }
 
 func newPodcastView(client *spotify.Client, width, height int) podcastView {
-	delegate := list.NewDefaultDelegate()
-	l := list.New(nil, delegate, width, height)
+	l := list.New(nil, newListDelegate(), width, height)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
