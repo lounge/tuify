@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func newList(width, height int) list.Model {
@@ -21,11 +22,13 @@ type statusItem struct {
 	isError bool
 }
 
+var loadingStyle = lipgloss.NewStyle().Foreground(colorSubtle)
+
 func (i statusItem) Title() string {
 	if i.isError {
 		return errorStyle.Render(i.text)
 	}
-	return i.text
+	return loadingStyle.Render(i.text)
 }
 func (i statusItem) Description() string { return "" }
 func (i statusItem) FilterValue() string { return "" }
@@ -50,8 +53,12 @@ type lazyList struct {
 }
 
 func newLazyList(width, height int) lazyList {
+	l := newList(width, height)
+	initial := []list.Item{statusItem{text: "Loading..."}}
+	l.SetItems(initial)
 	return lazyList{
-		list:    newList(width, height),
+		list:    l,
+		items:   initial,
 		loading: true,
 		hasMore: true,
 	}

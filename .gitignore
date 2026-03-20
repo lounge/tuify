@@ -17,4 +17,5 @@ vendor/
 
 # Mac
 .DS_Store
+
 *.log
