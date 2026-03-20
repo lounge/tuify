@@ -57,11 +57,23 @@ var (
 	progressTimeStyle   = lipgloss.NewStyle().Foreground(colorSubtle)
 )
 
-// Home menu
-var homeMenuStyle = lipgloss.NewStyle().
-	Border(lipgloss.RoundedBorder()).
-	BorderForeground(colorMuted).
-	Padding(1, 3)
+// Home tabs
+var (
+	homeTabWidth = 20
+
+	homeTabActive = lipgloss.NewStyle().
+			Background(colorPrimary).
+			Foreground(lipgloss.Color("#000000")).
+			Width(homeTabWidth).
+			Align(lipgloss.Center).
+			Padding(1, 1, 1, 1)
+
+	homeTabInactive = lipgloss.NewStyle().
+			Foreground(colorPrimary).
+			Width(homeTabWidth).
+			Align(lipgloss.Center).
+			Padding(0, 3)
+)
 
 // Shared
 var (
