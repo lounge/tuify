@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"strconv"
 	"time"
 
 	sp "github.com/zmb3/spotify/v2"
@@ -213,23 +215,44 @@ func (c *Client) GetShowEpisodes(ctx context.Context, showID string, offset, lim
 }
 
 func (c *Client) apiGet(ctx context.Context, url string, result interface{}) error {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-	if err != nil {
-		return err
+	for attempts := 0; attempts < 3; attempts++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return err
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return err
+		}
+		log.Printf("[spotify] %s %d body=%s", url, resp.StatusCode, body)
+		if resp.StatusCode == http.StatusTooManyRequests {
+			wait := 0
+			if s := resp.Header.Get("Retry-After"); s != "" {
+				if n, err := strconv.Atoi(s); err == nil {
+					wait = n
+				}
+			}
+			if wait > 10 {
+				return fmt.Errorf("rate limited — retry in %dm", wait/60)
+			}
+			select {
+			case <-time.After(time.Duration(wait) * time.Second):
+				continue
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("Spotify API %d: %s", resp.StatusCode, body)
+		}
+		return json.Unmarshal(body, result)
 	}
-	resp, err := c.http.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return err
-	}
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("Spotify API %d: %s", resp.StatusCode, body)
-	}
-	return json.Unmarshal(body, result)
+	return fmt.Errorf("Spotify API 429: rate limited after retries")
 }
 
 func playOpts(deviceID string) *sp.PlayOptions {

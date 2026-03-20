@@ -53,8 +53,22 @@ func (v playlistView) fetchMore() tea.Cmd {
 	offset := v.offset
 	client := v.client
 	return func() tea.Msg {
-		playlists, pageSize, hasMore, err := client.GetPlaylists(context.Background(), offset, 50)
-		return playlistsLoadedMsg{playlists: playlists, pageSize: pageSize, hasMore: hasMore, err: err}
+		// Batch multiple pages in one goroutine to avoid rapid cascade
+		// when owner filtering discards most results.
+		var all []spotify.Playlist
+		totalFetched := 0
+		hasMore := true
+		for hasMore && len(all) < 20 {
+			playlists, pageSize, more, err := client.GetPlaylists(context.Background(), offset, 50)
+			if err != nil {
+				return playlistsLoadedMsg{playlists: all, pageSize: totalFetched, hasMore: more, err: err}
+			}
+			all = append(all, playlists...)
+			totalFetched += pageSize
+			offset += pageSize
+			hasMore = more
+		}
+		return playlistsLoadedMsg{playlists: all, pageSize: totalFetched, hasMore: hasMore}
 	}
 }
 
