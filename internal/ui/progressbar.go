@@ -20,7 +20,11 @@ func resolveHex(ac lipgloss.AdaptiveColor) string {
 
 func renderProgressBar(width, progressMs, durationMs int) string {
 	cur := formatDuration(time.Duration(progressMs) * time.Millisecond)
-	total := formatDuration(time.Duration(durationMs) * time.Millisecond)
+	remainMs := durationMs - progressMs
+	if remainMs < 0 {
+		remainMs = 0
+	}
+	total := "-" + formatDuration(time.Duration(remainMs)*time.Millisecond)
 
 	// content width inside nowPlayingStyle (padding 0,1 = 2 chars horizontal)
 	contentWidth := width - 2
