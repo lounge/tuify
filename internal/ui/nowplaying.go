@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
 )
 
@@ -19,6 +20,7 @@ type nowPlayingTickMsg time.Time
 type progressTickMsg time.Time
 type clearErrorMsg struct{}
 type delayedPollMsg struct{}
+type pulseTickMsg time.Time
 
 type nowPlayingModel struct {
 	client     *spotify.Client
@@ -32,14 +34,16 @@ type nowPlayingModel struct {
 	width      int
 	progressMs int
 	durationMs int
+	pulsePos   int
+	pulseDir   int
 }
 
 func newNowPlaying(client *spotify.Client) nowPlayingModel {
-	return nowPlayingModel{client: client}
+	return nowPlayingModel{client: client, pulseDir: 1}
 }
 
 func (m nowPlayingModel) Init() tea.Cmd {
-	return tea.Batch(m.pollState(), m.tick(), m.progressTick())
+	return tea.Batch(m.pollState(), m.tick(), m.progressTick(), m.pulseTick())
 }
 
 func (m nowPlayingModel) tick() tea.Cmd {
@@ -51,6 +55,12 @@ func (m nowPlayingModel) tick() tea.Cmd {
 func (m nowPlayingModel) progressTick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
 		return progressTickMsg(t)
+	})
+}
+
+func (m nowPlayingModel) pulseTick() tea.Cmd {
+	return tea.Tick(120*time.Millisecond, func(t time.Time) tea.Msg {
+		return pulseTickMsg(t)
 	})
 }
 
@@ -69,6 +79,10 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 			return m, nil
 		}
 		if msg.state != nil {
+			if msg.state.TrackURI != m.trackURI {
+				m.pulsePos = 0
+				m.pulseDir = 1
+			}
 			m.track = msg.state.TrackName
 			m.artist = msg.state.ArtistName
 			m.trackURI = msg.state.TrackURI
@@ -96,6 +110,36 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 
+	case pulseTickMsg:
+		cmds := []tea.Cmd{m.pulseTick()}
+		if m.playing && m.hasTrack {
+			m.pulsePos += m.pulseDir
+			// Compute filled width for bounce bounds
+			contentWidth := m.width - 2
+			curLen := len(formatDuration(time.Duration(m.progressMs) * time.Millisecond))
+			totalLen := len(formatDuration(time.Duration(m.durationMs) * time.Millisecond))
+			barWidth := contentWidth - curLen - totalLen - 2
+			filled := 0
+			if m.durationMs > 0 {
+				filled = barWidth * m.progressMs / m.durationMs
+			}
+			if filled > barWidth {
+				filled = barWidth
+			}
+			if filled < 1 {
+				filled = 1
+			}
+			if m.pulsePos >= filled-1 {
+				m.pulsePos = filled - 1
+				m.pulseDir = -1
+			}
+			if m.pulsePos <= 0 {
+				m.pulsePos = 0
+				m.pulseDir = 1
+			}
+		}
+		return m, tea.Batch(cmds...)
+
 	case delayedPollMsg:
 		return m, m.pollState()
 
@@ -104,6 +148,19 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 		return m, nil
 	}
 	return m, nil
+}
+
+func (m nowPlayingModel) pulseStyleForDist(dist int) lipgloss.Style {
+	switch dist {
+	case 0:
+		return progressPulse0Style
+	case 1:
+		return progressPulse1Style
+	case 2:
+		return progressPulse2Style
+	default:
+		return progressFilledStyle
+	}
 }
 
 func (m nowPlayingModel) renderProgressBar() string {
@@ -127,8 +184,22 @@ func (m nowPlayingModel) renderProgressBar() string {
 	}
 	empty := barWidth - filled
 
-	bar := progressFilledStyle.Render(strings.Repeat("━", filled)) +
-		progressEmptyStyle.Render(strings.Repeat("─", empty))
+	var bar string
+	if m.playing && m.hasTrack && filled >= 2 {
+		// Render filled portion with pulse gradient
+		var b strings.Builder
+		for i := 0; i < filled; i++ {
+			dist := m.pulsePos - i
+			if dist < 0 {
+				dist = -dist
+			}
+			b.WriteString(m.pulseStyleForDist(dist).Render("━"))
+		}
+		bar = b.String() + progressEmptyStyle.Render(strings.Repeat("─", empty))
+	} else {
+		bar = progressFilledStyle.Render(strings.Repeat("━", filled)) +
+			progressEmptyStyle.Render(strings.Repeat("─", empty))
+	}
 
 	return progressTimeStyle.Render(cur) + " " + bar + " " + progressTimeStyle.Render(total)
 }

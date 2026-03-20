@@ -15,6 +15,11 @@ var (
 	colorError     = lipgloss.AdaptiveColor{Light: "#FF0000", Dark: "#ff0087"}
 	colorText      = lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"}
 	colorTextDim   = lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"}
+
+	// Pulse gradient colors (center → outer fade)
+	colorPulse0 = lipgloss.AdaptiveColor{Light: "#D4A017", Dark: "#FFD700"} // center: bright yellow
+	colorPulse1 = lipgloss.AdaptiveColor{Light: "#A9A030", Dark: "#C4E038"} // inner fade: yellow-green
+	colorPulse2 = lipgloss.AdaptiveColor{Light: "#90C040", Dark: "#A0D850"} // outer fade: green-yellow
 )
 
 // Shared list item styles
@@ -55,6 +60,10 @@ var (
 	progressFilledStyle = lipgloss.NewStyle().Foreground(colorPrimary)
 	progressEmptyStyle  = lipgloss.NewStyle().Foreground(colorDim)
 	progressTimeStyle   = lipgloss.NewStyle().Foreground(colorSubtle)
+
+	progressPulse0Style = lipgloss.NewStyle().Foreground(colorPulse0) // center
+	progressPulse1Style = lipgloss.NewStyle().Foreground(colorPulse1) // inner fade
+	progressPulse2Style = lipgloss.NewStyle().Foreground(colorPulse2) // outer fade
 )
 
 // Home menu
