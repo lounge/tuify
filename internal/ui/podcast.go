@@ -26,20 +26,14 @@ type podcastsLoadedMsg struct {
 }
 
 type podcastView struct {
-	list    list.Model
-	client  *spotify.Client
-	items   []list.Item
-	offset  int
-	loading bool
-	hasMore bool
+	lazyList
+	client *spotify.Client
 }
 
 func newPodcastView(client *spotify.Client, width, height int) podcastView {
 	return podcastView{
-		list:    newList(width, height),
-		client:  client,
-		loading: true,
-		hasMore: true,
+		lazyList: newLazyList(width, height),
+		client:   client,
 	}
 }
 
@@ -59,22 +53,18 @@ func (v podcastView) fetchMore() tea.Cmd {
 func (v podcastView) Update(msg tea.Msg) (podcastView, tea.Cmd) {
 	switch msg := msg.(type) {
 	case podcastsLoadedMsg:
-		v.loading = false
-		v.items = removeStatusItems(v.items)
+		v.onLoaded()
 		if msg.err != nil {
-			v.hasMore = false
-			v.items = append(v.items, statusItem{text: fmt.Sprintf("Failed to load: %v — press Enter to retry", msg.err), isError: true})
-			v.list.SetItems(v.items)
+			v.onError(msg.err)
 			return v, nil
 		}
+		var items []list.Item
 		for _, s := range msg.shows {
-			v.items = append(v.items, podcastItem{
+			items = append(items, podcastItem{
 				id: s.ID, name: s.Name, episodeCount: s.TotalEpisodes,
 			})
 		}
-		v.offset += len(msg.shows)
-		v.hasMore = msg.hasMore
-		v.list.SetItems(v.items)
+		v.append(items, len(msg.shows), msg.hasMore)
 		return v, nil
 	}
 
@@ -82,25 +72,15 @@ func (v podcastView) Update(msg tea.Msg) (podcastView, tea.Cmd) {
 	v.list, cmd = v.list.Update(msg)
 	cmds := []tea.Cmd{cmd}
 
-	if !v.loading && v.hasMore {
-		idx := v.list.Index()
-		if len(v.items)-idx <= 10 {
-			v.loading = true
-			v.items = append(v.items, statusItem{text: "Loading..."})
-			v.list.SetItems(v.items)
-			cmds = append(cmds, v.fetchMore())
-		}
+	if v.triggerLoad() {
+		cmds = append(cmds, v.fetchMore())
 	}
 
 	return v, tea.Batch(cmds...)
 }
 
 func (v *podcastView) retryLoad() tea.Cmd {
-	v.hasMore = true
-	v.loading = true
-	v.items = removeStatusItems(v.items)
-	v.items = append(v.items, statusItem{text: "Loading..."})
-	v.list.SetItems(v.items)
+	v.lazyList.retryLoad()
 	return v.fetchMore()
 }
 

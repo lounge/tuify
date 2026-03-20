@@ -28,20 +28,14 @@ type playlistsLoadedMsg struct {
 }
 
 type playlistView struct {
-	list    list.Model
-	client  *spotify.Client
-	items   []list.Item
-	offset  int
-	loading bool
-	hasMore bool
+	lazyList
+	client *spotify.Client
 }
 
 func newPlaylistView(client *spotify.Client, width, height int) playlistView {
 	return playlistView{
-		list:    newList(width, height),
-		client:  client,
-		loading: true,
-		hasMore: true,
+		lazyList: newLazyList(width, height),
+		client:   client,
 	}
 }
 
@@ -53,8 +47,6 @@ func (v playlistView) fetchMore() tea.Cmd {
 	offset := v.offset
 	client := v.client
 	return func() tea.Msg {
-		// Batch multiple pages in one goroutine to avoid rapid cascade
-		// when owner filtering discards most results.
 		var all []spotify.Playlist
 		totalFetched := 0
 		hasMore := true
@@ -75,23 +67,18 @@ func (v playlistView) fetchMore() tea.Cmd {
 func (v playlistView) Update(msg tea.Msg) (playlistView, tea.Cmd) {
 	switch msg := msg.(type) {
 	case playlistsLoadedMsg:
-		v.loading = false
-		// Remove loading indicator
-		v.items = removeStatusItems(v.items)
+		v.onLoaded()
 		if msg.err != nil {
-			v.hasMore = false
-			v.items = append(v.items, statusItem{text: fmt.Sprintf("Failed to load: %v — press Enter to retry", msg.err), isError: true})
-			v.list.SetItems(v.items)
+			v.onError(msg.err)
 			return v, nil
 		}
+		var items []list.Item
 		for _, p := range msg.playlists {
-			v.items = append(v.items, playlistItem{
+			items = append(items, playlistItem{
 				id: p.ID, name: p.Name, ownerName: p.OwnerName, trackCount: p.TrackCount,
 			})
 		}
-		v.offset += msg.pageSize
-		v.hasMore = msg.hasMore
-		v.list.SetItems(v.items)
+		v.append(items, msg.pageSize, msg.hasMore)
 		return v, nil
 	}
 
@@ -99,26 +86,15 @@ func (v playlistView) Update(msg tea.Msg) (playlistView, tea.Cmd) {
 	v.list, cmd = v.list.Update(msg)
 	cmds := []tea.Cmd{cmd}
 
-	// Lazy load trigger
-	if !v.loading && v.hasMore {
-		idx := v.list.Index()
-		if len(v.items)-idx <= 10 {
-			v.loading = true
-			v.items = append(v.items, statusItem{text: "Loading..."})
-			v.list.SetItems(v.items)
-			cmds = append(cmds, v.fetchMore())
-		}
+	if v.triggerLoad() {
+		cmds = append(cmds, v.fetchMore())
 	}
 
 	return v, tea.Batch(cmds...)
 }
 
 func (v *playlistView) retryLoad() tea.Cmd {
-	v.hasMore = true
-	v.loading = true
-	v.items = removeStatusItems(v.items)
-	v.items = append(v.items, statusItem{text: "Loading..."})
-	v.list.SetItems(v.items)
+	v.lazyList.retryLoad()
 	return v.fetchMore()
 }
 

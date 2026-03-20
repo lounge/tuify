@@ -37,7 +37,7 @@ type Model struct {
 func NewModel(client *spotify.Client) Model {
 	return Model{
 		viewStack:  []viewKind{viewHome},
-		home:       newHomeView(80, 20),
+		home:       newHomeView(0, 0),
 		nowPlaying: newNowPlaying(client),
 		client:     client,
 	}
@@ -81,17 +81,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.height = msg.Height
 		m.nowPlaying.width = msg.Width
 		h := m.listHeight()
-		switch m.currentView() {
-		case viewHome:
-			m.home.width = msg.Width
-			m.home.height = msg.Height - nowPlayingHeight
-		case viewPlaylists:
+		m.home.width = msg.Width
+		m.home.height = msg.Height - nowPlayingHeight
+		if m.playlists.client != nil {
 			m.playlists.list.SetSize(msg.Width, h)
-		case viewTracks:
+		}
+		if m.tracks.client != nil {
 			m.tracks.list.SetSize(msg.Width, h)
-		case viewPodcasts:
+		}
+		if m.podcasts.client != nil {
 			m.podcasts.list.SetSize(msg.Width, h)
-		case viewEpisodes:
+		}
+		if m.episodes.client != nil {
 			m.episodes.list.SetSize(msg.Width, h)
 		}
 		return m, nil

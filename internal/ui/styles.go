@@ -66,13 +66,13 @@ var (
 			Foreground(lipgloss.Color("#000000")).
 			Width(homeTabWidth).
 			Align(lipgloss.Center).
-			Padding(1, 1, 1, 1)
+			Padding(1, 3)
 
 	homeTabInactive = lipgloss.NewStyle().
 			Foreground(colorPrimary).
 			Width(homeTabWidth).
 			Align(lipgloss.Center).
-			Padding(0, 3)
+			Padding(1, 3)
 )
 
 // Shared

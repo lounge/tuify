@@ -29,25 +29,19 @@ type episodesLoadedMsg struct {
 }
 
 type episodeView struct {
-	list     list.Model
+	lazyList
 	client   *spotify.Client
 	showID   string
 	showName string
-	items    []list.Item
-	offset   int
-	loading  bool
-	hasMore  bool
 	syncURI  string
 }
 
 func newEpisodeView(client *spotify.Client, showID, showName string, width, height int) episodeView {
 	return episodeView{
-		list:     newList(width, height),
+		lazyList: newLazyList(width, height),
 		client:   client,
 		showID:   showID,
 		showName: showName,
-		loading:  true,
-		hasMore:  true,
 	}
 }
 
@@ -68,23 +62,19 @@ func (v episodeView) fetchMore() tea.Cmd {
 func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 	switch msg := msg.(type) {
 	case episodesLoadedMsg:
-		v.loading = false
-		v.items = removeStatusItems(v.items)
+		v.onLoaded()
 		if msg.err != nil {
-			v.hasMore = false
-			v.items = append(v.items, statusItem{text: fmt.Sprintf("Failed to load: %v — press Enter to retry", msg.err), isError: true})
-			v.list.SetItems(v.items)
+			v.onError(msg.err)
 			return v, nil
 		}
+		var items []list.Item
 		for _, e := range msg.episodes {
-			v.items = append(v.items, episodeItem{
+			items = append(items, episodeItem{
 				id: e.ID, uri: e.URI, name: e.Name,
 				releaseDate: e.ReleaseDate, duration: e.Duration,
 			})
 		}
-		v.offset += len(msg.episodes)
-		v.hasMore = msg.hasMore
-		v.list.SetItems(v.items)
+		v.append(items, len(msg.episodes), msg.hasMore)
 
 		if v.syncURI != "" {
 			if i, ok := v.findEpisode(v.syncURI); ok {
@@ -104,25 +94,15 @@ func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 	v.list, cmd = v.list.Update(msg)
 	cmds := []tea.Cmd{cmd}
 
-	if !v.loading && v.hasMore {
-		idx := v.list.Index()
-		if len(v.items)-idx <= 10 {
-			v.loading = true
-			v.items = append(v.items, statusItem{text: "Loading..."})
-			v.list.SetItems(v.items)
-			cmds = append(cmds, v.fetchMore())
-		}
+	if v.triggerLoad() {
+		cmds = append(cmds, v.fetchMore())
 	}
 
 	return v, tea.Batch(cmds...)
 }
 
 func (v *episodeView) retryLoad() tea.Cmd {
-	v.hasMore = true
-	v.loading = true
-	v.items = removeStatusItems(v.items)
-	v.items = append(v.items, statusItem{text: "Loading..."})
-	v.list.SetItems(v.items)
+	v.lazyList.retryLoad()
 	return v.fetchMore()
 }
 

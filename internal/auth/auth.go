@@ -72,7 +72,11 @@ func Login(a *spotifyauth.Authenticator) (*oauth2.Token, error) {
 		tokenCh <- token
 	})
 
-	go server.ListenAndServe()
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			errCh <- fmt.Errorf("failed to start auth server: %w", err)
+		}
+	}()
 	defer server.Shutdown(context.Background())
 
 	url := a.AuthURL(state,
@@ -119,7 +123,9 @@ func LoadToken() (*oauth2.Token, error) {
 
 func generateCodeVerifier() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
@@ -130,7 +136,9 @@ func generateCodeChallenge(verifier string) string {
 
 func generateRandomString() string {
 	b := make([]byte, 16)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		panic("crypto/rand: " + err.Error())
+	}
 	return base64.RawURLEncoding.EncodeToString(b)
 }
 
