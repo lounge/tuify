@@ -218,13 +218,12 @@ func (l *lazyList) applyFilter() {
 	}
 }
 
-// Playback messages
-type playResultMsg struct {
+// Playback result message — used for all device-bound commands.
+type playbackResultMsg struct {
 	deviceID string
 	err      error
+	seek     bool // true for seek results (uses lighter post-action polling)
 }
-
-type playbackResultMsg struct{ err error }
 
 func formatDuration(d time.Duration) string {
 	m := int(d.Minutes())

@@ -8,7 +8,7 @@ import (
 // Color palette — adaptive for light and dark terminals.
 var (
 	colorPrimary   = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7ee068"}
-	colorSecondary = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#b48eff"}
+	colorSecondary = lipgloss.AdaptiveColor{Light: "#6232CC", Dark: "#b48eff"}
 	colorMuted     = lipgloss.AdaptiveColor{Light: "#9B9B9B", Dark: "#626262"}
 	colorSubtle    = lipgloss.AdaptiveColor{Light: "#6C6C6C", Dark: "#8a8a8a"}
 	colorDim       = lipgloss.AdaptiveColor{Light: "#BCBCBC", Dark: "#444444"}

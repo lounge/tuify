@@ -21,6 +21,11 @@ const (
 	viewEpisodes
 )
 
+type seekFireMsg struct {
+	seq   int
+	posMs int
+}
+
 type Model struct {
 	viewStack  []viewKind
 	home       homeView
@@ -33,6 +38,7 @@ type Model struct {
 	deviceID   string
 	width      int
 	height     int
+	seekSeq    int
 }
 
 func NewModel(client *spotify.Client) Model {
@@ -147,11 +153,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "s":
 			return m, m.stopPlayback()
 		case "a":
-			cmd := m.seekRelative(-5000)
-			return m, cmd
+			return m, m.seekRelative(-5000)
 		case "d":
-			cmd := m.seekRelative(5000)
-			return m, cmd
+			return m, m.seekRelative(5000)
 		case "esc":
 			m.popView()
 			return m, nil
@@ -166,30 +170,41 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 
-	case playResultMsg:
-		if msg.err != nil {
-			var cmd tea.Cmd
-			m.nowPlaying, cmd = m.nowPlaying.SetError(msg.err.Error())
-			return m, cmd
+	case playbackResultMsg:
+		if msg.seek {
+			m.nowPlaying.seekPending = false
 		}
 		if msg.deviceID != "" {
 			m.deviceID = msg.deviceID
+		}
+		if msg.err != nil {
+			var errCmd tea.Cmd
+			m.nowPlaying, errCmd = m.nowPlaying.SetError(msg.err.Error())
+			if msg.seek {
+				return m, tea.Batch(
+					errCmd,
+					tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
+				)
+			}
+			return m, errCmd
+		}
+		if msg.seek {
+			// Single delayed poll to re-sync, no immediate poll to avoid snapping back
+			return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
 		}
 		return m, tea.Batch(
 			m.nowPlaying.pollState(),
 			tea.Tick(time.Second, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
 		)
 
-	case playbackResultMsg:
-		if msg.err != nil {
-			var cmd tea.Cmd
-			m.nowPlaying, cmd = m.nowPlaying.SetError(msg.err.Error())
-			return m, cmd
+	case seekFireMsg:
+		if msg.seq != m.seekSeq {
+			return m, nil // outdated, a newer seek superseded this one
 		}
-		return m, tea.Batch(
-			m.nowPlaying.pollState(),
-			tea.Tick(time.Second, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
-		)
+		posMs := msg.posMs
+		return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
+			return c.Seek(ctx, posMs, id)
+		}, true)
 	}
 
 	// Update now-playing
@@ -289,23 +304,12 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) playItem(itemURI, contextURI string) tea.Cmd {
-	client := m.client
-	deviceID := m.deviceID
-	return func() tea.Msg {
-		ctx := context.Background()
-		if deviceID == "" {
-			var err error
-			deviceID, err = client.FindDevice(ctx)
-			if err != nil {
-				return playResultMsg{err: err}
-			}
-		}
-		err := client.Play(ctx, itemURI, contextURI, deviceID)
-		return playResultMsg{deviceID: deviceID, err: err}
-	}
+	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
+		return c.Play(ctx, itemURI, contextURI, id)
+	}, false)
 }
 
-func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error) tea.Cmd {
+func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
 	client := m.client
 	deviceID := m.deviceID
 	return func() tea.Msg {
@@ -314,10 +318,10 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 			var err error
 			deviceID, err = client.FindDevice(ctx)
 			if err != nil {
-				return playbackResultMsg{err: err}
+				return playbackResultMsg{err: err, seek: seek}
 			}
 		}
-		return playbackResultMsg{err: fn(ctx, client, deviceID)}
+		return playbackResultMsg{deviceID: deviceID, err: fn(ctx, client, deviceID), seek: seek}
 	}
 }
 
@@ -328,26 +332,26 @@ func (m Model) togglePlayPause() tea.Cmd {
 			return c.Pause(ctx, id)
 		}
 		return c.Resume(ctx, id)
-	})
+	}, false)
 }
 
 func (m Model) nextTrack() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Next(ctx, id)
-	})
+	}, false)
 }
 
 func (m Model) previousTrack() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Previous(ctx, id)
-	})
+	}, false)
 }
 
 func (m Model) toggleShuffle() tea.Cmd {
 	newState := !m.nowPlaying.shuffling
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Shuffle(ctx, newState, id)
-	})
+	}, false)
 }
 
 func (m *Model) seekRelative(deltaMs int) tea.Cmd {
@@ -359,15 +363,18 @@ func (m *Model) seekRelative(deltaMs int) tea.Cmd {
 		posMs = m.nowPlaying.durationMs
 	}
 	m.nowPlaying.progressMs = posMs
-	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
-		return c.Seek(ctx, posMs, id)
+	m.nowPlaying.seekPending = true
+	m.seekSeq++
+	seq := m.seekSeq
+	return tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
+		return seekFireMsg{seq: seq, posMs: posMs}
 	})
 }
 
 func (m Model) stopPlayback() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Stop(ctx, id)
-	})
+	}, false)
 }
 
 func (m *Model) searchableList() *lazyList {

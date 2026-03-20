@@ -36,9 +36,9 @@ func NewAuthenticator(clientID string) *spotifyauth.Authenticator {
 }
 
 func Login(a *spotifyauth.Authenticator) (*oauth2.Token, error) {
-	verifier := generateCodeVerifier()
+	verifier := generateRandomBase64(32)
 	challenge := generateCodeChallenge(verifier)
-	state := generateRandomString()
+	state := generateRandomBase64(16)
 
 	tokenCh := make(chan *oauth2.Token, 1)
 	errCh := make(chan error, 1)
@@ -121,8 +121,8 @@ func LoadToken() (*oauth2.Token, error) {
 	return &token, nil
 }
 
-func generateCodeVerifier() string {
-	b := make([]byte, 32)
+func generateRandomBase64(n int) string {
+	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
 		panic("crypto/rand: " + err.Error())
 	}
@@ -132,14 +132,6 @@ func generateCodeVerifier() string {
 func generateCodeChallenge(verifier string) string {
 	h := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(h[:])
-}
-
-func generateRandomString() string {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand: " + err.Error())
-	}
-	return base64.RawURLEncoding.EncodeToString(b)
 }
 
 // savingTokenSource wraps a TokenSource and persists the token to disk

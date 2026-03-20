@@ -20,17 +20,18 @@ type clearErrorMsg struct{}
 type delayedPollMsg struct{}
 
 type nowPlayingModel struct {
-	client     *spotify.Client
-	track      string
-	artist     string
-	trackURI   string
-	playing    bool
-	shuffling  bool
-	hasTrack   bool
-	errMsg     string
-	width      int
-	progressMs int
-	durationMs int
+	client      *spotify.Client
+	track       string
+	artist      string
+	trackURI    string
+	playing     bool
+	shuffling   bool
+	hasTrack    bool
+	errMsg      string
+	width       int
+	progressMs  int
+	durationMs  int
+	seekPending bool
 }
 
 func newNowPlaying(client *spotify.Client) nowPlayingModel {
@@ -73,7 +74,9 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 			m.trackURI = msg.state.TrackURI
 			m.playing = msg.state.Playing
 			m.shuffling = msg.state.Shuffling
-			m.progressMs = msg.state.ProgressMs
+			if !m.seekPending {
+				m.progressMs = msg.state.ProgressMs
+			}
 			m.durationMs = msg.state.DurationMs
 			m.hasTrack = true
 		} else {
