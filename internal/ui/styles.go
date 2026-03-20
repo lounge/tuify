@@ -15,6 +15,7 @@ var (
 	colorError     = lipgloss.AdaptiveColor{Light: "#FF0000", Dark: "#ff0087"}
 	colorText      = lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"}
 	colorTextDim   = lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"}
+	colorTip       = lipgloss.AdaptiveColor{Light: "#D4A017", Dark: "#FFD866"}
 )
 
 // Shared list item styles
@@ -52,8 +53,7 @@ var (
 	nowPlayingIconStyle = lipgloss.NewStyle().
 				Foreground(colorSecondary)
 
-	progressFilledStyle = lipgloss.NewStyle().Foreground(colorPrimary)
-	progressEmptyStyle  = lipgloss.NewStyle().Foreground(colorDim)
+	progressEmptyStyle = lipgloss.NewStyle().Foreground(colorDim)
 	progressTimeStyle   = lipgloss.NewStyle().Foreground(colorSubtle)
 )
 

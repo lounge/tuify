@@ -3,7 +3,6 @@ package ui
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -106,31 +105,8 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 	return m, nil
 }
 
-func (m nowPlayingModel) renderProgressBar() string {
-	cur := formatDuration(time.Duration(m.progressMs) * time.Millisecond)
-	total := formatDuration(time.Duration(m.durationMs) * time.Millisecond)
-
-	// content width inside nowPlayingStyle (padding 0,1 = 2 chars horizontal)
-	contentWidth := m.width - 2
-	// bar width = content width minus timestamps and spacing: "0:00 ··· 0:00"
-	barWidth := contentWidth - len(cur) - len(total) - 2
-	if barWidth < 4 {
-		return fmt.Sprintf("%s / %s", progressTimeStyle.Render(cur), progressTimeStyle.Render(total))
-	}
-
-	filled := 0
-	if m.durationMs > 0 {
-		filled = barWidth * m.progressMs / m.durationMs
-	}
-	if filled > barWidth {
-		filled = barWidth
-	}
-	empty := barWidth - filled
-
-	bar := progressFilledStyle.Render(strings.Repeat("━", filled)) +
-		progressEmptyStyle.Render(strings.Repeat("─", empty))
-
-	return progressTimeStyle.Render(cur) + " " + bar + " " + progressTimeStyle.Render(total)
+func (m nowPlayingModel) progressBarView() string {
+	return renderProgressBar(m.width, m.progressMs, m.durationMs)
 }
 
 func (m nowPlayingModel) SetError(msg string) (nowPlayingModel, tea.Cmd) {
@@ -169,7 +145,7 @@ func (m nowPlayingModel) View() string {
 
 	var progress string
 	if m.hasTrack {
-		progress = m.renderProgressBar()
+		progress = m.progressBarView()
 	}
 
 	help := helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop  q:quit")
