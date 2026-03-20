@@ -24,6 +24,7 @@ func (i trackItem) Description() string {
 	return fmt.Sprintf("%s · %s · %s", i.artist, i.album, formatDuration(i.duration))
 }
 func (i trackItem) FilterValue() string { return i.name }
+func (i trackItem) URI() string          { return i.uri }
 
 type tracksLoadedMsg struct {
 	tracks  []spotify.Track
@@ -36,7 +37,6 @@ type trackView struct {
 	client       *spotify.Client
 	playlistID   string
 	playlistName string
-	syncURI      string
 }
 
 func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int) trackView {
@@ -77,18 +77,11 @@ func (v trackView) Update(msg tea.Msg) (trackView, tea.Cmd) {
 				artist: t.Artist, album: t.Album, duration: t.Duration,
 			})
 		}
-		v.append(items, len(msg.tracks), msg.hasMore)
-
-		if v.syncURI != "" {
-			if i, ok := v.findTrack(v.syncURI); ok {
-				v.list.Select(i)
-				v.syncURI = ""
-			} else if v.hasMore {
-				v.loading = true
-				return v, v.fetchMore()
-			} else {
-				v.syncURI = ""
-			}
+		if v.append(items, len(msg.tracks), msg.hasMore) {
+			return v, v.fetchMore()
+		}
+		if v.resolveSync() {
+			return v, v.fetchMore()
 		}
 		return v, nil
 	}
@@ -113,25 +106,4 @@ func (v trackView) View() string {
 	return v.list.View()
 }
 
-func (v *trackView) selectTrack(uri string) tea.Cmd {
-	if i, ok := v.findTrack(uri); ok {
-		v.list.Select(i)
-		v.syncURI = ""
-		return nil
-	}
-	v.syncURI = uri
-	if v.hasMore && !v.loading {
-		v.loading = true
-		return v.fetchMore()
-	}
-	return nil
-}
 
-func (v trackView) findTrack(uri string) (int, bool) {
-	for i, item := range v.items {
-		if ti, ok := item.(trackItem); ok && ti.uri == uri {
-			return i, true
-		}
-	}
-	return 0, false
-}

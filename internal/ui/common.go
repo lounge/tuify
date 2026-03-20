@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -45,11 +46,14 @@ func removeStatusItems(items []list.Item) []list.Item {
 
 // lazyList holds the shared state and logic for paginated list views.
 type lazyList struct {
-	list    list.Model
-	items   []list.Item
-	offset  int
-	loading bool
-	hasMore bool
+	list        list.Model
+	items       []list.Item
+	offset      int
+	loading     bool
+	hasMore     bool
+	searching   bool
+	searchQuery string
+	syncURI     string
 }
 
 func newLazyList(width, height int) lazyList {
@@ -81,11 +85,22 @@ func (l *lazyList) onError(err error) {
 }
 
 // append adds items, advances the offset, and refreshes the list widget.
-func (l *lazyList) append(items []list.Item, fetched int, hasMore bool) {
+// During search, it re-applies the filter and returns true if more data should
+// be fetched to complete the search across all items.
+func (l *lazyList) append(items []list.Item, fetched int, hasMore bool) bool {
 	l.items = append(l.items, items...)
 	l.offset += fetched
 	l.hasMore = hasMore
+	if l.searching {
+		l.applyFilter()
+		if l.hasMore {
+			l.loading = true
+			return true
+		}
+		return false
+	}
 	l.list.SetItems(l.items)
+	return false
 }
 
 // triggerLoad checks whether the cursor is near the end of the loaded items
@@ -111,6 +126,96 @@ func (l *lazyList) retryLoad() {
 	l.items = removeStatusItems(l.items)
 	l.items = append(l.items, statusItem{text: "Loading..."})
 	l.list.SetItems(l.items)
+}
+
+// openSearch enters search mode. Returns true if the caller should trigger
+// a fetch to load remaining items.
+func (l *lazyList) openSearch() bool {
+	l.searching = true
+	l.searchQuery = ""
+	if l.hasMore && !l.loading {
+		l.loading = true
+		return true
+	}
+	return false
+}
+
+func (l *lazyList) closeSearch() {
+	l.searching = false
+	l.searchQuery = ""
+	l.list.SetItems(l.items)
+}
+
+// findByURI locates an item by URI. Items must implement URI() string.
+func (l *lazyList) findByURI(uri string) (int, bool) {
+	for i, item := range l.items {
+		if u, ok := item.(interface{ URI() string }); ok && u.URI() == uri {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// selectByURI selects the item matching uri, or sets syncURI for deferred
+// resolution. Returns true if the caller should fetch more data.
+func (l *lazyList) selectByURI(uri string) bool {
+	if i, ok := l.findByURI(uri); ok {
+		l.list.Select(i)
+		l.syncURI = ""
+		return false
+	}
+	l.syncURI = uri
+	if l.hasMore && !l.loading {
+		l.loading = true
+		return true
+	}
+	return false
+}
+
+// resolveSync tries to select the pending syncURI after new items are loaded.
+// Returns true if the caller should fetch more data.
+func (l *lazyList) resolveSync() bool {
+	if l.syncURI == "" {
+		return false
+	}
+	if i, ok := l.findByURI(l.syncURI); ok {
+		l.list.Select(i)
+		l.syncURI = ""
+		return false
+	}
+	if l.hasMore {
+		l.loading = true
+		return true
+	}
+	l.syncURI = ""
+	return false
+}
+
+func (l *lazyList) applyFilter() {
+	if l.searchQuery == "" {
+		l.list.SetItems(l.items)
+		return
+	}
+	query := strings.ToLower(l.searchQuery)
+	var filtered []list.Item
+	for _, item := range l.items {
+		if _, ok := item.(statusItem); ok {
+			continue
+		}
+		di, ok := item.(list.DefaultItem)
+		if !ok {
+			continue
+		}
+		if strings.Contains(strings.ToLower(di.Title()), query) ||
+			strings.Contains(strings.ToLower(di.Description()), query) {
+			filtered = append(filtered, item)
+		}
+	}
+	if len(filtered) == 0 {
+		l.list.SetItems([]list.Item{statusItem{text: "No matching results"}})
+	} else {
+		l.list.SetItems(filtered)
+	}
 }
 
 // Playback messages

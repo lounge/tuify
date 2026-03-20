@@ -21,6 +21,7 @@ type episodeItem struct {
 func (i episodeItem) Title() string       { return i.name }
 func (i episodeItem) Description() string { return fmt.Sprintf("%s · %s", i.releaseDate, formatDuration(i.duration)) }
 func (i episodeItem) FilterValue() string { return i.name }
+func (i episodeItem) URI() string          { return i.uri }
 
 type episodesLoadedMsg struct {
 	episodes []spotify.Episode
@@ -33,7 +34,6 @@ type episodeView struct {
 	client   *spotify.Client
 	showID   string
 	showName string
-	syncURI  string
 }
 
 func newEpisodeView(client *spotify.Client, showID, showName string, width, height int) episodeView {
@@ -74,18 +74,11 @@ func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 				releaseDate: e.ReleaseDate, duration: e.Duration,
 			})
 		}
-		v.append(items, len(msg.episodes), msg.hasMore)
-
-		if v.syncURI != "" {
-			if i, ok := v.findEpisode(v.syncURI); ok {
-				v.list.Select(i)
-				v.syncURI = ""
-			} else if v.hasMore {
-				v.loading = true
-				return v, v.fetchMore()
-			} else {
-				v.syncURI = ""
-			}
+		if v.append(items, len(msg.episodes), msg.hasMore) {
+			return v, v.fetchMore()
+		}
+		if v.resolveSync() {
+			return v, v.fetchMore()
 		}
 		return v, nil
 	}
@@ -110,25 +103,3 @@ func (v episodeView) View() string {
 	return v.list.View()
 }
 
-func (v *episodeView) selectEpisode(uri string) tea.Cmd {
-	if i, ok := v.findEpisode(uri); ok {
-		v.list.Select(i)
-		v.syncURI = ""
-		return nil
-	}
-	v.syncURI = uri
-	if v.hasMore && !v.loading {
-		v.loading = true
-		return v.fetchMore()
-	}
-	return nil
-}
-
-func (v episodeView) findEpisode(uri string) (int, bool) {
-	for i, item := range v.items {
-		if ei, ok := item.(episodeItem); ok && ei.uri == uri {
-			return i, true
-		}
-	}
-	return 0, false
-}

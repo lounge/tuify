@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
 )
@@ -62,8 +63,8 @@ func (m Model) Init() tea.Cmd {
 }
 
 const (
-	// now-playing: border-top + status + progress + help + spacing
-	nowPlayingHeight = 5
+	// now-playing: border-top + status + blank + progress + blank + help
+	nowPlayingHeight = 6
 	// breadcrumb text + margin-bottom: 2 lines + now-playing
 	chromeHeight = 2 + nowPlayingHeight
 )
@@ -98,6 +99,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		// Search mode: intercept all keys except up/down
+		sl := m.searchableList()
+		if sl != nil && sl.searching {
+			switch msg.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				sl.closeSearch()
+				return m, nil
+			case "enter":
+				selected := sl.list.SelectedItem()
+				sl.closeSearch()
+				return m, m.playCurrentItem(selected)
+			case "backspace":
+				runes := []rune(sl.searchQuery)
+				if len(runes) > 0 {
+					sl.searchQuery = string(runes[:len(runes)-1])
+					sl.applyFilter()
+				}
+				return m, nil
+			case "/":
+				return m, nil
+			case "up", "down":
+				// Fall through to view update
+			default:
+				if len(msg.Runes) > 0 {
+					sl.searchQuery += string(msg.Runes)
+					sl.applyFilter()
+				}
+				return m, nil
+			}
+			break
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -122,6 +157,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "enter":
 			return m.handleEnter()
+		case "/":
+			if sl != nil {
+				if sl.openSearch() {
+					return m, m.fetchSearchableView()
+				}
+				return m, nil
+			}
 		}
 
 	case playResultMsg:
@@ -162,12 +204,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.nowPlaying.trackURI != prevURI {
 		switch m.currentView() {
 		case viewTracks:
-			if syncCmd := m.tracks.selectTrack(m.nowPlaying.trackURI); syncCmd != nil {
-				cmds = append(cmds, syncCmd)
+			if m.tracks.selectByURI(m.nowPlaying.trackURI) {
+				cmds = append(cmds, m.tracks.fetchMore())
 			}
 		case viewEpisodes:
-			if syncCmd := m.episodes.selectEpisode(m.nowPlaying.trackURI); syncCmd != nil {
-				cmds = append(cmds, syncCmd)
+			if m.episodes.selectByURI(m.nowPlaying.trackURI) {
+				cmds = append(cmds, m.episodes.fetchMore())
 			}
 		}
 	}
@@ -218,8 +260,8 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		}
 	case viewTracks:
 		selected := m.tracks.list.SelectedItem()
-		if ti, ok := selected.(trackItem); ok {
-			return m, m.playItem(ti.uri, "spotify:playlist:"+m.tracks.playlistID)
+		if cmd := m.playCurrentItem(selected); cmd != nil {
+			return m, cmd
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
 			return m, m.tracks.retryLoad()
@@ -236,8 +278,8 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		}
 	case viewEpisodes:
 		selected := m.episodes.list.SelectedItem()
-		if ei, ok := selected.(episodeItem); ok {
-			return m, m.playItem(ei.uri, "spotify:show:"+m.episodes.showID)
+		if cmd := m.playCurrentItem(selected); cmd != nil {
+			return m, cmd
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
 			return m, m.episodes.retryLoad()
@@ -328,6 +370,40 @@ func (m Model) stopPlayback() tea.Cmd {
 	})
 }
 
+func (m *Model) searchableList() *lazyList {
+	switch m.currentView() {
+	case viewTracks:
+		return &m.tracks.lazyList
+	case viewEpisodes:
+		return &m.episodes.lazyList
+	}
+	return nil
+}
+
+func (m Model) playCurrentItem(item list.Item) tea.Cmd {
+	switch m.currentView() {
+	case viewTracks:
+		if ti, ok := item.(trackItem); ok {
+			return m.playItem(ti.uri, "spotify:playlist:"+m.tracks.playlistID)
+		}
+	case viewEpisodes:
+		if ei, ok := item.(episodeItem); ok {
+			return m.playItem(ei.uri, "spotify:show:"+m.episodes.showID)
+		}
+	}
+	return nil
+}
+
+func (m Model) fetchSearchableView() tea.Cmd {
+	switch m.currentView() {
+	case viewTracks:
+		return m.tracks.fetchMore()
+	case viewEpisodes:
+		return m.episodes.fetchMore()
+	}
+	return nil
+}
+
 func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
@@ -368,7 +444,16 @@ func (m Model) View() string {
 
 	// Now playing bar
 	b.WriteString("\n")
-	b.WriteString(m.nowPlaying.View())
+	var searchEnabled, searchActive bool
+	var searchQuery string
+	if sl := m.searchableList(); sl != nil {
+		searchEnabled = true
+		if sl.searching {
+			searchActive = true
+			searchQuery = sl.searchQuery
+		}
+	}
+	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery))
 
 	return b.String()
 }

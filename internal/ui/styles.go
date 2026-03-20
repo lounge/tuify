@@ -82,6 +82,9 @@ var (
 
 	helpStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
+
+	searchInputStyle = lipgloss.NewStyle().
+				Foreground(colorSecondary)
 )
 
 func newListDelegate() list.DefaultDelegate {
