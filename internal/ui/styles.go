@@ -5,6 +5,8 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+const homeTabWidth = 20
+
 // Color palette — adaptive for light and dark terminals.
 var (
 	colorPrimary   = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7ee068"}
@@ -54,12 +56,10 @@ var (
 				Foreground(colorSecondary)
 
 	progressEmptyStyle = lipgloss.NewStyle().Foreground(colorDim)
-	progressTimeStyle   = lipgloss.NewStyle().Foreground(colorSubtle)
+	progressTimeStyle  = lipgloss.NewStyle().Foreground(colorSubtle)
 )
 
 // Home tabs
-const homeTabWidth = 20
-
 var (
 	homeTabActive = lipgloss.NewStyle().
 			Background(colorPrimary).

@@ -9,21 +9,12 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func newList(width, height int) list.Model {
-	l := list.New(nil, newListDelegate(), width, height)
-	l.SetShowTitle(false)
-	l.SetShowStatusBar(false)
-	l.SetShowHelp(false)
-	l.SetFilteringEnabled(false)
-	return l
-}
+var loadingStyle = lipgloss.NewStyle().Foreground(colorSubtle)
 
 type statusItem struct {
 	text    string
 	isError bool
 }
-
-var loadingStyle = lipgloss.NewStyle().Foreground(colorSubtle)
 
 func (i statusItem) Title() string {
 	if i.isError {
@@ -33,16 +24,6 @@ func (i statusItem) Title() string {
 }
 func (i statusItem) Description() string { return "" }
 func (i statusItem) FilterValue() string { return "" }
-
-func removeStatusItems(items []list.Item) []list.Item {
-	filtered := items[:0]
-	for _, item := range items {
-		if _, ok := item.(statusItem); !ok {
-			filtered = append(filtered, item)
-		}
-	}
-	return filtered
-}
 
 // lazyList holds the shared state and logic for paginated list views.
 type lazyList struct {
@@ -260,6 +241,25 @@ type playbackResultMsg struct {
 	deviceID string
 	err      error
 	seek     bool // true for seek results (uses lighter post-action polling)
+}
+
+func newList(width, height int) list.Model {
+	l := list.New(nil, newListDelegate(), width, height)
+	l.SetShowTitle(false)
+	l.SetShowStatusBar(false)
+	l.SetShowHelp(false)
+	l.SetFilteringEnabled(false)
+	return l
+}
+
+func removeStatusItems(items []list.Item) []list.Item {
+	filtered := items[:0]
+	for _, item := range items {
+		if _, ok := item.(statusItem); !ok {
+			filtered = append(filtered, item)
+		}
+	}
+	return filtered
 }
 
 func formatDuration(d time.Duration) string {

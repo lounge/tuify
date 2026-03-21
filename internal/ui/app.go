@@ -22,9 +22,25 @@ const (
 	viewEpisodes
 )
 
+const (
+	// now-playing: border-top + status + blank + progress + blank + help
+	nowPlayingHeight = 6
+	// breadcrumb text + margin-bottom: 2 lines + now-playing
+	chromeHeight = 2 + nowPlayingHeight
+)
+
 type seekFireMsg struct {
 	seq   int
 	posMs int
+}
+
+// searchCtx captures the parts that differ between API search and local filter search.
+type searchCtx struct {
+	query    *string
+	list     *list.Model
+	close    func()
+	play     func(list.Item) tea.Cmd
+	onChange func() tea.Cmd
 }
 
 type Model struct {
@@ -72,57 +88,8 @@ func (m Model) Init() tea.Cmd {
 	return m.nowPlaying.Init()
 }
 
-const (
-	// now-playing: border-top + status + blank + progress + blank + help
-	nowPlayingHeight = 6
-	// breadcrumb text + margin-bottom: 2 lines + now-playing
-	chromeHeight = 2 + nowPlayingHeight
-)
-
 func (m Model) listHeight() int {
 	return m.height - chromeHeight
-}
-
-// searchCtx captures the parts that differ between API search and local filter search.
-type searchCtx struct {
-	query    *string
-	list     *list.Model
-	close    func()
-	play     func(list.Item) tea.Cmd
-	onChange func() tea.Cmd
-}
-
-// handleSearchKey dispatches a key event for a search input session.
-// Returns the command and whether the key was handled (false = fall through for up/down).
-func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
-	switch msg.String() {
-	case "ctrl+c":
-		return tea.Quit, true
-	case "esc":
-		sc.close()
-		return nil, true
-	case "enter":
-		selected := sc.list.SelectedItem()
-		sc.close()
-		return sc.play(selected), true
-	case "backspace":
-		runes := []rune(*sc.query)
-		if len(runes) > 0 {
-			*sc.query = string(runes[:len(runes)-1])
-			return sc.onChange(), true
-		}
-		return nil, true
-	case "/":
-		return nil, true
-	case "up", "down", "left", "right":
-		return nil, false
-	default:
-		if len(msg.Runes) > 0 {
-			*sc.query += string(msg.Runes)
-			return sc.onChange(), true
-		}
-		return nil, true
-	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -630,4 +597,37 @@ func (m Model) View() string {
 	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery, vizAvailable))
 
 	return b.String()
+}
+
+// handleSearchKey dispatches a key event for a search input session.
+// Returns the command and whether the key was handled (false = fall through for up/down).
+func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.String() {
+	case "ctrl+c":
+		return tea.Quit, true
+	case "esc":
+		sc.close()
+		return nil, true
+	case "enter":
+		selected := sc.list.SelectedItem()
+		sc.close()
+		return sc.play(selected), true
+	case "backspace":
+		runes := []rune(*sc.query)
+		if len(runes) > 0 {
+			*sc.query = string(runes[:len(runes)-1])
+			return sc.onChange(), true
+		}
+		return nil, true
+	case "/":
+		return nil, true
+	case "up", "down", "left", "right":
+		return nil, false
+	default:
+		if len(msg.Runes) > 0 {
+			*sc.query += string(msg.Runes)
+			return sc.onChange(), true
+		}
+		return nil, true
+	}
 }

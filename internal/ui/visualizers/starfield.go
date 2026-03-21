@@ -8,6 +8,8 @@ import (
 
 const numStars = 200
 
+var starChars = [5]rune{'·', '∙', '•', '⦁', '★'}
+
 type star struct {
 	x, y, z float64
 	speed   float64
@@ -38,22 +40,6 @@ func (sf *Starfield) Init(seed string, durationMs int) {
 	sf.inited = true
 }
 
-func (sf *Starfield) newStar(randomDepth bool) star {
-	sf.rng = xorshift(sf.rng)
-	x := float64(sf.rng%2000)/1000.0 - 1.0
-	sf.rng = xorshift(sf.rng)
-	y := float64(sf.rng%2000)/1000.0 - 1.0
-	sf.rng = xorshift(sf.rng)
-	speed := 0.3 + float64(sf.rng%700)/1000.0
-
-	z := 1.0
-	if randomDepth {
-		sf.rng = xorshift(sf.rng)
-		z = float64(sf.rng%1000) / 1000.0
-	}
-	return star{x: x, y: y, z: z, speed: speed}
-}
-
 func (sf *Starfield) Advance() {
 	if !sf.inited {
 		return
@@ -67,8 +53,6 @@ func (sf *Starfield) Advance() {
 		}
 	}
 }
-
-var starChars = [5]rune{'·', '∙', '•', '⦁', '★'}
 
 func (sf *Starfield) View(progressMs, width, height int) string {
 	if !sf.inited || width < 1 || height < 1 {
@@ -148,4 +132,20 @@ func (sf *Starfield) View(progressMs, width, height int) string {
 	}
 
 	return buf.String()
+}
+
+func (sf *Starfield) newStar(randomDepth bool) star {
+	sf.rng = xorshift(sf.rng)
+	x := float64(sf.rng%2000)/1000.0 - 1.0
+	sf.rng = xorshift(sf.rng)
+	y := float64(sf.rng%2000)/1000.0 - 1.0
+	sf.rng = xorshift(sf.rng)
+	speed := 0.3 + float64(sf.rng%700)/1000.0
+
+	z := 1.0
+	if randomDepth {
+		sf.rng = xorshift(sf.rng)
+		z = float64(sf.rng%1000) / 1000.0
+	}
+	return star{x: x, y: y, z: z, speed: speed}
 }

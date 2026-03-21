@@ -37,12 +37,12 @@ type Track struct {
 }
 
 type Album struct {
-	ID         string
-	URI        string
-	Name       string
-	Artist     string
+	ID          string
+	URI         string
+	Name        string
+	Artist      string
 	ReleaseDate string
-	TrackCount int
+	TrackCount  int
 }
 
 type Artist struct {
@@ -75,6 +75,17 @@ type PlayerState struct {
 	TrackURI   string
 	ProgressMs int
 	DurationMs int
+}
+
+type rawAlbum struct {
+	ID          string `json:"id"`
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	ReleaseDate string `json:"release_date"`
+	TotalTracks int    `json:"total_tracks"`
+	Artists     []struct {
+		Name string `json:"name"`
+	} `json:"artists"`
 }
 
 func New(spClient *sp.Client, httpClient *http.Client) *Client {
@@ -232,136 +243,6 @@ func (c *Client) GetShowEpisodes(ctx context.Context, showID string, offset, lim
 	return episodes, hasMore, nil
 }
 
-// doWithRetry performs a GET request with 429 retry logic. Returns the
-// response body and status code, or an error if the request itself failed.
-func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
-	for attempts := 0; attempts < 3; attempts++ {
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			return nil, 0, err
-		}
-		resp, err := c.http.Do(req)
-		if err != nil {
-			return nil, 0, err
-		}
-		body, err := io.ReadAll(resp.Body)
-		resp.Body.Close()
-		if err != nil {
-			return nil, 0, err
-		}
-		if resp.StatusCode != http.StatusOK {
-			log.Printf("[spotify] %s %d body=%s", url, resp.StatusCode, body)
-		}
-		if resp.StatusCode == http.StatusTooManyRequests {
-			wait := 0
-			if s := resp.Header.Get("Retry-After"); s != "" {
-				if n, err := strconv.Atoi(s); err == nil {
-					wait = n
-				}
-			}
-			if wait > 10 {
-				return nil, resp.StatusCode, fmt.Errorf("rate limited — retry in %dm", wait/60)
-			}
-			select {
-			case <-time.After(time.Duration(wait) * time.Second):
-				continue
-			case <-ctx.Done():
-				return nil, 0, ctx.Err()
-			}
-		}
-		return body, resp.StatusCode, nil
-	}
-	return nil, http.StatusTooManyRequests, fmt.Errorf("Spotify API 429: rate limited after retries")
-}
-
-func (c *Client) apiGet(ctx context.Context, url string, result interface{}) error {
-	body, status, err := c.doWithRetry(ctx, url)
-	if err != nil {
-		return err
-	}
-	if status != http.StatusOK {
-		return fmt.Errorf("Spotify API %d: %s", status, body)
-	}
-	return json.Unmarshal(body, result)
-}
-
-func playOpts(deviceID string) *sp.PlayOptions {
-	opts := &sp.PlayOptions{}
-	if deviceID != "" {
-		id := sp.ID(deviceID)
-		opts.DeviceID = &id
-	}
-	return opts
-}
-
-func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string) error {
-	opts := playOpts(deviceID)
-	if contextURI != "" {
-		uri := sp.URI(contextURI)
-		opts.PlaybackContext = &uri
-		opts.PlaybackOffset = &sp.PlaybackOffset{URI: sp.URI(itemURI)}
-	} else {
-		opts.URIs = []sp.URI{sp.URI(itemURI)}
-	}
-	return c.sp.PlayOpt(ctx, opts)
-}
-
-func (c *Client) PlayQueue(ctx context.Context, uris []string, deviceID string) error {
-	opts := playOpts(deviceID)
-	for _, u := range uris {
-		opts.URIs = append(opts.URIs, sp.URI(u))
-	}
-	return c.sp.PlayOpt(ctx, opts)
-}
-
-func (c *Client) Resume(ctx context.Context, deviceID string) error {
-	return c.sp.PlayOpt(ctx, playOpts(deviceID))
-}
-
-func (c *Client) Pause(ctx context.Context, deviceID string) error {
-	return c.sp.PauseOpt(ctx, playOpts(deviceID))
-}
-
-func (c *Client) Stop(ctx context.Context, deviceID string) error {
-	opts := playOpts(deviceID)
-	if err := c.sp.PauseOpt(ctx, opts); err != nil {
-		return err
-	}
-	return c.sp.SeekOpt(ctx, 0, opts)
-}
-
-func (c *Client) Next(ctx context.Context, deviceID string) error {
-	return c.sp.NextOpt(ctx, playOpts(deviceID))
-}
-
-func (c *Client) Previous(ctx context.Context, deviceID string) error {
-	return c.sp.PreviousOpt(ctx, playOpts(deviceID))
-}
-
-func (c *Client) Shuffle(ctx context.Context, state bool, deviceID string) error {
-	return c.sp.ShuffleOpt(ctx, state, playOpts(deviceID))
-}
-
-func (c *Client) Seek(ctx context.Context, positionMs int, deviceID string) error {
-	return c.sp.SeekOpt(ctx, positionMs, playOpts(deviceID))
-}
-
-func (c *Client) FindDevice(ctx context.Context) (string, error) {
-	devices, err := c.sp.PlayerDevices(ctx)
-	if err != nil {
-		return "", err
-	}
-	if len(devices) == 0 {
-		return "", fmt.Errorf("No Spotify devices found — open Spotify on any device")
-	}
-	for _, d := range devices {
-		if d.Active {
-			return string(d.ID), nil
-		}
-	}
-	return string(devices[0].ID), nil
-}
-
 func (c *Client) SearchTracks(ctx context.Context, query string, offset, limit int) ([]Track, bool, error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/search?q=%s&type=track&limit=%d&offset=%d",
 		neturl.QueryEscape(query), limit, offset)
@@ -436,36 +317,6 @@ func (c *Client) SearchEpisodes(ctx context.Context, query string, offset, limit
 	}
 	hasMore := result.Episodes.Offset+len(result.Episodes.Items) < result.Episodes.Total
 	return episodes, hasMore, nil
-}
-
-type rawAlbum struct {
-	ID          string `json:"id"`
-	URI         string `json:"uri"`
-	Name        string `json:"name"`
-	ReleaseDate string `json:"release_date"`
-	TotalTracks int    `json:"total_tracks"`
-	Artists     []struct {
-		Name string `json:"name"`
-	} `json:"artists"`
-}
-
-func convertAlbums(raw []rawAlbum) []Album {
-	var albums []Album
-	for _, a := range raw {
-		artist := ""
-		if len(a.Artists) > 0 {
-			artist = a.Artists[0].Name
-		}
-		albums = append(albums, Album{
-			ID:          a.ID,
-			URI:         a.URI,
-			Name:        a.Name,
-			Artist:      artist,
-			ReleaseDate: a.ReleaseDate,
-			TrackCount:  a.TotalTracks,
-		})
-	}
-	return albums
 }
 
 func (c *Client) SearchAlbums(ctx context.Context, query string, offset, limit int) ([]Album, bool, error) {
@@ -646,4 +497,153 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		ps.ArtistName = state.Item.Show.Name
 	}
 	return ps, nil
+}
+
+func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string) error {
+	opts := playOpts(deviceID)
+	if contextURI != "" {
+		uri := sp.URI(contextURI)
+		opts.PlaybackContext = &uri
+		opts.PlaybackOffset = &sp.PlaybackOffset{URI: sp.URI(itemURI)}
+	} else {
+		opts.URIs = []sp.URI{sp.URI(itemURI)}
+	}
+	return c.sp.PlayOpt(ctx, opts)
+}
+
+func (c *Client) PlayQueue(ctx context.Context, uris []string, deviceID string) error {
+	opts := playOpts(deviceID)
+	for _, u := range uris {
+		opts.URIs = append(opts.URIs, sp.URI(u))
+	}
+	return c.sp.PlayOpt(ctx, opts)
+}
+
+func (c *Client) Resume(ctx context.Context, deviceID string) error {
+	return c.sp.PlayOpt(ctx, playOpts(deviceID))
+}
+
+func (c *Client) Pause(ctx context.Context, deviceID string) error {
+	return c.sp.PauseOpt(ctx, playOpts(deviceID))
+}
+
+func (c *Client) Stop(ctx context.Context, deviceID string) error {
+	opts := playOpts(deviceID)
+	if err := c.sp.PauseOpt(ctx, opts); err != nil {
+		return err
+	}
+	return c.sp.SeekOpt(ctx, 0, opts)
+}
+
+func (c *Client) Next(ctx context.Context, deviceID string) error {
+	return c.sp.NextOpt(ctx, playOpts(deviceID))
+}
+
+func (c *Client) Previous(ctx context.Context, deviceID string) error {
+	return c.sp.PreviousOpt(ctx, playOpts(deviceID))
+}
+
+func (c *Client) Shuffle(ctx context.Context, state bool, deviceID string) error {
+	return c.sp.ShuffleOpt(ctx, state, playOpts(deviceID))
+}
+
+func (c *Client) Seek(ctx context.Context, positionMs int, deviceID string) error {
+	return c.sp.SeekOpt(ctx, positionMs, playOpts(deviceID))
+}
+
+func (c *Client) FindDevice(ctx context.Context) (string, error) {
+	devices, err := c.sp.PlayerDevices(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(devices) == 0 {
+		return "", fmt.Errorf("No Spotify devices found — open Spotify on any device")
+	}
+	for _, d := range devices {
+		if d.Active {
+			return string(d.ID), nil
+		}
+	}
+	return string(devices[0].ID), nil
+}
+
+// doWithRetry performs a GET request with 429 retry logic. Returns the
+// response body and status code, or an error if the request itself failed.
+func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
+	for attempts := 0; attempts < 3; attempts++ {
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			return nil, 0, err
+		}
+		resp, err := c.http.Do(req)
+		if err != nil {
+			return nil, 0, err
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			return nil, 0, err
+		}
+		if resp.StatusCode != http.StatusOK {
+			log.Printf("[spotify] %s %d body=%s", url, resp.StatusCode, body)
+		}
+		if resp.StatusCode == http.StatusTooManyRequests {
+			wait := 0
+			if s := resp.Header.Get("Retry-After"); s != "" {
+				if n, err := strconv.Atoi(s); err == nil {
+					wait = n
+				}
+			}
+			if wait > 10 {
+				return nil, resp.StatusCode, fmt.Errorf("rate limited — retry in %dm", wait/60)
+			}
+			select {
+			case <-time.After(time.Duration(wait) * time.Second):
+				continue
+			case <-ctx.Done():
+				return nil, 0, ctx.Err()
+			}
+		}
+		return body, resp.StatusCode, nil
+	}
+	return nil, http.StatusTooManyRequests, fmt.Errorf("Spotify API 429: rate limited after retries")
+}
+
+func (c *Client) apiGet(ctx context.Context, url string, result interface{}) error {
+	body, status, err := c.doWithRetry(ctx, url)
+	if err != nil {
+		return err
+	}
+	if status != http.StatusOK {
+		return fmt.Errorf("Spotify API %d: %s", status, body)
+	}
+	return json.Unmarshal(body, result)
+}
+
+func convertAlbums(raw []rawAlbum) []Album {
+	var albums []Album
+	for _, a := range raw {
+		artist := ""
+		if len(a.Artists) > 0 {
+			artist = a.Artists[0].Name
+		}
+		albums = append(albums, Album{
+			ID:          a.ID,
+			URI:         a.URI,
+			Name:        a.Name,
+			Artist:      artist,
+			ReleaseDate: a.ReleaseDate,
+			TrackCount:  a.TotalTracks,
+		})
+	}
+	return albums
+}
+
+func playOpts(deviceID string) *sp.PlayOptions {
+	opts := &sp.PlayOptions{}
+	if deviceID != "" {
+		id := sp.ID(deviceID)
+		opts.DeviceID = &id
+	}
+	return opts
 }

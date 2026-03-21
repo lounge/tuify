@@ -26,6 +26,11 @@ type Oscillogram struct {
 	hues       []float64
 }
 
+type oscCol struct {
+	amp        float64
+	fr, fg, fb int // foreground RGB
+}
+
 func NewOscillogram() *Oscillogram {
 	return &Oscillogram{}
 }
@@ -70,11 +75,6 @@ func (o *Oscillogram) Init(seed string, durationMs int) {
 }
 
 func (o *Oscillogram) Advance() {}
-
-type oscCol struct {
-	amp    float64
-	fr, fg, fb int // foreground RGB
-}
 
 func (o *Oscillogram) View(progressMs, width, height int) string {
 	if len(o.amplitudes) == 0 || width < 1 || height < 1 {

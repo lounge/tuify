@@ -21,6 +21,25 @@ import (
 
 const redirectURL = "http://127.0.0.1:4444/callback"
 
+// savingTokenSource wraps a TokenSource and persists the token to disk
+// whenever it is refreshed, so refreshed tokens survive app restarts.
+type savingTokenSource struct {
+	base oauth2.TokenSource
+	last *oauth2.Token
+}
+
+func (s *savingTokenSource) Token() (*oauth2.Token, error) {
+	tok, err := s.base.Token()
+	if err != nil {
+		return nil, err
+	}
+	if s.last == nil || tok.AccessToken != s.last.AccessToken {
+		s.last = tok
+		_ = SaveToken(tok)
+	}
+	return tok, nil
+}
+
 func NewAuthenticator(clientID string) *spotifyauth.Authenticator {
 	return spotifyauth.New(
 		spotifyauth.WithClientID(clientID),
@@ -33,6 +52,19 @@ func NewAuthenticator(clientID string) *spotifyauth.Authenticator {
 			spotifyauth.ScopeUserLibraryRead,
 		),
 	)
+}
+
+// NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
+// and persists them to disk on each refresh.
+func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) *http.Client {
+	base := a.Client(context.Background(), token)
+	ts := &savingTokenSource{base: base.Transport.(*oauth2.Transport).Source, last: token}
+	return &http.Client{
+		Transport: &oauth2.Transport{
+			Source: ts,
+			Base:   http.DefaultTransport,
+		},
+	}
 }
 
 func Login(a *spotifyauth.Authenticator) (*oauth2.Token, error) {
@@ -132,38 +164,6 @@ func generateRandomBase64(n int) string {
 func generateCodeChallenge(verifier string) string {
 	h := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(h[:])
-}
-
-// savingTokenSource wraps a TokenSource and persists the token to disk
-// whenever it is refreshed, so refreshed tokens survive app restarts.
-type savingTokenSource struct {
-	base oauth2.TokenSource
-	last *oauth2.Token
-}
-
-func (s *savingTokenSource) Token() (*oauth2.Token, error) {
-	tok, err := s.base.Token()
-	if err != nil {
-		return nil, err
-	}
-	if s.last == nil || tok.AccessToken != s.last.AccessToken {
-		s.last = tok
-		_ = SaveToken(tok)
-	}
-	return tok, nil
-}
-
-// NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
-// and persists them to disk on each refresh.
-func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) *http.Client {
-	base := a.Client(context.Background(), token)
-	ts := &savingTokenSource{base: base.Transport.(*oauth2.Transport).Source, last: token}
-	return &http.Client{
-		Transport: &oauth2.Transport{
-			Source: ts,
-			Base:   http.DefaultTransport,
-		},
-	}
 }
 
 func openBrowser(url string) {
