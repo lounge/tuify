@@ -599,6 +599,67 @@ func (c *Client) GetAlbumTracks(ctx context.Context, albumID string, offset, lim
 	return tracks, hasMore, nil
 }
 
+type AudioSegment struct {
+	Start           float64    `json:"start"`
+	Duration        float64    `json:"duration"`
+	Confidence      float64    `json:"confidence"`
+	LoudnessStart   float64    `json:"loudness_start"`
+	LoudnessMax     float64    `json:"loudness_max"`
+	LoudnessMaxTime float64    `json:"loudness_max_time"`
+	LoudnessEnd     float64    `json:"loudness_end"`
+	Pitches         [12]float64 `json:"pitches"`
+	Timbre          [12]float64 `json:"timbre"`
+}
+
+type AudioBeat struct {
+	Start      float64 `json:"start"`
+	Duration   float64 `json:"duration"`
+	Confidence float64 `json:"confidence"`
+}
+
+type AudioBar struct {
+	Start      float64 `json:"start"`
+	Duration   float64 `json:"duration"`
+	Confidence float64 `json:"confidence"`
+}
+
+type AudioSection struct {
+	Start           float64 `json:"start"`
+	Duration        float64 `json:"duration"`
+	Confidence      float64 `json:"confidence"`
+	Loudness        float64 `json:"loudness"`
+	Tempo           float64 `json:"tempo"`
+	TempoConfidence float64 `json:"tempo_confidence"`
+	Key             int     `json:"key"`
+	KeyConfidence   float64 `json:"key_confidence"`
+	Mode            int     `json:"mode"`
+	ModeConfidence  float64 `json:"mode_confidence"`
+	TimeSignature   int     `json:"time_signature"`
+}
+
+type AudioTatum struct {
+	Start      float64 `json:"start"`
+	Duration   float64 `json:"duration"`
+	Confidence float64 `json:"confidence"`
+}
+
+type AudioAnalysis struct {
+	Segments []AudioSegment `json:"segments"`
+	Beats    []AudioBeat    `json:"beats"`
+	Bars     []AudioBar     `json:"bars"`
+	Sections []AudioSection `json:"sections"`
+	Tatums   []AudioTatum   `json:"tatums"`
+}
+
+func (c *Client) GetAudioAnalysis(ctx context.Context, trackID string) (*AudioAnalysis, error) {
+	url := fmt.Sprintf("https://api.spotify.com/v1/audio-analysis/%s", trackID)
+	var result AudioAnalysis
+	if err := c.apiGet(ctx, url, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 	body, status, err := c.doWithRetry(ctx, "https://api.spotify.com/v1/me/player?additional_types=track,episode")
 	if err != nil {
