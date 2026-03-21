@@ -11,6 +11,7 @@ type homeItem struct {
 }
 
 var homeItems = []homeItem{
+	{name: "Search", kind: viewSearch},
 	{name: "Playlists", kind: viewPlaylists},
 	{name: "Podcasts", kind: viewPodcasts},
 }
@@ -28,11 +29,11 @@ func newHomeView(width, height int) homeView {
 func (v homeView) Update(msg tea.Msg) (homeView, tea.Cmd) {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
-		case "left", "h":
+		case "up", "k":
 			if v.cursor > 0 {
 				v.cursor--
 			}
-		case "right", "l":
+		case "down", "j":
 			if v.cursor < len(homeItems)-1 {
 				v.cursor++
 			}
@@ -55,6 +56,6 @@ func (v homeView) View() string {
 		}
 	}
 
-	row := lipgloss.JoinHorizontal(lipgloss.Center, tabs...)
-	return lipgloss.Place(v.width, v.height, lipgloss.Center, lipgloss.Center, row)
+	column := lipgloss.JoinVertical(lipgloss.Center, tabs...)
+	return lipgloss.Place(v.width, v.height, lipgloss.Center, lipgloss.Center, column)
 }

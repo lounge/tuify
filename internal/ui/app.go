@@ -15,6 +15,7 @@ type viewKind int
 
 const (
 	viewHome viewKind = iota
+	viewSearch
 	viewPlaylists
 	viewTracks
 	viewPodcasts
@@ -29,6 +30,7 @@ type seekFireMsg struct {
 type Model struct {
 	viewStack  []viewKind
 	home       homeView
+	search     searchView
 	playlists  playlistView
 	tracks     trackView
 	podcasts   podcastView
@@ -90,6 +92,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		h := m.listHeight()
 		m.home.width = msg.Width
 		m.home.height = msg.Height - nowPlayingHeight
+		if m.search.client != nil {
+			m.search.list.SetSize(msg.Width, h)
+		}
 		if m.playlists.client != nil {
 			m.playlists.list.SetSize(msg.Width, h)
 		}
@@ -105,7 +110,49 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Search mode: intercept all keys except up/down
+		// Search view: API search with debounce
+		if m.currentView() == viewSearch && m.search.searching {
+			switch msg.String() {
+			case "ctrl+c":
+				return m, tea.Quit
+			case "esc":
+				m.search.closeSearch()
+				return m, nil
+			case "enter":
+				selected := m.search.list.SelectedItem()
+				m.search.closeSearch()
+				if cmd := m.playCurrentItem(selected); cmd != nil {
+					return m, cmd
+				}
+				return m, nil
+			case "backspace":
+				runes := []rune(m.search.searchQuery)
+				if len(runes) > 0 {
+					m.search.searchQuery = string(runes[:len(runes)-1])
+					m.search.debounceSeq++
+					if len([]rune(m.search.searchQuery)) >= 2 {
+						return m, m.search.debounce()
+					}
+				}
+				return m, nil
+			case "/":
+				return m, nil
+			case "up", "down":
+				// Fall through to view update
+			default:
+				if len(msg.Runes) > 0 {
+					m.search.searchQuery += string(msg.Runes)
+					m.search.debounceSeq++
+					if len([]rune(m.search.searchQuery)) >= 2 {
+						return m, m.search.debounce()
+					}
+				}
+				return m, nil
+			}
+			break
+		}
+
+		// Local filter search mode: intercept all keys except up/down
 		sl := m.searchableList()
 		if sl != nil && sl.searching {
 			switch msg.String() {
@@ -162,6 +209,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m.handleEnter()
 		case "/":
+			if m.currentView() == viewSearch && !m.search.searching {
+				m.search.openSearch()
+				return m, nil
+			}
 			if sl != nil {
 				if sl.openSearch() {
 					return m, m.fetchSearchableView()
@@ -218,6 +269,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Sync list selection when the playing item changes
 	if m.nowPlaying.trackURI != prevURI {
 		switch m.currentView() {
+		case viewSearch:
+			if m.search.selectByURI(m.nowPlaying.trackURI) {
+				cmds = append(cmds, m.search.fetchMore()...)
+			}
 		case viewTracks:
 			if m.tracks.selectByURI(m.nowPlaying.trackURI) {
 				cmds = append(cmds, m.tracks.fetchMore())
@@ -233,6 +288,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.currentView() {
 	case viewHome:
 		m.home, cmd = m.home.Update(msg)
+	case viewSearch:
+		m.search, cmd = m.search.Update(msg)
 	case viewPlaylists:
 		m.playlists, cmd = m.playlists.Update(msg)
 	case viewTracks:
@@ -254,6 +311,10 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	case viewHome:
 		hi := m.home.selectedItem()
 		switch hi.kind {
+		case viewSearch:
+			m.search = newSearchView(m.client, m.width, m.listHeight())
+			m.pushView(viewSearch)
+			return m, nil
 		case viewPlaylists:
 			m.playlists = newPlaylistView(m.client, m.width, m.listHeight())
 			m.pushView(viewPlaylists)
@@ -262,6 +323,11 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 			m.podcasts = newPodcastView(m.client, m.width, m.listHeight())
 			m.pushView(viewPodcasts)
 			return m, m.podcasts.Init()
+		}
+	case viewSearch:
+		selected := m.search.list.SelectedItem()
+		if cmd := m.playCurrentItem(selected); cmd != nil {
+			return m, cmd
 		}
 	case viewPlaylists:
 		selected := m.playlists.list.SelectedItem()
@@ -301,6 +367,12 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m Model) playQueue(uris []string) tea.Cmd {
+	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
+		return c.PlayQueue(ctx, uris, id)
+	}, false)
 }
 
 func (m Model) playItem(itemURI, contextURI string) tea.Cmd {
@@ -389,6 +461,13 @@ func (m *Model) searchableList() *lazyList {
 
 func (m Model) playCurrentItem(item list.Item) tea.Cmd {
 	switch m.currentView() {
+	case viewSearch:
+		if ti, ok := item.(trackItem); ok {
+			return m.playQueue(m.search.trackQueueFrom(ti.uri))
+		}
+		if ei, ok := item.(episodeItem); ok {
+			return m.playQueue(m.search.episodeQueueFrom(ei.uri))
+		}
 	case viewTracks:
 		if ti, ok := item.(trackItem); ok {
 			return m.playItem(ti.uri, "spotify:playlist:"+m.tracks.playlistID)
@@ -422,6 +501,8 @@ func (m Model) View() string {
 	if m.currentView() != viewHome {
 		var crumbs string
 		switch m.currentView() {
+		case viewSearch:
+			crumbs = "Home > Search"
 		case viewPlaylists:
 			crumbs = "Home > Playlists"
 		case viewTracks:
@@ -439,6 +520,8 @@ func (m Model) View() string {
 	switch m.currentView() {
 	case viewHome:
 		b.WriteString(m.home.View())
+	case viewSearch:
+		b.WriteString(m.search.View())
 	case viewPlaylists:
 		b.WriteString(m.playlists.View())
 	case viewTracks:
@@ -453,7 +536,13 @@ func (m Model) View() string {
 	b.WriteString("\n")
 	var searchEnabled, searchActive bool
 	var searchQuery string
-	if sl := m.searchableList(); sl != nil {
+	if m.currentView() == viewSearch {
+		searchEnabled = true
+		if m.search.searching {
+			searchActive = true
+			searchQuery = m.search.searchQuery
+		}
+	} else if sl := m.searchableList(); sl != nil {
 		searchEnabled = true
 		if sl.searching {
 			searchActive = true

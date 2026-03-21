@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	neturl "net/url"
 	"strconv"
 	"time"
 
@@ -288,6 +289,14 @@ func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string)
 	return c.sp.PlayOpt(ctx, opts)
 }
 
+func (c *Client) PlayQueue(ctx context.Context, uris []string, deviceID string) error {
+	opts := playOpts(deviceID)
+	for _, u := range uris {
+		opts.URIs = append(opts.URIs, sp.URI(u))
+	}
+	return c.sp.PlayOpt(ctx, opts)
+}
+
 func (c *Client) Resume(ctx context.Context, deviceID string) error {
 	return c.sp.PlayOpt(ctx, playOpts(deviceID))
 }
@@ -334,6 +343,82 @@ func (c *Client) FindDevice(ctx context.Context) (string, error) {
 		}
 	}
 	return string(devices[0].ID), nil
+}
+
+func (c *Client) SearchTracks(ctx context.Context, query string, offset, limit int) ([]Track, bool, error) {
+	endpoint := fmt.Sprintf("https://api.spotify.com/v1/search?q=%s&type=track&limit=%d&offset=%d",
+		neturl.QueryEscape(query), limit, offset)
+	var result struct {
+		Tracks struct {
+			Offset int `json:"offset"`
+			Total  int `json:"total"`
+			Items  []struct {
+				ID       string `json:"id"`
+				URI      string `json:"uri"`
+				Name     string `json:"name"`
+				Duration int    `json:"duration_ms"`
+				Artists  []struct {
+					Name string `json:"name"`
+				} `json:"artists"`
+				Album struct {
+					Name string `json:"name"`
+				} `json:"album"`
+			} `json:"items"`
+		} `json:"tracks"`
+	}
+	if err := c.apiGet(ctx, endpoint, &result); err != nil {
+		return nil, false, err
+	}
+	var tracks []Track
+	for _, t := range result.Tracks.Items {
+		artist := ""
+		if len(t.Artists) > 0 {
+			artist = t.Artists[0].Name
+		}
+		tracks = append(tracks, Track{
+			ID:       t.ID,
+			URI:      t.URI,
+			Name:     t.Name,
+			Artist:   artist,
+			Album:    t.Album.Name,
+			Duration: time.Duration(t.Duration) * time.Millisecond,
+		})
+	}
+	hasMore := result.Tracks.Offset+len(result.Tracks.Items) < result.Tracks.Total
+	return tracks, hasMore, nil
+}
+
+func (c *Client) SearchEpisodes(ctx context.Context, query string, offset, limit int) ([]Episode, bool, error) {
+	endpoint := fmt.Sprintf("https://api.spotify.com/v1/search?q=%s&type=episode&limit=%d&offset=%d",
+		neturl.QueryEscape(query), limit, offset)
+	var result struct {
+		Episodes struct {
+			Offset int `json:"offset"`
+			Total  int `json:"total"`
+			Items  []struct {
+				ID          string `json:"id"`
+				URI         string `json:"uri"`
+				Name        string `json:"name"`
+				ReleaseDate string `json:"release_date"`
+				DurationMs  int    `json:"duration_ms"`
+			} `json:"items"`
+		} `json:"episodes"`
+	}
+	if err := c.apiGet(ctx, endpoint, &result); err != nil {
+		return nil, false, err
+	}
+	var episodes []Episode
+	for _, e := range result.Episodes.Items {
+		episodes = append(episodes, Episode{
+			ID:          e.ID,
+			URI:         e.URI,
+			Name:        e.Name,
+			ReleaseDate: e.ReleaseDate,
+			Duration:    time.Duration(e.DurationMs) * time.Millisecond,
+		})
+	}
+	hasMore := result.Episodes.Offset+len(result.Episodes.Items) < result.Episodes.Total
+	return episodes, hasMore, nil
 }
 
 func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {

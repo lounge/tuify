@@ -85,6 +85,10 @@ var (
 
 	searchInputStyle = lipgloss.NewStyle().
 				Foreground(colorSecondary)
+
+	sectionStyle = lipgloss.NewStyle().
+			Foreground(colorMuted).
+			Bold(true)
 )
 
 func newListDelegate() list.DefaultDelegate {
