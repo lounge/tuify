@@ -4,6 +4,8 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 
+![Tuify screenshot](img/screenshot.png)
+
 ## Features
 
 - **Playback Control** — Play, pause, skip, previous, shuffle, seek, and device selection
