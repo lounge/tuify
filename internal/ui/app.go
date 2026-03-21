@@ -112,7 +112,7 @@ func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 	case "/":
 		return nil, true
-	case "up", "down":
+	case "up", "down", "left", "right":
 		return nil, false
 	default:
 		if len(msg.Runes) > 0 {
@@ -135,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.home.width = msg.Width
 		m.home.height = msg.Height - nowPlayingHeight
 		if m.search.client != nil {
-			m.search.list.SetSize(msg.Width, h)
+			m.search.list.SetSize(msg.Width, h-searchTabLines)
 		}
 		if m.playlists.client != nil {
 			m.playlists.list.SetSize(msg.Width, h)
@@ -209,6 +209,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.seekRelative(-5000)
 		case "d":
 			return m, m.seekRelative(5000)
+		case "left", "right":
+			if m.currentView() == viewSearch {
+				if msg.String() == "left" {
+					m.search.switchTab(tabTracks)
+				} else {
+					m.search.switchTab(tabEpisodes)
+				}
+				return m, nil
+			}
 		case "esc":
 			m.popView()
 			return m, nil

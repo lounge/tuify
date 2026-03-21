@@ -11,7 +11,6 @@ import (
 )
 
 type trackItem struct {
-	id       string
 	uri      string
 	name     string
 	artist   string
@@ -73,7 +72,7 @@ func (v trackView) Update(msg tea.Msg) (trackView, tea.Cmd) {
 		var items []list.Item
 		for _, t := range msg.tracks {
 			items = append(items, trackItem{
-				id: t.ID, uri: t.URI, name: t.Name,
+				uri: t.URI, name: t.Name,
 				artist: t.Artist, album: t.Album, duration: t.Duration,
 			})
 		}
@@ -105,5 +104,4 @@ func (v *trackView) retryLoad() tea.Cmd {
 func (v trackView) View() string {
 	return v.list.View()
 }
-
 

@@ -58,9 +58,9 @@ var (
 )
 
 // Home tabs
-var (
-	homeTabWidth = 20
+const homeTabWidth = 20
 
+var (
 	homeTabActive = lipgloss.NewStyle().
 			Background(colorPrimary).
 			Foreground(lipgloss.Color("#000000")).
@@ -86,9 +86,14 @@ var (
 	searchInputStyle = lipgloss.NewStyle().
 				Foreground(colorSecondary)
 
-	sectionStyle = lipgloss.NewStyle().
-			Foreground(colorMuted).
-			Bold(true)
+	searchTabActiveStyle = lipgloss.NewStyle().
+				Foreground(colorPrimary).
+				Bold(true).
+				Padding(0, 1)
+
+	searchTabInactiveStyle = lipgloss.NewStyle().
+				Foreground(colorMuted).
+				Padding(0, 1)
 )
 
 func newListDelegate() list.DefaultDelegate {

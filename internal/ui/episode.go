@@ -11,7 +11,6 @@ import (
 )
 
 type episodeItem struct {
-	id          string
 	uri         string
 	name        string
 	releaseDate string
@@ -70,7 +69,7 @@ func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 		var items []list.Item
 		for _, e := range msg.episodes {
 			items = append(items, episodeItem{
-				id: e.ID, uri: e.URI, name: e.Name,
+				uri: e.URI, name: e.Name,
 				releaseDate: e.ReleaseDate, duration: e.Duration,
 			})
 		}
@@ -102,4 +101,3 @@ func (v *episodeView) retryLoad() tea.Cmd {
 func (v episodeView) View() string {
 	return v.list.View()
 }
-
