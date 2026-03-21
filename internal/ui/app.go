@@ -135,7 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.home.width = msg.Width
 		m.home.height = msg.Height - nowPlayingHeight
 		if m.search.client != nil {
-			m.search.list.SetSize(msg.Width, h-searchTabLines)
+			m.search.list.SetSize(msg.Width, h)
 		}
 		if m.playlists.client != nil {
 			m.playlists.list.SetSize(msg.Width, h)
@@ -158,10 +158,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				query: &m.search.searchQuery,
 				list:  &m.search.list,
 				close: func() { m.search.closeSearch() },
-				play:  m.playCurrentItem,
+				play: func(item list.Item) tea.Cmd {
+					// For container items, drill down instead of playing.
+					if !m.search.isPlayable() {
+						return m.search.drillDown(item)
+					}
+					return m.playCurrentItem(item)
+				},
 				onChange: func() tea.Cmd {
 					m.search.debounceSeq++
-					if len([]rune(m.search.searchQuery)) >= 2 {
+					_, term := parseSearch(m.search.searchQuery)
+					if len([]rune(term)) >= 2 {
 						return m.search.debounce()
 					}
 					return nil
@@ -209,22 +216,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.seekRelative(-5000)
 		case "d":
 			return m, m.seekRelative(5000)
-		case "left", "right":
-			if m.currentView() == viewSearch {
-				if msg.String() == "left" {
-					m.search.switchTab(tabTracks)
-				} else {
-					m.search.switchTab(tabEpisodes)
-				}
-				return m, nil
-			}
 		case "esc":
+			if m.currentView() == viewSearch && m.search.depth > 0 {
+				if m.search.goBack() {
+					return m, m.search.goBackFetchCmd()
+				}
+			}
 			m.popView()
 			return m, nil
 		case "enter":
 			return m.handleEnter()
 		case "/":
-			if m.currentView() == viewSearch && !m.search.searching {
+			if m.currentView() == viewSearch {
 				m.search.openSearch()
 				return m, nil
 			}
@@ -285,8 +288,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.nowPlaying.trackURI != prevURI {
 		switch m.currentView() {
 		case viewSearch:
-			if m.search.selectByURI(m.nowPlaying.trackURI) {
-				cmds = append(cmds, m.search.fetchMore()...)
+			if m.search.isPlayable() {
+				if m.search.selectByURI(m.nowPlaying.trackURI) {
+					cmds = append(cmds, m.search.fetchMore()...)
+				}
 			}
 		case viewTracks:
 			if m.tracks.selectByURI(m.nowPlaying.trackURI) {
@@ -341,7 +346,14 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 		}
 	case viewSearch:
 		selected := m.search.list.SelectedItem()
-		if cmd := m.playCurrentItem(selected); cmd != nil {
+		if si, ok := selected.(statusItem); ok && si.isError {
+			return m, m.search.retry()
+		}
+		if m.search.isPlayable() {
+			if cmd := m.playCurrentItem(selected); cmd != nil {
+				return m, cmd
+			}
+		} else if cmd := m.search.drillDown(selected); cmd != nil {
 			return m, cmd
 		}
 	case viewPlaylists:
@@ -477,11 +489,22 @@ func (m *Model) searchableList() *lazyList {
 func (m Model) playCurrentItem(item list.Item) tea.Cmd {
 	switch m.currentView() {
 	case viewSearch:
+		ctx := m.search.contextURI()
+		if ctx != "" {
+			// Album or show context: use Spotify context URI for continuation
+			if ti, ok := item.(trackItem); ok {
+				return m.playItem(ti.uri, ctx)
+			}
+			if ei, ok := item.(episodeItem); ok {
+				return m.playItem(ei.uri, ctx)
+			}
+		}
+		// No context (direct track/episode search): queue remaining items
 		if ti, ok := item.(trackItem); ok {
-			return m.playQueue(m.search.trackQueueFrom(ti.uri))
+			return m.playQueue(m.search.queueFrom(ti.uri))
 		}
 		if ei, ok := item.(episodeItem); ok {
-			return m.playQueue(m.search.episodeQueueFrom(ei.uri))
+			return m.playQueue(m.search.queueFrom(ei.uri))
 		}
 	case viewTracks:
 		if ti, ok := item.(trackItem); ok {
@@ -517,7 +540,7 @@ func (m Model) View() string {
 		var crumbs string
 		switch m.currentView() {
 		case viewSearch:
-			crumbs = "Home > Search"
+			crumbs = m.search.Breadcrumb()
 		case viewPlaylists:
 			crumbs = "Home > Playlists"
 		case viewTracks:

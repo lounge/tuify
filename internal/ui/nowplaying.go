@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -153,7 +154,13 @@ func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery stri
 
 	var help string
 	if searchActive {
-		help = searchInputStyle.Render("/" + searchQuery + "█")
+		if idx := strings.Index(searchQuery, ":"); idx > 0 {
+			pre := searchQuery[:idx+1]
+			rest := searchQuery[idx+1:]
+			help = searchPrefixStyle.Render("/"+pre) + searchInputStyle.Render(rest+"█")
+		} else {
+			help = searchInputStyle.Render("/" + searchQuery + "█")
+		}
 	} else if searchEnabled {
 		help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop  /:search  q:quit")
 	} else {

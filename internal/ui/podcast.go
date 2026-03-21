@@ -11,6 +11,7 @@ import (
 
 type podcastItem struct {
 	id           string
+	uri          string
 	name         string
 	episodeCount int
 }

@@ -86,14 +86,15 @@ var (
 	searchInputStyle = lipgloss.NewStyle().
 				Foreground(colorSecondary)
 
-	searchTabActiveStyle = lipgloss.NewStyle().
+	searchPrefixStyle = lipgloss.NewStyle().
 				Foreground(colorPrimary).
-				Bold(true).
-				Padding(0, 1)
+				Bold(true)
 
-	searchTabInactiveStyle = lipgloss.NewStyle().
-				Foreground(colorMuted).
-				Padding(0, 1)
+	searchHintBoxStyle = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(colorMuted).
+				Foreground(colorSubtle).
+				Padding(1, 2)
 )
 
 func newListDelegate() list.DefaultDelegate {
