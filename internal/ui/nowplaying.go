@@ -120,7 +120,7 @@ func (m nowPlayingModel) SetError(msg string) (nowPlayingModel, tea.Cmd) {
 	})
 }
 
-func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery string) string {
+func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery string, vizAvailable bool) string {
 	if m.errMsg != "" {
 		return nowPlayingStyle.Width(m.width).Render(
 			errorStyle.Render(m.errMsg),
@@ -162,9 +162,17 @@ func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery stri
 			help = searchInputStyle.Render("/" + searchQuery + "█")
 		}
 	} else if searchEnabled {
-		help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop  /:search  q:quit")
+		vizHint := ""
+		if vizAvailable {
+			vizHint = "  v:visualizer"
+		}
+		help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop  /:search" + vizHint + "  q:quit")
 	} else {
-		help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop  q:quit")
+		vizHint := ""
+		if vizAvailable {
+			vizHint = "  v:visualizer"
+		}
+		help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop" + vizHint + "  q:quit")
 	}
 	return nowPlayingStyle.Width(m.width).Render(
 		fmt.Sprintf("%s\n\n%s\n\n%s", status, progress, help),

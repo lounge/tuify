@@ -36,6 +36,7 @@ type Model struct {
 	podcasts   podcastView
 	episodes   episodeView
 	nowPlaying nowPlayingModel
+	visualizer visualizerModel
 	client     *spotify.Client
 	deviceID   string
 	width      int
@@ -48,6 +49,7 @@ func NewModel(client *spotify.Client) Model {
 		viewStack:  []viewKind{viewHome},
 		home:       newHomeView(0, 0),
 		nowPlaying: newNowPlaying(client),
+		visualizer: newVisualizerModel(),
 		client:     client,
 	}
 }
@@ -216,7 +218,27 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.seekRelative(-5000)
 		case "d":
 			return m, m.seekRelative(5000)
+		case "v":
+			if m.nowPlaying.hasTrack && isTrackURI(m.nowPlaying.trackURI) {
+				cmd := m.visualizer.toggle(trackIDFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs)
+				return m, cmd
+			}
+			return m, nil
+		case "left":
+			if m.visualizer.active {
+				m.visualizer.cycle(-1)
+				return m, nil
+			}
+		case "right":
+			if m.visualizer.active {
+				m.visualizer.cycle(1)
+				return m, nil
+			}
 		case "esc":
+			if m.visualizer.active {
+				m.visualizer.active = false
+				return m, nil
+			}
 			if m.currentView() == viewSearch && m.search.depth > 0 {
 				if m.search.goBack() {
 					return m, m.search.goBackFetchCmd()
@@ -266,6 +288,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			tea.Tick(time.Second, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
 		)
 
+	case vizTickMsg:
+		if m.visualizer.active {
+			m.visualizer.advance()
+			return m, m.visualizer.tick()
+		}
+		return m, nil
+
 	case seekFireMsg:
 		if msg.seq != m.seekSeq {
 			return m, nil // outdated, a newer seek superseded this one
@@ -282,6 +311,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.nowPlaying, cmd = m.nowPlaying.Update(msg)
 	if cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+
+	// Re-init visualizer waveform on track change
+	if m.nowPlaying.trackURI != prevURI && isTrackURI(m.nowPlaying.trackURI) {
+		m.visualizer.onTrackChange(trackIDFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs)
 	}
 
 	// Sync list selection when the playing item changes
@@ -534,40 +568,45 @@ func (m Model) View() string {
 	}
 
 	var b strings.Builder
+	contentHeight := m.height - nowPlayingHeight
 
-	// Breadcrumb (skip on home)
-	if m.currentView() != viewHome {
-		var crumbs string
-		switch m.currentView() {
-		case viewSearch:
-			crumbs = m.search.Breadcrumb()
-		case viewPlaylists:
-			crumbs = "Home > Playlists"
-		case viewTracks:
-			crumbs = fmt.Sprintf("Home > Playlists > %s", m.tracks.playlistName)
-		case viewPodcasts:
-			crumbs = "Home > Podcasts"
-		case viewEpisodes:
-			crumbs = fmt.Sprintf("Home > Podcasts > %s", m.episodes.showName)
+	if m.visualizer.active {
+		b.WriteString(m.visualizer.View(m.nowPlaying.progressMs, m.width, contentHeight))
+	} else {
+		// Breadcrumb (skip on home)
+		if m.currentView() != viewHome {
+			var crumbs string
+			switch m.currentView() {
+			case viewSearch:
+				crumbs = m.search.Breadcrumb()
+			case viewPlaylists:
+				crumbs = "Home > Playlists"
+			case viewTracks:
+				crumbs = fmt.Sprintf("Home > Playlists > %s", m.tracks.playlistName)
+			case viewPodcasts:
+				crumbs = "Home > Podcasts"
+			case viewEpisodes:
+				crumbs = fmt.Sprintf("Home > Podcasts > %s", m.episodes.showName)
+			}
+			b.WriteString(breadcrumbStyle.Render(crumbs))
+			b.WriteString("\n")
 		}
-		b.WriteString(breadcrumbStyle.Render(crumbs))
-		b.WriteString("\n")
-	}
 
-	// Current view
-	switch m.currentView() {
-	case viewHome:
-		b.WriteString(m.home.View())
-	case viewSearch:
-		b.WriteString(m.search.View())
-	case viewPlaylists:
-		b.WriteString(m.playlists.View())
-	case viewTracks:
-		b.WriteString(m.tracks.View())
-	case viewPodcasts:
-		b.WriteString(m.podcasts.View())
-	case viewEpisodes:
-		b.WriteString(m.episodes.View())
+		// Current view
+		switch m.currentView() {
+		case viewHome:
+			b.WriteString(m.home.View())
+		case viewSearch:
+			b.WriteString(m.search.View())
+		case viewPlaylists:
+			b.WriteString(m.playlists.View())
+		case viewTracks:
+			b.WriteString(m.tracks.View())
+		case viewPodcasts:
+			b.WriteString(m.podcasts.View())
+		case viewEpisodes:
+			b.WriteString(m.episodes.View())
+		}
 	}
 
 	// Now playing bar
@@ -587,7 +626,8 @@ func (m Model) View() string {
 			searchQuery = sl.searchQuery
 		}
 	}
-	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery))
+	vizAvailable := m.nowPlaying.hasTrack && isTrackURI(m.nowPlaying.trackURI)
+	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery, vizAvailable))
 
 	return b.String()
 }
