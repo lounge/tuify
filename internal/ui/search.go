@@ -327,13 +327,7 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 				headers++
 			}
 			if totalItems+headers-v.list.Index() <= 10 {
-				if v.episodeHasMore {
-					v.pendingLoads++
-					cmds = append(cmds, v.fetchEpisodes(v.query, v.episodeOffset, 10))
-				} else if v.trackHasMore {
-					v.pendingLoads++
-					cmds = append(cmds, v.fetchTracks(v.query, v.trackOffset, 10))
-				}
+				cmds = append(cmds, v.fetchMore()...)
 			}
 		}
 	}

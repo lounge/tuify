@@ -81,6 +81,48 @@ func (m Model) listHeight() int {
 	return m.height - chromeHeight
 }
 
+// searchCtx captures the parts that differ between API search and local filter search.
+type searchCtx struct {
+	query    *string
+	list     *list.Model
+	close    func()
+	play     func(list.Item) tea.Cmd
+	onChange func() tea.Cmd
+}
+
+// handleSearchKey dispatches a key event for a search input session.
+// Returns the command and whether the key was handled (false = fall through for up/down).
+func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
+	switch msg.String() {
+	case "ctrl+c":
+		return tea.Quit, true
+	case "esc":
+		sc.close()
+		return nil, true
+	case "enter":
+		selected := sc.list.SelectedItem()
+		sc.close()
+		return sc.play(selected), true
+	case "backspace":
+		runes := []rune(*sc.query)
+		if len(runes) > 0 {
+			*sc.query = string(runes[:len(runes)-1])
+			return sc.onChange(), true
+		}
+		return nil, true
+	case "/":
+		return nil, true
+	case "up", "down":
+		return nil, false
+	default:
+		if len(msg.Runes) > 0 {
+			*sc.query += string(msg.Runes)
+			return sc.onChange(), true
+		}
+		return nil, true
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmds []tea.Cmd
 
@@ -110,78 +152,42 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
-		// Search view: API search with debounce
+		// Search input: API search with debounce
 		if m.currentView() == viewSearch && m.search.searching {
-			switch msg.String() {
-			case "ctrl+c":
-				return m, tea.Quit
-			case "esc":
-				m.search.closeSearch()
-				return m, nil
-			case "enter":
-				selected := m.search.list.SelectedItem()
-				m.search.closeSearch()
-				if cmd := m.playCurrentItem(selected); cmd != nil {
-					return m, cmd
-				}
-				return m, nil
-			case "backspace":
-				runes := []rune(m.search.searchQuery)
-				if len(runes) > 0 {
-					m.search.searchQuery = string(runes[:len(runes)-1])
+			sc := searchCtx{
+				query: &m.search.searchQuery,
+				list:  &m.search.list,
+				close: func() { m.search.closeSearch() },
+				play:  m.playCurrentItem,
+				onChange: func() tea.Cmd {
 					m.search.debounceSeq++
 					if len([]rune(m.search.searchQuery)) >= 2 {
-						return m, m.search.debounce()
+						return m.search.debounce()
 					}
-				}
-				return m, nil
-			case "/":
-				return m, nil
-			case "up", "down":
-				// Fall through to view update
-			default:
-				if len(msg.Runes) > 0 {
-					m.search.searchQuery += string(msg.Runes)
-					m.search.debounceSeq++
-					if len([]rune(m.search.searchQuery)) >= 2 {
-						return m, m.search.debounce()
-					}
-				}
-				return m, nil
+					return nil
+				},
+			}
+			if cmd, handled := handleSearchKey(sc, msg); handled {
+				return m, cmd
 			}
 			break
 		}
 
-		// Local filter search mode: intercept all keys except up/down
+		// Search input: local filter
 		sl := m.searchableList()
 		if sl != nil && sl.searching {
-			switch msg.String() {
-			case "ctrl+c":
-				return m, tea.Quit
-			case "esc":
-				sl.closeSearch()
-				return m, nil
-			case "enter":
-				selected := sl.list.SelectedItem()
-				sl.closeSearch()
-				return m, m.playCurrentItem(selected)
-			case "backspace":
-				runes := []rune(sl.searchQuery)
-				if len(runes) > 0 {
-					sl.searchQuery = string(runes[:len(runes)-1])
+			sc := searchCtx{
+				query: &sl.searchQuery,
+				list:  &sl.list,
+				close: func() { sl.closeSearch() },
+				play:  m.playCurrentItem,
+				onChange: func() tea.Cmd {
 					sl.applyFilter()
-				}
-				return m, nil
-			case "/":
-				return m, nil
-			case "up", "down":
-				// Fall through to view update
-			default:
-				if len(msg.Runes) > 0 {
-					sl.searchQuery += string(msg.Runes)
-					sl.applyFilter()
-				}
-				return m, nil
+					return nil
+				},
+			}
+			if cmd, handled := handleSearchKey(sc, msg); handled {
+				return m, cmd
 			}
 			break
 		}
