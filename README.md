@@ -1,6 +1,6 @@
 # Tuify
 
-A terminal-based Spotify client written in Go. Browse playlists, search for music and podcasts, control playback, and enjoy visualizers — all from your terminal.
+A terminal-based Spotify client written in Go. Browse playlists, search for music and podcasts, control playback — Spotify without all the noise.
 
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 
@@ -8,17 +8,17 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 
 ## Features
 
-- **Playback Control** — Play, pause, skip, previous, shuffle, seek, and device selection
+- **Playback Control** — Play, pause, skip, previous, shuffle, seek
 - **Playlists** — Browse and play your Spotify playlists
 - **Podcasts** — Browse saved shows and episodes
 - **Search** — Multi-type search with prefix shortcuts:
   - `t:` Track search (default)
+  - `e:` Episode search
   - `a:` Artist → Album → Track drill-down
   - `l:` Album → Track drill-down
-  - `e:` Episode search
   - `s:` Show → Episode drill-down
 - **Now Playing** — Live progress bar, track info, shuffle state
-- **Visualizers** — Oscillogram and starfield animations synced to playback
+- **Visualizers** — Oscillogram and starfield animations
 
 ## Prerequisites
 
@@ -29,13 +29,13 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 ## Install
 
 ```bash
-go install github.com/fred/tuify@latest
+go install github.com/lounge/tuify@latest
 ```
 
 Or build from source:
 
 ```bash
-git clone https://github.com/fred/tuify.git
+git clone https://github.com/lounge/tuify.git
 cd tuify
 go build
 ```
@@ -81,7 +81,9 @@ tuify/
 │       ├── visualizer.go    # Visualizer controller
 │       ├── styles.go        # Styling
 │       ├── common.go        # Shared helpers
-│       └── visualizers/     # Oscillogram & starfield
+│       └── visualizers/     # Visualizers
+│           ├── Oscillogram
+│           └── Starfield
 └── go.mod
 ```
 
