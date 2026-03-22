@@ -87,9 +87,9 @@ type searchView struct {
 
 var searchHintText = strings.Join([]string{
 	"t:  track search (default)",
+	"e:  episode search",
 	"a:  artist → album → track",
 	"l:  album → track",
-	"e:  episode search",
 	"s:  show → episode",
 }, "\n")
 
