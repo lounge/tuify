@@ -27,8 +27,8 @@ type Oscillogram struct {
 }
 
 type oscCol struct {
-	amp        float64
-	fr, fg, fb int // foreground RGB
+	amp     float64
+	r, g, b int
 }
 
 func NewOscillogram() *Oscillogram {
@@ -106,7 +106,7 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 			lum *= 0.6
 		}
 		r, g, b := hslToRGB(hue, sat, lum)
-		cols[col] = oscCol{amp: amp, fr: r, fg: g, fb: b}
+		cols[col] = oscCol{amp: amp, r: r, g: g, b: b}
 	}
 
 	// Use both halves plus a center row for odd heights.
@@ -142,7 +142,7 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 			if blockIdx > 7 {
 				blockIdx = 7
 			}
-			buf.WriteString(ansiFg(c.fr, c.fg, c.fb))
+			buf.WriteString(ansiFg(c.r, c.g, c.b))
 			buf.WriteString(upperBlocks[blockIdx])
 			buf.WriteString(ansiReset)
 		}
@@ -169,11 +169,11 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 
 			blockIdx := int(cellLevel * 8)
 			if blockIdx >= 7 {
-				buf.WriteString(ansiFg(c.fr, c.fg, c.fb))
+				buf.WriteString(ansiFg(c.r, c.g, c.b))
 				buf.WriteString("█")
 				buf.WriteString(ansiReset)
 			} else {
-				buf.WriteString(ansiFgBg(bgR, bgG, bgB, c.fr, c.fg, c.fb))
+				buf.WriteString(ansiFgBg(bgR, bgG, bgB, c.r, c.g, c.b))
 				buf.WriteString(lowerMasks[blockIdx])
 				buf.WriteString(ansiReset)
 			}

@@ -190,6 +190,7 @@ func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, 
 		Items  []struct {
 			Show struct {
 				ID            string `json:"id"`
+				URI           string `json:"uri"`
 				Name          string `json:"name"`
 				TotalEpisodes int    `json:"total_episodes"`
 			} `json:"show"`
@@ -202,6 +203,7 @@ func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, 
 	for _, item := range page.Items {
 		shows = append(shows, Show{
 			ID:            item.Show.ID,
+			URI:           item.Show.URI,
 			Name:          item.Show.Name,
 			TotalEpisodes: item.Show.TotalEpisodes,
 		})

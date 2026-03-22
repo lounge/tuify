@@ -63,7 +63,7 @@ func (v podcastView) Update(msg tea.Msg) (podcastView, tea.Cmd) {
 		var items []list.Item
 		for _, s := range msg.shows {
 			items = append(items, podcastItem{
-				id: s.ID, name: s.Name, episodeCount: s.TotalEpisodes,
+				id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes,
 			})
 		}
 		v.append(items, len(msg.shows), msg.hasMore)

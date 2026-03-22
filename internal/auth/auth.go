@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -121,7 +122,8 @@ func Login(a *spotifyauth.Authenticator) (*oauth2.Token, error) {
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 	)
 	openBrowser(url)
-	fmt.Println("Waiting for authentication... (opening browser)")
+	fmt.Println("Waiting for authentication...")
+	fmt.Printf("If the browser doesn't open, visit:\n  %s\n", url)
 
 	select {
 	case token := <-tokenCh:
@@ -172,12 +174,18 @@ func generateCodeChallenge(verifier string) string {
 }
 
 func openBrowser(url string) {
+	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		exec.Command("open", url).Start()
+		cmd = exec.Command("open", url)
 	case "linux":
-		exec.Command("xdg-open", url).Start()
+		cmd = exec.Command("xdg-open", url)
 	case "windows":
-		exec.Command("rundll32", "url.dll,FileProtocolHandler", url).Start()
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+	default:
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		log.Printf("failed to open browser: %v", err)
 	}
 }

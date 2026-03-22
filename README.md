@@ -49,7 +49,7 @@ On first run, Tuify will prompt you for your Spotify Client ID:
 3. Copy your Client ID and paste it when prompted
 4. A browser window will open to authorize with Spotify
 
-Configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`).
+Configuration, auth tokens, and debug logs are stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`).
 
 ## Usage
 
@@ -57,35 +57,65 @@ Configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`).
 ./tuify
 ```
 
-Navigate with arrow keys, Enter to select, Escape/Backspace to go back. Use the tab bar on the home screen to switch between Search, Playlists, and Podcasts.
+### Keybindings
+
+| Key | Action |
+|-----|--------|
+| `Enter` | Select / play |
+| `Esc` | Go back |
+| `Space` | Play / pause |
+| `n` | Next track |
+| `p` | Previous track |
+| `a` / `d` | Seek backward / forward |
+| `r` | Toggle shuffle |
+| `s` | Stop |
+| `/` | Search |
+| `v` | Toggle visualizer |
+| `←` / `→` | Cycle visualizers |
+| `q` | Quit |
+
+## Testing
+
+```bash
+go test ./...
+```
 
 ## Project Structure
 
 ```
 tuify/
-├── main.go                  # Entry point and auth flow
+├── main.go                  # Entry point and setup
 ├── internal/
 │   ├── auth/                # OAuth2 PKCE authentication
 │   ├── config/              # Configuration management
 │   ├── spotify/             # Spotify API client wrapper
+│   │   ├── client.go        # API methods and type converters
+│   │   ├── client_test.go   # Converter tests
+│   │   └── api_test.go      # API tests with HTTP mocking
 │   └── ui/
 │       ├── app.go           # Main app model and routing
-│       ├── search.go        # Search view
+│       ├── search.go        # Search view with drill-down
 │       ├── home.go          # Home screen tabs
 │       ├── nowplaying.go    # Now-playing bar
 │       ├── playlist.go      # Playlist browsing
 │       ├── track.go         # Track view
 │       ├── podcast.go       # Podcast browsing
 │       ├── episode.go       # Episode view
-│       ├── progressbar.go   # Progress bar
+│       ├── progressbar.go   # Gradient progress bar
 │       ├── visualizer.go    # Visualizer controller
-│       ├── styles.go        # Styling
-│       ├── common.go        # Shared helpers
-│       └── visualizers/     # Visualizers
-│           ├── Oscillogram
-│           └── Starfield
+│       ├── styles.go        # Colors and styling
+│       ├── common.go        # Shared types and lazyList
+│       └── visualizers/
+│           ├── common.go    # Shared visualizer utilities
+│           ├── oscillogram.go
+│           └── starfield.go
 └── go.mod
 ```
+
+## TODO
+
+- Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason...
+- Visualizers that actually take the real audio data as input.
 
 ## Built With
 
