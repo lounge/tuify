@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/lounge/tuify/internal/config"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
@@ -109,7 +110,11 @@ func Login(a *spotifyauth.Authenticator) (*oauth2.Token, error) {
 			errCh <- fmt.Errorf("failed to start auth server: %w", err)
 		}
 	}()
-	defer server.Shutdown(context.Background())
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+		server.Shutdown(ctx)
+	}()
 
 	url := a.AuthURL(state,
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),

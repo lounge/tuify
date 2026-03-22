@@ -145,7 +145,7 @@ func (sf *Starfield) newStar(randomDepth bool) star {
 	z := 1.0
 	if randomDepth {
 		sf.rng = xorshift(sf.rng)
-		z = float64(sf.rng%1000) / 1000.0
+		z = float64(sf.rng%999+1) / 1000.0
 	}
 	return star{x: x, y: y, z: z, speed: speed}
 }

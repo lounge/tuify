@@ -60,16 +60,24 @@ type searchResultMsg struct {
 
 // ---------- searchView ----------
 
+var searchHintText = strings.Join([]string{
+	"t:  track search (default)",
+	"e:  episode search",
+	"a:  artist → album → track",
+	"l:  album → track",
+	"s:  show → episode",
+}, "\n")
+
 type searchView struct {
 	list        list.Model
 	client      *spotify.Client
 	searching   bool
-	searchQuery string   // raw user input (e.g. "a:queen")
-	query       string   // committed search term (after prefix, e.g. "queen")
+	searchQuery string // raw user input (e.g. "a:queen")
+	query       string // committed search term (after prefix, e.g. "queen")
 	prefix      searchPrefix
 	debounceSeq int
-	epoch       int      // incremented on every state reset to discard stale results
-	depth       int      // 0 = search results, 1 = container detail, 2 = artist→album→tracks
+	epoch       int // incremented on every state reset to discard stale results
+	depth       int // 0 = search results, 1 = container detail, 2 = artist→album→tracks
 	offset      int
 	hasMore     bool
 	pending     int
@@ -84,14 +92,6 @@ type searchView struct {
 	// items backing the list at current depth
 	items []list.Item
 }
-
-var searchHintText = strings.Join([]string{
-	"t:  track search (default)",
-	"e:  episode search",
-	"a:  artist → album → track",
-	"l:  album → track",
-	"s:  show → episode",
-}, "\n")
 
 func newSearchView(client *spotify.Client, width, height int) searchView {
 	l := newList(width, height)
@@ -150,6 +150,23 @@ func (v searchView) debounce() tea.Cmd {
 
 // ---------- fetchers ----------
 
+// fetchCmd builds a tea.Cmd that fetches data, converts each result to a list.Item,
+// and wraps the outcome in a searchResultMsg.
+func fetchCmd[T any](
+	epoch int, term string,
+	fetch func() ([]T, bool, error),
+	convert func(T) list.Item,
+) tea.Cmd {
+	return func() tea.Msg {
+		results, hasMore, err := fetch()
+		var items []list.Item
+		for _, r := range results {
+			items = append(items, convert(r))
+		}
+		return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
+	}
+}
+
 func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	client := v.client
 	prefix := v.prefix
@@ -159,115 +176,97 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	// depth > 0: fetch detail items for a selected container
 	if depth == 1 && prefix == prefixArtist {
 		artistID := v.selectedArtist.id
-		return func() tea.Msg {
-			albums, hasMore, err := client.GetArtistAlbums(context.Background(), artistID, offset, limit)
-			var items []list.Item
-			for _, a := range albums {
-				items = append(items, albumItem{
-					id: a.ID, uri: a.URI, name: a.Name,
-					artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Album, bool, error) {
+				return client.GetArtistAlbums(context.Background(), artistID, offset, limit)
+			},
+			func(a spotify.Album) list.Item {
+				return albumItem{id: a.ID, uri: a.URI, name: a.Name, artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount}
+			},
+		)
 	}
 	if (depth == 1 && prefix == prefixAlbum) || (depth == 2 && prefix == prefixArtist) {
 		albumID := v.selectedAlbum.id
 		albumName := v.selectedAlbum.name
-		return func() tea.Msg {
-			tracks, hasMore, err := client.GetAlbumTracks(context.Background(), albumID, offset, limit)
-			var items []list.Item
-			for _, t := range tracks {
-				items = append(items, trackItem{
-					uri: t.URI, name: t.Name, artist: t.Artist, album: albumName, duration: t.Duration,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Track, bool, error) {
+				return client.GetAlbumTracks(context.Background(), albumID, offset, limit)
+			},
+			func(t spotify.Track) list.Item {
+				return trackItem{uri: t.URI, name: t.Name, artist: t.Artist, album: albumName, duration: t.Duration}
+			},
+		)
 	}
 	if depth == 1 && prefix == prefixShow {
 		showID := v.selectedShow.id
-		return func() tea.Msg {
-			episodes, hasMore, err := client.GetShowEpisodes(context.Background(), showID, offset, limit)
-			var items []list.Item
-			for _, e := range episodes {
-				items = append(items, episodeItem{
-					uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Episode, bool, error) {
+				return client.GetShowEpisodes(context.Background(), showID, offset, limit)
+			},
+			func(e spotify.Episode) list.Item {
+				return episodeItem{uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration}
+			},
+		)
 	}
 
 	// depth 0: search by prefix type
 	switch prefix {
 	case prefixEpisode:
-		return func() tea.Msg {
-			episodes, hasMore, err := client.SearchEpisodes(context.Background(), term, offset, limit)
-			var items []list.Item
-			for _, e := range episodes {
-				items = append(items, episodeItem{
-					uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Episode, bool, error) {
+				return client.SearchEpisodes(context.Background(), term, offset, limit)
+			},
+			func(e spotify.Episode) list.Item {
+				return episodeItem{uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration}
+			},
+		)
 	case prefixAlbum:
-		return func() tea.Msg {
-			albums, hasMore, err := client.SearchAlbums(context.Background(), term, offset, limit)
-			var items []list.Item
-			for _, a := range albums {
-				items = append(items, albumItem{
-					id: a.ID, uri: a.URI, name: a.Name,
-					artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Album, bool, error) {
+				return client.SearchAlbums(context.Background(), term, offset, limit)
+			},
+			func(a spotify.Album) list.Item {
+				return albumItem{id: a.ID, uri: a.URI, name: a.Name, artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount}
+			},
+		)
 	case prefixArtist:
-		return func() tea.Msg {
-			artists, hasMore, err := client.SearchArtists(context.Background(), term, offset, limit)
-			var items []list.Item
-			for _, a := range artists {
-				items = append(items, artistItem{
-					id: a.ID, uri: a.URI, name: a.Name, genres: a.Genres,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Artist, bool, error) {
+				return client.SearchArtists(context.Background(), term, offset, limit)
+			},
+			func(a spotify.Artist) list.Item {
+				return artistItem{id: a.ID, uri: a.URI, name: a.Name, genres: a.Genres}
+			},
+		)
 	case prefixShow:
-		return func() tea.Msg {
-			shows, hasMore, err := client.SearchShows(context.Background(), term, offset, limit)
-			var items []list.Item
-			for _, s := range shows {
-				items = append(items, podcastItem{
-					id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Show, bool, error) {
+				return client.SearchShows(context.Background(), term, offset, limit)
+			},
+			func(s spotify.Show) list.Item {
+				return podcastItem{id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes}
+			},
+		)
 	default: // prefixTrack
-		return func() tea.Msg {
-			tracks, hasMore, err := client.SearchTracks(context.Background(), term, offset, limit)
-			var items []list.Item
-			for _, t := range tracks {
-				items = append(items, trackItem{
-					uri: t.URI, name: t.Name, artist: t.Artist, album: t.Album, duration: t.Duration,
-				})
-			}
-			return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
-		}
+		return fetchCmd(epoch, term,
+			func() ([]spotify.Track, bool, error) {
+				return client.SearchTracks(context.Background(), term, offset, limit)
+			},
+			func(t spotify.Track) list.Item {
+				return trackItem{uri: t.URI, name: t.Name, artist: t.Artist, album: t.Album, duration: t.Duration}
+			},
+		)
 	}
 }
 
-func (v *searchView) fetchMore() []tea.Cmd {
+func (v *searchView) fetchMore() tea.Cmd {
 	if v.hasMore && v.pending == 0 {
 		v.pending++
 		term := v.query
 		if v.depth > 0 {
 			term = "" // detail fetches don't need the search term
 		}
-		return []tea.Cmd{v.fetchResults(term, v.offset, 10)}
+		return v.fetchResults(term, v.offset, 10)
 	}
 	return nil
 }
@@ -279,7 +278,7 @@ func (v *searchView) rebuildList() {
 	items := v.items
 	if len(items) == 0 {
 		if v.pending > 0 {
-			items = []list.Item{statusItem{text: "Loading..."}}
+			items = []list.Item{loadingStatusItem}
 		} else if v.searchErr != nil {
 			items = []list.Item{statusItem{
 				text:    fmt.Sprintf("Search failed: %v", v.searchErr),
@@ -352,7 +351,7 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 			v.selectedAlbum = struct{ id, uri, name string }{ai.id, ai.uri, ai.name}
 			v.resetPagination()
 			v.pending = 1
-			v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+			v.list.SetItems([]list.Item{loadingStatusItem})
 			return v.fetchResults("", 0, 10)
 		}
 	case prefixShow:
@@ -361,7 +360,7 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 			v.selectedShow = struct{ id, uri, name string }{si.id, si.uri, si.name}
 			v.resetPagination()
 			v.pending = 1
-			v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+			v.list.SetItems([]list.Item{loadingStatusItem})
 			return v.fetchResults("", 0, 10)
 		}
 	case prefixArtist:
@@ -371,7 +370,7 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 				v.selectedArtist = struct{ id, name string }{ai.id, ai.name}
 				v.resetPagination()
 				v.pending = 1
-				v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+				v.list.SetItems([]list.Item{loadingStatusItem})
 				return v.fetchResults("", 0, 10)
 			}
 		} else if v.depth == 1 {
@@ -380,7 +379,7 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 				v.selectedAlbum = struct{ id, uri, name string }{ai.id, ai.uri, ai.name}
 				v.resetPagination()
 				v.pending = 1
-				v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+				v.list.SetItems([]list.Item{loadingStatusItem})
 				return v.fetchResults("", 0, 10)
 			}
 		}
@@ -399,7 +398,7 @@ func (v *searchView) goBack() bool {
 		v.selectedAlbum = struct{ id, uri, name string }{}
 		v.resetPagination()
 		v.pending = 1
-		v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+		v.list.SetItems([]list.Item{loadingStatusItem})
 		return true
 	}
 	// depth 1 → 0: go back to search results
@@ -411,7 +410,7 @@ func (v *searchView) goBack() bool {
 	// Re-commit the original search
 	if v.query != "" {
 		v.pending = 1
-		v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+		v.list.SetItems([]list.Item{loadingStatusItem})
 	} else {
 		v.list.SetItems(nil)
 	}
@@ -430,7 +429,7 @@ func (v *searchView) goBackFetchCmd() tea.Cmd {
 func (v *searchView) retry() tea.Cmd {
 	v.searchErr = nil
 	v.pending = 1
-	v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+	v.list.SetItems([]list.Item{loadingStatusItem})
 	term := v.query
 	if v.depth > 0 {
 		term = ""
@@ -516,7 +515,7 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 		v.selectedArtist = struct{ id, name string }{}
 		v.selectedAlbum = struct{ id, uri, name string }{}
 		v.selectedShow = struct{ id, uri, name string }{}
-		v.list.SetItems([]list.Item{statusItem{text: "Loading..."}})
+		v.list.SetItems([]list.Item{loadingStatusItem})
 		return v, v.fetchResults(term, 0, 10)
 
 	case searchResultMsg:
@@ -535,7 +534,7 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 		v.rebuildList()
 		// resolve sync
 		if v.syncURI != "" && v.pending == 0 && v.hasMore {
-			return v, tea.Batch(v.fetchMore()...)
+			return v, v.fetchMore()
 		}
 		return v, nil
 	}
@@ -546,7 +545,9 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 
 	// Pagination: fetch more when near bottom
 	if v.pending == 0 && len(v.items) > 0 && len(v.items)-v.list.Index() <= 10 {
-		cmds = append(cmds, v.fetchMore()...)
+		if cmd := v.fetchMore(); cmd != nil {
+			cmds = append(cmds, cmd)
+		}
 	}
 
 	return v, tea.Batch(cmds...)

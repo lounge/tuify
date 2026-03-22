@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,10 +18,13 @@ import (
 )
 
 func main() {
-	f, err := os.OpenFile("debug.log", os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
-	if err == nil {
-		log.SetOutput(f)
-		defer f.Close()
+	logPath := filepath.Join(config.Dir(), "debug.log")
+	if err := os.MkdirAll(config.Dir(), 0o700); err == nil {
+		f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+		if err == nil {
+			log.SetOutput(f)
+			defer f.Close()
+		}
 	}
 	cfg, err := config.Load()
 	if err != nil {

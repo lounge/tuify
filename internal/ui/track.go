@@ -23,7 +23,7 @@ func (i trackItem) Description() string {
 	return fmt.Sprintf("%s · %s · %s", i.artist, i.album, formatDuration(i.duration))
 }
 func (i trackItem) FilterValue() string { return i.name }
-func (i trackItem) URI() string          { return i.uri }
+func (i trackItem) URI() string         { return i.uri }
 
 type tracksLoadedMsg struct {
 	tracks  []spotify.Track
@@ -104,4 +104,3 @@ func (v *trackView) retryLoad() tea.Cmd {
 func (v trackView) View() string {
 	return v.list.View()
 }
-

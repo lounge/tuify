@@ -291,7 +291,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case viewSearch:
 			if m.search.isPlayable() {
 				if m.search.selectByURI(m.nowPlaying.trackURI) {
-					cmds = append(cmds, m.search.fetchMore()...)
+					if cmd := m.search.fetchMore(); cmd != nil {
+						cmds = append(cmds, cmd)
+					}
 				}
 			}
 		case viewTracks:

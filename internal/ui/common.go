@@ -16,6 +16,8 @@ type statusItem struct {
 	isError bool
 }
 
+var loadingStatusItem = statusItem{text: "Loading..."}
+
 func (i statusItem) Title() string {
 	if i.isError {
 		return errorStyle.Render(i.text)
@@ -39,7 +41,7 @@ type lazyList struct {
 
 func newLazyList(width, height int) lazyList {
 	l := newList(width, height)
-	initial := []list.Item{statusItem{text: "Loading..."}}
+	initial := []list.Item{loadingStatusItem}
 	l.SetItems(initial)
 	return lazyList{
 		list:    l,
@@ -93,7 +95,7 @@ func (l *lazyList) triggerLoad() bool {
 	}
 	if len(l.items)-l.list.Index() <= 10 {
 		l.loading = true
-		l.items = append(l.items, statusItem{text: "Loading..."})
+		l.items = append(l.items, loadingStatusItem)
 		l.list.SetItems(l.items)
 		return true
 	}
@@ -105,7 +107,7 @@ func (l *lazyList) retryLoad() {
 	l.hasMore = true
 	l.loading = true
 	l.items = removeStatusItems(l.items)
-	l.items = append(l.items, statusItem{text: "Loading..."})
+	l.items = append(l.items, loadingStatusItem)
 	l.list.SetItems(l.items)
 }
 
@@ -209,7 +211,7 @@ type albumItem struct {
 	trackCount  int
 }
 
-func (i albumItem) Title() string       { return i.name }
+func (i albumItem) Title() string { return i.name }
 func (i albumItem) Description() string {
 	year := i.releaseDate
 	if len(year) >= 4 {
@@ -227,7 +229,7 @@ type artistItem struct {
 	genres []string
 }
 
-func (i artistItem) Title() string       { return i.name }
+func (i artistItem) Title() string { return i.name }
 func (i artistItem) Description() string {
 	if len(i.genres) == 0 {
 		return ""

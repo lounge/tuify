@@ -19,6 +19,7 @@ type podcastItem struct {
 func (i podcastItem) Title() string       { return i.name }
 func (i podcastItem) Description() string { return fmt.Sprintf("%d episodes", i.episodeCount) }
 func (i podcastItem) FilterValue() string { return i.name }
+func (i podcastItem) URI() string         { return i.uri }
 
 type podcastsLoadedMsg struct {
 	shows   []spotify.Show

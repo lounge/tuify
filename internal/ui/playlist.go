@@ -16,8 +16,10 @@ type playlistItem struct {
 	trackCount int
 }
 
-func (i playlistItem) Title() string       { return i.name }
-func (i playlistItem) Description() string { return fmt.Sprintf("by %s · %d tracks", i.ownerName, i.trackCount) }
+func (i playlistItem) Title() string { return i.name }
+func (i playlistItem) Description() string {
+	return fmt.Sprintf("by %s · %d tracks", i.ownerName, i.trackCount)
+}
 func (i playlistItem) FilterValue() string { return i.name }
 
 type playlistsLoadedMsg struct {

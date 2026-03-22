@@ -17,10 +17,12 @@ type episodeItem struct {
 	duration    time.Duration
 }
 
-func (i episodeItem) Title() string       { return i.name }
-func (i episodeItem) Description() string { return fmt.Sprintf("%s · %s", i.releaseDate, formatDuration(i.duration)) }
+func (i episodeItem) Title() string { return i.name }
+func (i episodeItem) Description() string {
+	return fmt.Sprintf("%s · %s", i.releaseDate, formatDuration(i.duration))
+}
 func (i episodeItem) FilterValue() string { return i.name }
-func (i episodeItem) URI() string          { return i.uri }
+func (i episodeItem) URI() string         { return i.uri }
 
 type episodesLoadedMsg struct {
 	episodes []spotify.Episode

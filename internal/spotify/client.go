@@ -88,6 +88,27 @@ type rawAlbum struct {
 	} `json:"artists"`
 }
 
+type rawTrack struct {
+	ID       string `json:"id"`
+	URI      string `json:"uri"`
+	Name     string `json:"name"`
+	Duration int    `json:"duration_ms"`
+	Artists  []struct {
+		Name string `json:"name"`
+	} `json:"artists"`
+	Album struct {
+		Name string `json:"name"`
+	} `json:"album"`
+}
+
+type rawEpisode struct {
+	ID          string `json:"id"`
+	URI         string `json:"uri"`
+	Name        string `json:"name"`
+	ReleaseDate string `json:"release_date"`
+	DurationMs  int    `json:"duration_ms"`
+}
+
 func New(spClient *sp.Client, httpClient *http.Client) *Client {
 	return &Client{sp: spClient, http: httpClient}
 }
@@ -109,8 +130,8 @@ func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) ([]Playlis
 		Offset int `json:"offset"`
 		Total  int `json:"total"`
 		Items  []struct {
-			ID   string `json:"id"`
-			Name string `json:"name"`
+			ID    string `json:"id"`
+			Name  string `json:"name"`
 			Owner struct {
 				ID          string `json:"id"`
 				DisplayName string `json:"display_name"`
@@ -145,44 +166,20 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit
 		Offset int `json:"offset"`
 		Total  int `json:"total"`
 		Items  []struct {
-			Item struct {
-				ID       string `json:"id"`
-				URI      string `json:"uri"`
-				Name     string `json:"name"`
-				Duration int    `json:"duration_ms"`
-				Artists  []struct {
-					Name string `json:"name"`
-				} `json:"artists"`
-				Album struct {
-					Name string `json:"name"`
-				} `json:"album"`
-			} `json:"item"`
+			Item rawTrack `json:"item"`
 		} `json:"items"`
 	}
 	if err := c.apiGet(ctx, url, &page); err != nil {
 		return nil, false, err
 	}
-	var tracks []Track
+	var raw []rawTrack
 	for _, item := range page.Items {
-		t := item.Item
-		if t.ID == "" {
-			continue
+		if item.Item.ID != "" {
+			raw = append(raw, item.Item)
 		}
-		artist := ""
-		if len(t.Artists) > 0 {
-			artist = t.Artists[0].Name
-		}
-		tracks = append(tracks, Track{
-			ID:       t.ID,
-			URI:      t.URI,
-			Name:     t.Name,
-			Artist:   artist,
-			Album:    t.Album.Name,
-			Duration: time.Duration(t.Duration) * time.Millisecond,
-		})
 	}
 	hasMore := page.Offset+len(page.Items) < page.Total
-	return tracks, hasMore, nil
+	return convertTracks(raw), hasMore, nil
 }
 
 func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, bool, error) {
@@ -216,31 +213,15 @@ func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, 
 func (c *Client) GetShowEpisodes(ctx context.Context, showID string, offset, limit int) ([]Episode, bool, error) {
 	url := fmt.Sprintf("https://api.spotify.com/v1/shows/%s/episodes?limit=%d&offset=%d", showID, limit, offset)
 	var page struct {
-		Offset int `json:"offset"`
-		Total  int `json:"total"`
-		Items  []struct {
-			ID          string `json:"id"`
-			URI         string `json:"uri"`
-			Name        string `json:"name"`
-			ReleaseDate string `json:"release_date"`
-			DurationMs  int    `json:"duration_ms"`
-		} `json:"items"`
+		Offset int          `json:"offset"`
+		Total  int          `json:"total"`
+		Items  []rawEpisode `json:"items"`
 	}
 	if err := c.apiGet(ctx, url, &page); err != nil {
 		return nil, false, err
 	}
-	var episodes []Episode
-	for _, e := range page.Items {
-		episodes = append(episodes, Episode{
-			ID:          e.ID,
-			URI:         e.URI,
-			Name:        e.Name,
-			ReleaseDate: e.ReleaseDate,
-			Duration:    time.Duration(e.DurationMs) * time.Millisecond,
-		})
-	}
 	hasMore := page.Offset+len(page.Items) < page.Total
-	return episodes, hasMore, nil
+	return convertEpisodes(page.Items), hasMore, nil
 }
 
 func (c *Client) SearchTracks(ctx context.Context, query string, offset, limit int) ([]Track, bool, error) {
@@ -248,42 +229,16 @@ func (c *Client) SearchTracks(ctx context.Context, query string, offset, limit i
 		neturl.QueryEscape(query), limit, offset)
 	var result struct {
 		Tracks struct {
-			Offset int `json:"offset"`
-			Total  int `json:"total"`
-			Items  []struct {
-				ID       string `json:"id"`
-				URI      string `json:"uri"`
-				Name     string `json:"name"`
-				Duration int    `json:"duration_ms"`
-				Artists  []struct {
-					Name string `json:"name"`
-				} `json:"artists"`
-				Album struct {
-					Name string `json:"name"`
-				} `json:"album"`
-			} `json:"items"`
+			Offset int        `json:"offset"`
+			Total  int        `json:"total"`
+			Items  []rawTrack `json:"items"`
 		} `json:"tracks"`
 	}
 	if err := c.apiGet(ctx, endpoint, &result); err != nil {
 		return nil, false, err
 	}
-	var tracks []Track
-	for _, t := range result.Tracks.Items {
-		artist := ""
-		if len(t.Artists) > 0 {
-			artist = t.Artists[0].Name
-		}
-		tracks = append(tracks, Track{
-			ID:       t.ID,
-			URI:      t.URI,
-			Name:     t.Name,
-			Artist:   artist,
-			Album:    t.Album.Name,
-			Duration: time.Duration(t.Duration) * time.Millisecond,
-		})
-	}
 	hasMore := result.Tracks.Offset+len(result.Tracks.Items) < result.Tracks.Total
-	return tracks, hasMore, nil
+	return convertTracks(result.Tracks.Items), hasMore, nil
 }
 
 func (c *Client) SearchEpisodes(ctx context.Context, query string, offset, limit int) ([]Episode, bool, error) {
@@ -291,32 +246,16 @@ func (c *Client) SearchEpisodes(ctx context.Context, query string, offset, limit
 		neturl.QueryEscape(query), limit, offset)
 	var result struct {
 		Episodes struct {
-			Offset int `json:"offset"`
-			Total  int `json:"total"`
-			Items  []struct {
-				ID          string `json:"id"`
-				URI         string `json:"uri"`
-				Name        string `json:"name"`
-				ReleaseDate string `json:"release_date"`
-				DurationMs  int    `json:"duration_ms"`
-			} `json:"items"`
+			Offset int          `json:"offset"`
+			Total  int          `json:"total"`
+			Items  []rawEpisode `json:"items"`
 		} `json:"episodes"`
 	}
 	if err := c.apiGet(ctx, endpoint, &result); err != nil {
 		return nil, false, err
 	}
-	var episodes []Episode
-	for _, e := range result.Episodes.Items {
-		episodes = append(episodes, Episode{
-			ID:          e.ID,
-			URI:         e.URI,
-			Name:        e.Name,
-			ReleaseDate: e.ReleaseDate,
-			Duration:    time.Duration(e.DurationMs) * time.Millisecond,
-		})
-	}
 	hasMore := result.Episodes.Offset+len(result.Episodes.Items) < result.Episodes.Total
-	return episodes, hasMore, nil
+	return convertEpisodes(result.Episodes.Items), hasMore, nil
 }
 
 func (c *Client) SearchAlbums(ctx context.Context, query string, offset, limit int) ([]Album, bool, error) {
@@ -417,37 +356,15 @@ func (c *Client) GetAlbumTracks(ctx context.Context, albumID string, offset, lim
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/albums/%s/tracks?limit=%d&offset=%d",
 		albumID, limit, offset)
 	var page struct {
-		Offset int `json:"offset"`
-		Total  int `json:"total"`
-		Items  []struct {
-			ID       string `json:"id"`
-			URI      string `json:"uri"`
-			Name     string `json:"name"`
-			Duration int    `json:"duration_ms"`
-			Artists  []struct {
-				Name string `json:"name"`
-			} `json:"artists"`
-		} `json:"items"`
+		Offset int        `json:"offset"`
+		Total  int        `json:"total"`
+		Items  []rawTrack `json:"items"`
 	}
 	if err := c.apiGet(ctx, endpoint, &page); err != nil {
 		return nil, false, err
 	}
-	var tracks []Track
-	for _, t := range page.Items {
-		artist := ""
-		if len(t.Artists) > 0 {
-			artist = t.Artists[0].Name
-		}
-		tracks = append(tracks, Track{
-			ID:       t.ID,
-			URI:      t.URI,
-			Name:     t.Name,
-			Artist:   artist,
-			Duration: time.Duration(t.Duration) * time.Millisecond,
-		})
-	}
 	hasMore := page.Offset+len(page.Items) < page.Total
-	return tracks, hasMore, nil
+	return convertTracks(page.Items), hasMore, nil
 }
 
 func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
@@ -587,7 +504,7 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		if err != nil {
 			return nil, 0, err
 		}
-		if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 			log.Printf("[spotify] %s %d body=%s", url, resp.StatusCode, body)
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
@@ -640,6 +557,39 @@ func convertAlbums(raw []rawAlbum) []Album {
 		})
 	}
 	return albums
+}
+
+func convertTracks(raw []rawTrack) []Track {
+	var tracks []Track
+	for _, t := range raw {
+		artist := ""
+		if len(t.Artists) > 0 {
+			artist = t.Artists[0].Name
+		}
+		tracks = append(tracks, Track{
+			ID:       t.ID,
+			URI:      t.URI,
+			Name:     t.Name,
+			Artist:   artist,
+			Album:    t.Album.Name,
+			Duration: time.Duration(t.Duration) * time.Millisecond,
+		})
+	}
+	return tracks
+}
+
+func convertEpisodes(raw []rawEpisode) []Episode {
+	var episodes []Episode
+	for _, e := range raw {
+		episodes = append(episodes, Episode{
+			ID:          e.ID,
+			URI:         e.URI,
+			Name:        e.Name,
+			ReleaseDate: e.ReleaseDate,
+			Duration:    time.Duration(e.DurationMs) * time.Millisecond,
+		})
+	}
+	return episodes
 }
 
 func playOpts(deviceID string) *sp.PlayOptions {
