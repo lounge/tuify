@@ -516,6 +516,9 @@ func (c *Client) PlayQueue(ctx context.Context, uris []string, deviceID string) 
 	for _, u := range uris {
 		opts.URIs = append(opts.URIs, sp.URI(u))
 	}
+	if len(uris) > 0 {
+		opts.PlaybackOffset = &sp.PlaybackOffset{URI: sp.URI(uris[0])}
+	}
 	return c.sp.PlayOpt(ctx, opts)
 }
 
