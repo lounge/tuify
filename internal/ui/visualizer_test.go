@@ -2,38 +2,41 @@ package ui
 
 import "testing"
 
-func TestIsTrackURI(t *testing.T) {
+func TestIsPlayableURI(t *testing.T) {
 	tests := []struct {
 		uri  string
 		want bool
 	}{
 		{"spotify:track:abc123", true},
-		{"spotify:episode:abc123", false},
+		{"spotify:episode:abc123", true},
 		{"spotify:track:", true},
+		{"spotify:episode:", true},
 		{"", false},
 		{"spotify:tracks:abc", false},
+		{"spotify:show:abc", false},
 	}
 
 	for _, tt := range tests {
-		if got := isTrackURI(tt.uri); got != tt.want {
-			t.Errorf("isTrackURI(%q) = %v, want %v", tt.uri, got, tt.want)
+		if got := isPlayableURI(tt.uri); got != tt.want {
+			t.Errorf("isPlayableURI(%q) = %v, want %v", tt.uri, got, tt.want)
 		}
 	}
 }
 
-func TestTrackIDFromURI(t *testing.T) {
+func TestIDFromURI(t *testing.T) {
 	tests := []struct {
 		uri  string
 		want string
 	}{
 		{"spotify:track:abc123", "abc123"},
+		{"spotify:episode:xyz789", "xyz789"},
 		{"spotify:track:", ""},
-		{"notauri", "notauri"}, // no prefix to trim
+		{"notauri", "notauri"},
 	}
 
 	for _, tt := range tests {
-		if got := trackIDFromURI(tt.uri); got != tt.want {
-			t.Errorf("trackIDFromURI(%q) = %q, want %q", tt.uri, got, tt.want)
+		if got := idFromURI(tt.uri); got != tt.want {
+			t.Errorf("idFromURI(%q) = %q, want %q", tt.uri, got, tt.want)
 		}
 	}
 }

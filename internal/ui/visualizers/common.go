@@ -2,6 +2,7 @@ package visualizers
 
 import (
 	"fmt"
+	"image"
 	"math"
 )
 
@@ -9,6 +10,10 @@ type Visualizer interface {
 	Init(seed string, durationMs int)
 	Advance()
 	View(progressMs, width, height int) string
+}
+
+type ImageAware interface {
+	SetImage(img image.Image)
 }
 
 func xorshift(s uint64) uint64 {

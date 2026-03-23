@@ -186,8 +186,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "d":
 			return m, m.seekRelative(5000)
 		case "v":
-			if m.nowPlaying.hasTrack && isTrackURI(m.nowPlaying.trackURI) {
-				cmd := m.visualizer.toggle(trackIDFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs)
+			if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
+				cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL)
 				return m, cmd
 			}
 			return m, nil
@@ -280,9 +280,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		cmds = append(cmds, cmd)
 	}
 
-	// Re-init visualizer waveform on track change
-	if m.nowPlaying.trackURI != prevURI && isTrackURI(m.nowPlaying.trackURI) {
-		m.visualizer.onTrackChange(trackIDFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs)
+	// Re-init visualizer on track change and reload album art
+	if m.nowPlaying.trackURI != prevURI && isPlayableURI(m.nowPlaying.trackURI) {
+		m.visualizer.onTrackChange(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs)
+		m.visualizer.loadImage(m.nowPlaying.imageURL)
+	} else if m.nowPlaying.imageURL != m.visualizer.imageURL {
+		m.visualizer.loadImage(m.nowPlaying.imageURL)
 	}
 
 	// Sync list selection when the playing item changes
@@ -595,7 +598,7 @@ func (m Model) View() string {
 			searchQuery = sl.searchQuery
 		}
 	}
-	vizAvailable := m.nowPlaying.hasTrack && isTrackURI(m.nowPlaying.trackURI)
+	vizAvailable := m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI)
 	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery, vizAvailable))
 
 	return b.String()

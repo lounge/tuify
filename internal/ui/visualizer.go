@@ -1,6 +1,10 @@
 package ui
 
 import (
+	"image"
+	_ "image/jpeg"
+	_ "image/png"
+	"net/http"
 	"strings"
 	"time"
 
@@ -11,19 +15,31 @@ import (
 
 type vizTickMsg struct{}
 
+type fetchResult struct {
+	img image.Image
+	url string
+	err error
+}
+
 type visualizerModel struct {
-	active  bool
-	trackID string
-	vizList []visualizers.Visualizer
-	vizIdx  int
+	active     bool
+	trackID    string
+	vizList    []visualizers.Visualizer
+	vizIdx     int
+	imageURL   string
+	imageCache map[string]image.Image
+	imageCh    chan fetchResult
 }
 
 func newVisualizerModel() visualizerModel {
 	return visualizerModel{
 		vizList: []visualizers.Visualizer{
-			visualizers.NewOscillogram(),
+			visualizers.NewAlbumArt(),
 			visualizers.NewStarfield(),
+			visualizers.NewOscillogram(),
 		},
+		imageCache: make(map[string]image.Image),
+		imageCh:    make(chan fetchResult, 1),
 	}
 }
 
@@ -31,18 +47,20 @@ func (m *visualizerModel) viz() visualizers.Visualizer {
 	return m.vizList[m.vizIdx]
 }
 
-func (m *visualizerModel) toggle(trackID string, durationMs int) tea.Cmd {
+func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL string) tea.Cmd {
 	if m.active {
 		m.active = false
 		return nil
 	}
 	m.active = true
+	m.drainImageCh()
 	if trackID != m.trackID {
 		m.trackID = trackID
 		for _, v := range m.vizList {
 			v.Init(trackID, durationMs)
 		}
 	}
+	m.loadImage(imageURL)
 	return m.tick()
 }
 
@@ -53,6 +71,7 @@ func (m visualizerModel) tick() tea.Cmd {
 }
 
 func (m *visualizerModel) advance() {
+	m.drainImageCh()
 	for _, v := range m.vizList {
 		v.Advance()
 	}
@@ -63,13 +82,74 @@ func (m *visualizerModel) cycle(delta int) {
 }
 
 func (m *visualizerModel) onTrackChange(trackID string, durationMs int) {
-	if !m.active {
-		return
-	}
 	m.trackID = trackID
 	for _, v := range m.vizList {
 		v.Init(trackID, durationMs)
 	}
+}
+
+func (m *visualizerModel) loadImage(imageURL string) {
+	if imageURL == "" {
+		m.imageURL = ""
+		m.setFallbackImage()
+		return
+	}
+	m.imageURL = imageURL
+	if img, ok := m.imageCache[imageURL]; ok {
+		m.setImageOnAware(img)
+		return
+	}
+	url := imageURL
+	ch := m.imageCh
+	go func() {
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Get(url)
+		if err != nil {
+			select {
+			case ch <- fetchResult{err: err, url: url}:
+			default:
+			}
+			return
+		}
+		defer resp.Body.Close()
+		img, _, err := image.Decode(resp.Body)
+		select {
+		case ch <- fetchResult{img: img, url: url, err: err}:
+		default:
+		}
+	}()
+}
+
+func (m *visualizerModel) drainImageCh() {
+	for {
+		select {
+		case result := <-m.imageCh:
+			if result.err != nil || result.img == nil {
+				continue
+			}
+			if len(m.imageCache) >= 20 {
+				m.imageCache = make(map[string]image.Image)
+			}
+			m.imageCache[result.url] = result.img
+			if result.url == m.imageURL {
+				m.setImageOnAware(result.img)
+			}
+		default:
+			return
+		}
+	}
+}
+
+func (m *visualizerModel) setImageOnAware(img image.Image) {
+	for _, v := range m.vizList {
+		if ia, ok := v.(visualizers.ImageAware); ok {
+			ia.SetImage(img)
+		}
+	}
+}
+
+func (m *visualizerModel) setFallbackImage() {
+	m.setImageOnAware(visualizers.MusicNoteFallback())
 }
 
 func (m visualizerModel) View(progressMs, width, height int) string {
@@ -88,10 +168,13 @@ func (m visualizerModel) View(progressMs, width, height int) string {
 	return m.viz().View(progressMs, width, vizHeight)
 }
 
-func isTrackURI(uri string) bool {
-	return strings.HasPrefix(uri, "spotify:track:")
+func isPlayableURI(uri string) bool {
+	return strings.HasPrefix(uri, "spotify:track:") || strings.HasPrefix(uri, "spotify:episode:")
 }
 
-func trackIDFromURI(uri string) string {
-	return strings.TrimPrefix(uri, "spotify:track:")
+func idFromURI(uri string) string {
+	if i := strings.LastIndex(uri, ":"); i >= 0 {
+		return uri[i+1:]
+	}
+	return uri
 }

@@ -25,6 +25,7 @@ type nowPlayingModel struct {
 	track       string
 	artist      string
 	trackURI    string
+	imageURL    string
 	playing     bool
 	shuffling   bool
 	hasTrack    bool
@@ -73,6 +74,7 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 			m.track = msg.state.TrackName
 			m.artist = msg.state.ArtistName
 			m.trackURI = msg.state.TrackURI
+			m.imageURL = msg.state.ImageURL
 			m.playing = msg.state.Playing
 			m.shuffling = msg.state.Shuffling
 			if !m.seekPending {

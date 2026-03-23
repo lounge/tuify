@@ -73,6 +73,7 @@ type PlayerState struct {
 	TrackName  string
 	ArtistName string
 	TrackURI   string
+	ImageURL   string
 	ProgressMs int
 	DurationMs int
 }
@@ -394,6 +395,14 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 			Show *struct {
 				Name string `json:"name"`
 			} `json:"show"`
+			Album *struct {
+				Images []struct {
+					URL string `json:"url"`
+				} `json:"images"`
+			} `json:"album"`
+			Images []struct {
+				URL string `json:"url"`
+			} `json:"images"`
 		} `json:"item"`
 	}
 	if err := json.Unmarshal(body, &state); err != nil {
@@ -414,6 +423,13 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		ps.ArtistName = state.Item.Artists[0].Name
 	} else if state.Item.Show != nil {
 		ps.ArtistName = state.Item.Show.Name
+	}
+	if state.Item.Album != nil && len(state.Item.Album.Images) > 0 {
+		images := state.Item.Album.Images
+		ps.ImageURL = images[len(images)/2].URL
+	} else if len(state.Item.Images) > 0 {
+		images := state.Item.Images
+		ps.ImageURL = images[len(images)/2].URL
 	}
 	return ps, nil
 }

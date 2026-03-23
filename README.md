@@ -5,6 +5,7 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 
 ![Tuify screenshot](img/recording.gif)
+![Tuify album_art viz](img/album_art.png)
 
 ## Features
 
@@ -18,7 +19,7 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
   - `l:` Album → Track drill-down
   - `s:` Show → Episode drill-down
 - **Now Playing** — Live progress bar, track info, shuffle state
-- **Visualizers** — Oscillogram and starfield animations
+- **Visualizers** — Album art, starfield, and oscillogram animations
 
 ## Prerequisites
 
@@ -46,6 +47,7 @@ On first run, Tuify will prompt you for your Spotify Client ID:
 
 1. Go to https://developer.spotify.com/dashboard and create an app
 2. Set the redirect URI to `http://127.0.0.1:4444/callback`
+3. Check Web API checkbox
 3. Copy your Client ID and paste it when prompted
 4. A browser window will open to authorize with Spotify
 
@@ -107,6 +109,7 @@ tuify/
 │       ├── common.go        # Shared types and lazyList
 │       └── visualizers/
 │           ├── common.go    # Shared visualizer utilities
+│           ├── albumart.go
 │           ├── oscillogram.go
 │           └── starfield.go
 └── go.mod
@@ -114,8 +117,9 @@ tuify/
 
 ## TODO
 
-- Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason...
+- Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... [(https://github.com/spotify/web-api/issues/1337)].
 - Visualizers that actually take the real audio data as input.
+- Support for spotifyd [(https://github.com/Spotifyd/spotifyd)].
 
 ## Built With
 
