@@ -24,8 +24,8 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 ## Prerequisites
 
 - Go 1.26+
-- A Spotify account
-- A [Spotify Developer App](https://developer.spotify.com/dashboard) with redirect URI set to `http://127.0.0.1:4444/callback`
+- A Premium Spotify account
+- A [Spotify Developer App](https://developer.spotify.com/dashboard)
 
 ## Install
 
