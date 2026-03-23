@@ -117,9 +117,9 @@ tuify/
 
 ## TODO
 
-- Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... [(https://github.com/spotify/web-api/issues/1337)].
+- Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
 - Visualizers that actually take the real audio data as input.
-- Support for spotifyd [(https://github.com/Spotifyd/spotifyd)].
+- Support for spotifyd (https://github.com/Spotifyd/spotifyd).
 
 ## Built With
 
