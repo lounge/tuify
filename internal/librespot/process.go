@@ -54,6 +54,8 @@ func (p *Process) Args() []string {
 		"--backend", "subprocess",
 		"--device", p.config.AudioWorker,
 		"--bitrate", strconv.Itoa(p.config.Bitrate),
+		"--initial-volume", "100",
+		"--volume-ctrl", "fixed",
 		"--disable-audio-cache",
 	}
 	if p.config.Username != "" {
