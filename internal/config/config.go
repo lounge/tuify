@@ -8,7 +8,12 @@ import (
 )
 
 type Config struct {
-	ClientID string `json:"client_id"`
+	ClientID          string `json:"client_id"`
+	EnableLibrespot   bool   `json:"enable_librespot,omitempty"`
+	LibrespotPath     string `json:"librespot_path,omitempty"`
+	DeviceName        string `json:"device_name,omitempty"`
+	Bitrate           int    `json:"bitrate,omitempty"`
+	SpotifyUsername   string `json:"spotify_username,omitempty"`
 }
 
 func Dir() string {

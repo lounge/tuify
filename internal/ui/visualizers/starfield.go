@@ -4,6 +4,8 @@ import (
 	"hash/fnv"
 	"math"
 	"strings"
+
+	"github.com/lounge/tuify/internal/audio"
 )
 
 const numStars = 200
@@ -16,13 +18,14 @@ type star struct {
 }
 
 type Starfield struct {
-	stars  []star
-	rng    uint64
-	inited bool
-	grid   []rune
-	colors []int32 // packed RGB (-1 = no star)
-	gridW  int
-	gridH  int
+	stars     []star
+	rng       uint64
+	inited    bool
+	grid      []rune
+	colors    []int32 // packed RGB (-1 = no star)
+	gridW     int
+	gridH     int
+	audioData *audio.FrequencyData
 }
 
 func NewStarfield() *Starfield {
@@ -40,11 +43,20 @@ func (sf *Starfield) Init(seed string, durationMs int) {
 	sf.inited = true
 }
 
+func (sf *Starfield) SetAudioData(data *audio.FrequencyData) {
+	sf.audioData = data
+}
+
 func (sf *Starfield) Advance() {
 	if !sf.inited {
 		return
 	}
-	dt := 0.015
+	// Bass-reactive speed: 1.0× to 3.0× based on bass energy.
+	speedMul := 1.0
+	if sf.audioData != nil {
+		speedMul = 1.0 + float64(sf.audioData.Bass)*2.0
+	}
+	dt := 0.015 * speedMul
 	for i := range sf.stars {
 		s := &sf.stars[i]
 		s.z -= s.speed * dt

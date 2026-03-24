@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"image"
 	"math"
+
+	"github.com/lounge/tuify/internal/audio"
 )
 
 type Visualizer interface {
@@ -14,6 +16,11 @@ type Visualizer interface {
 
 type ImageAware interface {
 	SetImage(img image.Image)
+}
+
+// AudioAware is implemented by visualizers that consume real-time frequency data.
+type AudioAware interface {
+	SetAudioData(data *audio.FrequencyData)
 }
 
 func xorshift(s uint64) uint64 {

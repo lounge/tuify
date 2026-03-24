@@ -4,12 +4,14 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/ui/visualizers"
 )
 
@@ -29,12 +31,14 @@ type visualizerModel struct {
 	imageURL   string
 	imageCache map[string]image.Image
 	imageCh    chan fetchResult
+	audioRecv  *audio.Receiver
 }
 
 func newVisualizerModel() visualizerModel {
 	return visualizerModel{
 		vizList: []visualizers.Visualizer{
 			visualizers.NewAlbumArt(),
+			visualizers.NewSpectrum(),
 			visualizers.NewStarfield(),
 			visualizers.NewOscillogram(),
 		},
@@ -72,6 +76,21 @@ func (m visualizerModel) tick() tea.Cmd {
 
 func (m *visualizerModel) advance() {
 	m.drainImageCh()
+	if m.audioRecv != nil {
+		connected := m.audioRecv.Connected()
+		fd := m.audioRecv.Latest()
+		if fd != nil {
+			log.Printf("[viz] audio data: bass=%.2f mid=%.2f high=%.2f peak=%.2f progress=%dms",
+				fd.Bass, fd.Mid, fd.High, fd.Peak, fd.ProgressMs)
+			for _, v := range m.vizList {
+				if aa, ok := v.(visualizers.AudioAware); ok {
+					aa.SetAudioData(fd)
+				}
+			}
+		} else if connected {
+			log.Printf("[viz] audio receiver connected but no data yet")
+		}
+	}
 	for _, v := range m.vizList {
 		v.Advance()
 	}

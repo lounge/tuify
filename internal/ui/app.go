@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/spotify"
 )
 
@@ -60,14 +61,30 @@ type Model struct {
 	seekSeq    int
 }
 
-func NewModel(client *spotify.Client) Model {
-	return Model{
+// ModelOption configures optional Model features.
+type ModelOption func(*Model)
+
+// WithAudioReceiver sets the audio receiver for real-time visualizer data.
+func WithAudioReceiver(r *audio.Receiver) ModelOption {
+	return func(m *Model) {
+		if r != nil {
+			m.visualizer.audioRecv = r
+		}
+	}
+}
+
+func NewModel(client *spotify.Client, opts ...ModelOption) Model {
+	m := Model{
 		viewStack:  []viewKind{viewHome},
 		home:       newHomeView(0, 0),
 		nowPlaying: newNowPlaying(client),
 		visualizer: newVisualizerModel(),
 		client:     client,
 	}
+	for _, opt := range opts {
+		opt(&m)
+	}
+	return m
 }
 
 func (m Model) currentView() viewKind {

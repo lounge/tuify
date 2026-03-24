@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/audio"
 )
 
 var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
@@ -24,6 +25,7 @@ var pitchHues = [12]float64{
 type Oscillogram struct {
 	amplitudes []float64
 	hues       []float64
+	audioData  *audio.FrequencyData
 }
 
 type oscCol struct {
@@ -74,39 +76,62 @@ func (o *Oscillogram) Init(seed string, durationMs int) {
 	}
 }
 
+func (o *Oscillogram) SetAudioData(data *audio.FrequencyData) {
+	o.audioData = data
+}
+
 func (o *Oscillogram) Advance() {}
 
 func (o *Oscillogram) View(progressMs, width, height int) string {
-	if len(o.amplitudes) == 0 || width < 1 || height < 1 {
+	if width < 1 || height < 1 {
 		return ""
 	}
 
-	centerIdx := progressMs / 100
-	if centerIdx >= len(o.amplitudes) {
-		centerIdx = len(o.amplitudes) - 1
-	}
-
-	halfW := width / 2
-
 	// Precompute per-column data (amplitude + color).
 	cols := make([]oscCol, width)
-	for col := range width {
-		segIdx := centerIdx - halfW + col
-		if segIdx < 0 || segIdx >= len(o.amplitudes) {
-			continue
-		}
-		amp := o.amplitudes[segIdx]
-		hue := o.hues[segIdx]
-		past := col < halfW
 
-		sat := 0.6 + amp*0.4
-		lum := 0.3 + amp*0.3
-		if past {
-			sat *= 0.4
-			lum *= 0.6
+	if o.audioData != nil {
+		// Real audio mode: map 64 frequency bands across the terminal width.
+		for col := range width {
+			bandIdx := col * 64 / width
+			if bandIdx >= 64 {
+				bandIdx = 63
+			}
+			amp := float64(o.audioData.Bands[bandIdx])
+			// Hue from band index: low=warm (red/orange), high=cool (blue/purple).
+			hue := float64(bandIdx) / 64.0 * 300.0
+			sat := 0.7 + amp*0.3
+			lum := 0.3 + amp*0.35
+			r, g, b := hslToRGB(hue, sat, lum)
+			cols[col] = oscCol{amp: amp, r: r, g: g, b: b}
 		}
-		r, g, b := hslToRGB(hue, sat, lum)
-		cols[col] = oscCol{amp: amp, r: r, g: g, b: b}
+	} else {
+		// Synthetic mode: original seed-based visualization.
+		if len(o.amplitudes) == 0 {
+			return ""
+		}
+		centerIdx := progressMs / 100
+		if centerIdx >= len(o.amplitudes) {
+			centerIdx = len(o.amplitudes) - 1
+		}
+		halfW := width / 2
+		for col := range width {
+			segIdx := centerIdx - halfW + col
+			if segIdx < 0 || segIdx >= len(o.amplitudes) {
+				continue
+			}
+			amp := o.amplitudes[segIdx]
+			hue := o.hues[segIdx]
+			past := col < halfW
+			sat := 0.6 + amp*0.4
+			lum := 0.3 + amp*0.3
+			if past {
+				sat *= 0.4
+				lum *= 0.6
+			}
+			r, g, b := hslToRGB(hue, sat, lum)
+			cols[col] = oscCol{amp: amp, r: r, g: g, b: b}
+		}
 	}
 
 	// Use both halves plus a center row for odd heights.

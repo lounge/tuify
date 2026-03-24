@@ -15,9 +15,10 @@ import (
 )
 
 type Client struct {
-	sp     *sp.Client
-	http   *http.Client
-	userID string
+	sp              *sp.Client
+	http            *http.Client
+	userID          string
+	PreferredDevice string // if set, FindDevice prefers this device name
 }
 
 type Playlist struct {
@@ -496,6 +497,14 @@ func (c *Client) FindDevice(ctx context.Context) (string, error) {
 	}
 	if len(devices) == 0 {
 		return "", fmt.Errorf("No Spotify devices found — open Spotify on any device")
+	}
+	// Prefer the configured device (e.g., librespot's "tuify").
+	if c.PreferredDevice != "" {
+		for _, d := range devices {
+			if d.Name == c.PreferredDevice {
+				return string(d.ID), nil
+			}
+		}
 	}
 	for _, d := range devices {
 		if d.Active {
