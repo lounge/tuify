@@ -68,12 +68,6 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 
 	topH := (height + 1) / 2
 	botH := height / 2
-	if topH < 1 {
-		topH = 1
-	}
-	if botH < 1 {
-		botH = 1
-	}
 
 	bgR, bgG, bgB := termBG()
 
