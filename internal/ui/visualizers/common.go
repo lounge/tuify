@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"image"
 	"math"
+
+	"github.com/lounge/tuify/internal/audio"
 )
 
 type Visualizer interface {
@@ -14,6 +16,11 @@ type Visualizer interface {
 
 type ImageAware interface {
 	SetImage(img image.Image)
+}
+
+// AudioAware is implemented by visualizers that consume real-time frequency data.
+type AudioAware interface {
+	SetAudioData(data *audio.FrequencyData)
 }
 
 func xorshift(s uint64) uint64 {
@@ -69,8 +76,8 @@ func ansiFg(r, g, b int) string {
 }
 
 // ansiFgBg returns ANSI 24-bit foreground + background escapes.
-func ansiFgBg(fr, fg, fb, br, bg, bb int) string {
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm", fr, fg, fb, br, bg, bb)
+func ansiFgBg(fgR, fgG, fgB, bgR, bgG, bgB int) string {
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm", fgR, fgG, fgB, bgR, bgG, bgB)
 }
 
 const ansiReset = "\x1b[0m"

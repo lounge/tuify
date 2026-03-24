@@ -1,29 +1,26 @@
 package visualizers
 
 import (
-	"hash/fnv"
-	"math"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/audio"
 )
 
 var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
 
 // For the bottom half, we use standard block chars with swapped fg/bg.
-// To fill top N/8 of a cell: use the block that fills bottom (8-N)/8 with fg=bgColor,
-// and set bg=barColor. The "empty" foreground masks the bottom, bar color shows on top.
-// Index 0 = fill top 1/8, index 6 = fill top 7/8.
 var lowerMasks = [7]string{"▇", "▆", "▅", "▄", "▃", "▂", "▁"}
 
-// pitchHues maps 12 pseudo-pitch classes to hue values.
-var pitchHues = [12]float64{
-	0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330,
-}
+const (
+	oscMinAmp      = 0.005  // resting bar height for the idle gradient line
+	oscDecayActive = 0.82   // band release decay per tick when audio is present
+	oscDecayIdle   = 0.88   // band decay per tick when no audio
+)
 
 type Oscillogram struct {
-	amplitudes []float64
-	hues       []float64
+	bands  [audio.NumBands]float32 // smoothed band values
+	inited bool
 }
 
 type oscCol struct {
@@ -36,86 +33,44 @@ func NewOscillogram() *Oscillogram {
 }
 
 func (o *Oscillogram) Init(seed string, durationMs int) {
-	h := fnv.New64a()
-	h.Write([]byte(seed))
-	s := h.Sum64()
+	o.bands = [audio.NumBands]float32{}
+	o.inited = true
+}
 
-	count := durationMs / 100
-	if count < 1 {
-		count = 1
-	}
-
-	controlInterval := 8
-	numControls := count/controlInterval + 2
-	controls := make([]float64, numControls)
-	hueControls := make([]float64, numControls)
-	for i := range numControls {
-		s = xorshift(s)
-		controls[i] = float64(s%1000) / 1000.0
-		s = xorshift(s)
-		hueControls[i] = float64(s % 12)
-	}
-
-	o.amplitudes = make([]float64, count)
-	o.hues = make([]float64, count)
-	for i := range count {
-		ci := i / controlInterval
-		t := float64(i%controlInterval) / float64(controlInterval)
-		mu := (1 - math.Cos(t*math.Pi)) / 2
-
-		a := ci
-		b := ci + 1
-		if b >= numControls {
-			b = numControls - 1
+func (o *Oscillogram) SetAudioData(data *audio.FrequencyData) {
+	if data != nil {
+		for i := range audio.NumBands {
+			target := data.Bands[i]
+			if target > o.bands[i] {
+				o.bands[i] = target // fast attack
+			} else {
+				o.bands[i] *= oscDecayActive
+			}
 		}
-		o.amplitudes[i] = controls[a]*(1-mu) + controls[b]*mu
-		hi := hueControls[a]*(1-mu) + hueControls[b]*mu
-		o.hues[i] = pitchHues[int(hi)%12]
+	} else {
+		// Decay toward resting level.
+		for i := range audio.NumBands {
+			o.bands[i] *= oscDecayIdle
+		}
 	}
 }
 
-func (o *Oscillogram) Advance() {}
+func (o *Oscillogram) Advance() {
+	if !o.inited {
+		return
+	}
+}
 
 func (o *Oscillogram) View(progressMs, width, height int) string {
-	if len(o.amplitudes) == 0 || width < 1 || height < 1 {
+	if !o.inited || width < 1 || height < 1 {
 		return ""
 	}
 
-	centerIdx := progressMs / 100
-	if centerIdx >= len(o.amplitudes) {
-		centerIdx = len(o.amplitudes) - 1
-	}
-
-	halfW := width / 2
-
-	// Precompute per-column data (amplitude + color).
-	cols := make([]oscCol, width)
-	for col := range width {
-		segIdx := centerIdx - halfW + col
-		if segIdx < 0 || segIdx >= len(o.amplitudes) {
-			continue
-		}
-		amp := o.amplitudes[segIdx]
-		hue := o.hues[segIdx]
-		past := col < halfW
-
-		sat := 0.6 + amp*0.4
-		lum := 0.3 + amp*0.3
-		if past {
-			sat *= 0.4
-			lum *= 0.6
-		}
-		r, g, b := hslToRGB(hue, sat, lum)
-		cols[col] = oscCol{amp: amp, r: r, g: g, b: b}
-	}
-
-	// Use both halves plus a center row for odd heights.
 	halfH := height / 2
 	if halfH < 1 {
 		halfH = 1
 	}
 
-	// Resolve terminal background for bottom-half masking.
 	var bgR, bgG, bgB int
 	if lipgloss.HasDarkBackground() {
 		bgR, bgG, bgB = 0, 0, 0
@@ -123,8 +78,27 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 		bgR, bgG, bgB = 255, 255, 255
 	}
 
+	cols := make([]oscCol, width)
+	for col := range width {
+		bandIdx := col * audio.NumBands / width
+		if bandIdx >= audio.NumBands {
+			bandIdx = audio.NumBands - 1
+		}
+		amp := float64(o.bands[bandIdx])
+		if amp < oscMinAmp {
+			amp = oscMinAmp
+		}
+		hue := float64(bandIdx) / float64(audio.NumBands) * 300.0
+		sat := 0.7 + amp*0.3
+		lum := 0.25 + amp*0.35
+		r, g, b := hslToRGB(hue, sat, lum)
+		cols[col] = oscCol{amp: amp, r: r, g: g, b: b}
+	}
+
 	var buf strings.Builder
 	buf.Grow(width * height * 20)
+
+	rowsWritten := 0
 
 	// Top half (rows from top to center).
 	for row := halfH - 1; row >= 0; row-- {
@@ -146,17 +120,26 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 			buf.WriteString(upperBlocks[blockIdx])
 			buf.WriteString(ansiReset)
 		}
-		buf.WriteRune('\n')
+		rowsWritten++
+		if rowsWritten < height {
+			buf.WriteRune('\n')
+		}
 	}
 
 	// Center separator for odd heights.
-	if height%2 == 1 {
+	if height%2 == 1 && rowsWritten < height {
 		buf.WriteString(strings.Repeat(" ", width))
-		buf.WriteRune('\n')
+		rowsWritten++
+		if rowsWritten < height {
+			buf.WriteRune('\n')
+		}
 	}
 
 	// Bottom half (mirror).
 	for row := range halfH {
+		if rowsWritten >= height {
+			break
+		}
 		for col := range width {
 			c := cols[col]
 			barHeight := c.amp * float64(halfH)
@@ -178,7 +161,8 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 				buf.WriteString(ansiReset)
 			}
 		}
-		if row < halfH-1 {
+		rowsWritten++
+		if rowsWritten < height {
 			buf.WriteRune('\n')
 		}
 	}

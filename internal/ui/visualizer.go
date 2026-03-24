@@ -10,6 +10,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/ui/visualizers"
 )
 
@@ -29,15 +30,25 @@ type visualizerModel struct {
 	imageURL   string
 	imageCache map[string]image.Image
 	imageCh    chan fetchResult
+	audioRecv  *audio.Receiver
 }
 
-func newVisualizerModel() visualizerModel {
-	return visualizerModel{
-		vizList: []visualizers.Visualizer{
+func newVisualizerModel(hasAudio bool) visualizerModel {
+	var vizList []visualizers.Visualizer
+	if hasAudio {
+		vizList = []visualizers.Visualizer{
 			visualizers.NewAlbumArt(),
+			visualizers.NewSpectrum(),
 			visualizers.NewStarfield(),
 			visualizers.NewOscillogram(),
-		},
+		}
+	} else {
+		vizList = []visualizers.Visualizer{
+			visualizers.NewAlbumArt(),
+		}
+	}
+	return visualizerModel{
+		vizList:    vizList,
 		imageCache: make(map[string]image.Image),
 		imageCh:    make(chan fetchResult, 1),
 	}
@@ -72,6 +83,23 @@ func (m visualizerModel) tick() tea.Cmd {
 
 func (m *visualizerModel) advance() {
 	m.drainImageCh()
+	if m.audioRecv != nil {
+		fd := m.audioRecv.Latest()
+		if fd != nil {
+			for _, v := range m.vizList {
+				if aa, ok := v.(visualizers.AudioAware); ok {
+					aa.SetAudioData(fd)
+				}
+			}
+		} else {
+			// No fresh data (paused or disconnected): clear audio on visualizers.
+			for _, v := range m.vizList {
+				if aa, ok := v.(visualizers.AudioAware); ok {
+					aa.SetAudioData(nil)
+				}
+			}
+		}
+	}
 	for _, v := range m.vizList {
 		v.Advance()
 	}
@@ -128,7 +156,11 @@ func (m *visualizerModel) drainImageCh() {
 				continue
 			}
 			if len(m.imageCache) >= 20 {
+				cur := m.imageCache[m.imageURL]
 				m.imageCache = make(map[string]image.Image)
+				if cur != nil {
+					m.imageCache[m.imageURL] = cur
+				}
 			}
 			m.imageCache[result.url] = result.img
 			if result.url == m.imageURL {
