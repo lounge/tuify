@@ -204,7 +204,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.previousTrack()
 		case "r":
 			m.nowPlaying.recordUserAction()
-			return m, m.toggleShuffle()
+			newShuffle := !m.nowPlaying.shuffling
+			m.nowPlaying.shuffling = newShuffle
+			m.nowPlaying.shufflePending = true
+			return m, m.toggleShuffle(newShuffle)
 		case "s":
 			m.nowPlaying.recordUserAction()
 			return m, m.stopPlayback()
@@ -267,7 +270,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.err != nil {
 			if m.nowPlaying.playPausePending {
 				m.nowPlaying.playPausePending = false
-				m.nowPlaying.playing = !m.nowPlaying.playing // revert optimistic flip
+				m.nowPlaying.playing = !m.nowPlaying.playing
+			}
+			if m.nowPlaying.shufflePending {
+				m.nowPlaying.shufflePending = false
+				m.nowPlaying.shuffling = !m.nowPlaying.shuffling
 			}
 			var errCmd tea.Cmd
 			m.nowPlaying, errCmd = m.nowPlaying.SetError(msg.err.Error())
@@ -279,15 +286,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, errCmd
 		}
-		// User action already triggers a poll; skip the next scheduled one to avoid double-polling
-		m.nowPlaying.skipNextPoll = true
 		if msg.seek {
-			// Single delayed poll to re-sync, no immediate poll to avoid snapping back
 			return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
 		}
+		// Staggered polls to catch the update once the API reflects the change.
 		return m, tea.Batch(
-			m.nowPlaying.pollState(),
-			tea.Tick(time.Second, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
+			tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
+			tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
 		)
 
 	case vizTickMsg:
@@ -486,8 +491,7 @@ func (m Model) previousTrack() tea.Cmd {
 	}, false)
 }
 
-func (m Model) toggleShuffle() tea.Cmd {
-	newState := !m.nowPlaying.shuffling
+func (m Model) toggleShuffle(newState bool) tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Shuffle(ctx, newState, id)
 	}, false)

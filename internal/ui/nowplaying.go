@@ -36,8 +36,8 @@ type nowPlayingModel struct {
 	durationMs     int
 	seekPending      bool
 	playPausePending bool
+	shufflePending   bool
 	lastUserAction   time.Time // zero value means no action yet; pollInterval treats this as idle
-	skipNextPoll     bool
 }
 
 func (m *nowPlayingModel) recordUserAction() {
@@ -117,7 +117,13 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 					m.progressMs = msg.state.ProgressMs
 				}
 			}
-			m.shuffling = msg.state.Shuffling
+			if m.shufflePending {
+				if msg.state.Shuffling == m.shuffling {
+					m.shufflePending = false
+				}
+			} else {
+				m.shuffling = msg.state.Shuffling
+			}
 			m.durationMs = msg.state.DurationMs
 			m.hasTrack = true
 			if m.trackURI != prevURI {
@@ -130,10 +136,6 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 		return m, nil
 
 	case nowPlayingTickMsg:
-		if m.skipNextPoll {
-			m.skipNextPoll = false
-			return m, m.tick()
-		}
 		log.Printf("[poll] polling GetPlayerState (next in %s)", m.pollInterval())
 		return m, tea.Batch(m.pollState(), m.tick())
 
@@ -151,10 +153,6 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 		return m, tea.Batch(cmds...)
 
 	case delayedPollMsg:
-		if m.skipNextPoll {
-			m.skipNextPoll = false
-			return m, nil
-		}
 		return m, m.pollState()
 
 	case clearErrorMsg:
