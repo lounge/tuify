@@ -1,6 +1,8 @@
 # Tuify
 
-A terminal-based Spotify client written in Go. Browse playlists, search for music and podcasts, control playback — Spotify without all the noise. Optional [librespot](https://github.com/librespot-org/librespot) integration for direct audio streaming and real-time audio-reactive visualizers.
+A terminal-based Spotify client written in Go. Browse playlists, search for music and podcasts, control playback — **Spotify without all the noise.**
+
+ Optional [librespot](https://github.com/librespot-org/librespot) integration for direct audio streaming and real-time audio-reactive visualizers.
 
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 
