@@ -1,8 +1,6 @@
 package visualizers
 
 import (
-	"hash/fnv"
-	"math"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -15,8 +13,6 @@ type Spectrum struct {
 	prevBands [64]float32
 	peakHold  [64]float32
 	inited    bool
-	rng       uint64 // seed for synthetic mode
-	frame     int    // frame counter for synthetic animation
 }
 
 func NewSpectrum() *Spectrum {
@@ -26,10 +22,6 @@ func NewSpectrum() *Spectrum {
 func (s *Spectrum) Init(seed string, durationMs int) {
 	s.prevBands = [64]float32{}
 	s.peakHold = [64]float32{}
-	s.frame = 0
-	h := fnv.New64a()
-	h.Write([]byte(seed))
-	s.rng = h.Sum64()
 	s.inited = true
 }
 
@@ -38,8 +30,6 @@ func (s *Spectrum) SetAudioData(data *audio.FrequencyData) {
 }
 
 func (s *Spectrum) Advance() {
-	s.frame++
-
 	if s.audioData != nil {
 		// Real audio mode: smooth toward actual data.
 		for i := range 64 {
@@ -56,35 +46,10 @@ func (s *Spectrum) Advance() {
 			}
 		}
 	} else {
-		// Synthetic mode: generate animated spectrum from seed.
-		t := float64(s.frame) * 0.05
+		// No audio: decay to zero.
 		for i := range 64 {
-			fi := float64(i)
-			// Layered sine waves at different frequencies, seeded by rng.
-			phase := float64(s.rng>>uint(i%16)&0xFF) / 255.0 * math.Pi * 2
-			val := 0.3*math.Sin(t*0.7+fi*0.15+phase) +
-				0.2*math.Sin(t*1.3+fi*0.08+phase*1.5) +
-				0.15*math.Sin(t*2.1+fi*0.22+phase*0.7)
-			// Bias toward bass (lower bands louder).
-			bassBoost := 1.0 - fi/64.0*0.5
-			val = (val + 0.65) * bassBoost * 0.7
-			if val < 0 {
-				val = 0
-			}
-			if val > 1 {
-				val = 1
-			}
-			target := float32(val)
-			if target > s.prevBands[i] {
-				s.prevBands[i] = target
-			} else {
-				s.prevBands[i] += (target - s.prevBands[i]) * 0.3
-			}
-			if s.prevBands[i] > s.peakHold[i] {
-				s.peakHold[i] = s.prevBands[i]
-			} else {
-				s.peakHold[i] *= 0.97
-			}
+			s.prevBands[i] *= 0.9
+			s.peakHold[i] *= 0.95
 		}
 	}
 }

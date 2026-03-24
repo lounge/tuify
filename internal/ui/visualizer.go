@@ -4,7 +4,6 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
-	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -34,14 +33,22 @@ type visualizerModel struct {
 	audioRecv  *audio.Receiver
 }
 
-func newVisualizerModel() visualizerModel {
-	return visualizerModel{
-		vizList: []visualizers.Visualizer{
+func newVisualizerModel(hasAudio bool) visualizerModel {
+	var vizList []visualizers.Visualizer
+	if hasAudio {
+		vizList = []visualizers.Visualizer{
 			visualizers.NewAlbumArt(),
 			visualizers.NewSpectrum(),
 			visualizers.NewStarfield(),
 			visualizers.NewOscillogram(),
-		},
+		}
+	} else {
+		vizList = []visualizers.Visualizer{
+			visualizers.NewAlbumArt(),
+		}
+	}
+	return visualizerModel{
+		vizList:    vizList,
 		imageCache: make(map[string]image.Image),
 		imageCh:    make(chan fetchResult, 1),
 	}
@@ -77,18 +84,20 @@ func (m visualizerModel) tick() tea.Cmd {
 func (m *visualizerModel) advance() {
 	m.drainImageCh()
 	if m.audioRecv != nil {
-		connected := m.audioRecv.Connected()
 		fd := m.audioRecv.Latest()
 		if fd != nil {
-			log.Printf("[viz] audio data: bass=%.2f mid=%.2f high=%.2f peak=%.2f progress=%dms",
-				fd.Bass, fd.Mid, fd.High, fd.Peak, fd.ProgressMs)
 			for _, v := range m.vizList {
 				if aa, ok := v.(visualizers.AudioAware); ok {
 					aa.SetAudioData(fd)
 				}
 			}
-		} else if connected {
-			log.Printf("[viz] audio receiver connected but no data yet")
+		} else {
+			// No fresh data (paused or disconnected): clear audio on visualizers.
+			for _, v := range m.vizList {
+				if aa, ok := v.(visualizers.AudioAware); ok {
+					aa.SetAudioData(nil)
+				}
+			}
 		}
 	}
 	for _, v := range m.vizList {

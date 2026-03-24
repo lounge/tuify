@@ -64,10 +64,13 @@ type Model struct {
 // ModelOption configures optional Model features.
 type ModelOption func(*Model)
 
-// WithAudioReceiver sets the audio receiver for real-time visualizer data.
+// WithAudioReceiver sets the audio receiver for real-time visualizer data
+// and enables the audio-reactive visualizers.
 func WithAudioReceiver(r *audio.Receiver) ModelOption {
 	return func(m *Model) {
 		if r != nil {
+			m.visualizer.audioRecv = r
+			m.visualizer = newVisualizerModel(true)
 			m.visualizer.audioRecv = r
 		}
 	}
@@ -78,7 +81,7 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 		viewStack:  []viewKind{viewHome},
 		home:       newHomeView(0, 0),
 		nowPlaying: newNowPlaying(client),
-		visualizer: newVisualizerModel(),
+		visualizer: newVisualizerModel(false),
 		client:     client,
 	}
 	for _, opt := range opts {

@@ -7,6 +7,7 @@ import (
 	"os"
 	"runtime"
 	"sync/atomic"
+	"time"
 )
 
 // Receiver listens on a unix socket for FrequencyData from the audio worker.
@@ -14,6 +15,7 @@ type Receiver struct {
 	socketPath string
 	listener   net.Listener
 	latest     atomic.Pointer[FrequencyData]
+	lastUpdate atomic.Int64 // unix nanos of last frame
 	connected  atomic.Bool
 	done       chan struct{}
 }
@@ -101,6 +103,7 @@ func (r *Receiver) readLoop(conn net.Conn) {
 			}
 		}
 		r.latest.Store(&fd)
+		r.lastUpdate.Store(time.Now().UnixNano())
 		frames++
 		if frames == 1 {
 			log.Printf("[audio-receiver] first frame received: bass=%.2f mid=%.2f high=%.2f",
@@ -123,9 +126,14 @@ func (r *Receiver) Stop() {
 	log.Printf("[audio-receiver] stopped")
 }
 
-// Latest returns the most recent FrequencyData, or nil if none received.
+// Latest returns the most recent FrequencyData, or nil if no fresh data.
+// Returns nil if the last frame is older than 150ms (e.g., paused).
 // Thread-safe; called from the Bubble Tea goroutine.
 func (r *Receiver) Latest() *FrequencyData {
+	last := r.lastUpdate.Load()
+	if last == 0 || time.Since(time.Unix(0, last)) > 150*time.Millisecond {
+		return nil
+	}
 	return r.latest.Load()
 }
 

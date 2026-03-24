@@ -8,7 +8,10 @@ import (
 	"github.com/lounge/tuify/internal/audio"
 )
 
-const numStars = 200
+const (
+	baseStars = 200
+	maxStars  = 600
+)
 
 var starChars = [5]rune{'·', '∙', '•', '⦁', '★'}
 
@@ -36,7 +39,7 @@ func (sf *Starfield) Init(seed string, durationMs int) {
 	h := fnv.New64a()
 	h.Write([]byte(seed))
 	sf.rng = h.Sum64()
-	sf.stars = make([]star, numStars)
+	sf.stars = make([]star, baseStars, maxStars)
 	for i := range sf.stars {
 		sf.stars[i] = sf.newStar(true)
 	}
@@ -51,19 +54,49 @@ func (sf *Starfield) Advance() {
 	if !sf.inited {
 		return
 	}
-	// Bass-reactive speed: 1.0× to 3.0× based on bass energy.
-	speedMul := 1.0
+
+	// Audio-reactive parameters.
+	speedMul := 0.15 // slow drift when idle/paused
+	intensity := 0.0
 	if sf.audioData != nil {
-		speedMul = 1.0 + float64(sf.audioData.Bass)*2.0
+		bass := float64(sf.audioData.Bass)
+		mid := float64(sf.audioData.Mid)
+		peak := float64(sf.audioData.Peak)
+		intensity = bass*0.5 + mid*0.3 + peak*0.2
+
+		// Speed: 0.5× quiet, up to 8× on heavy bass hits.
+		speedMul = 0.5 + bass*7.5
+
+		// Spawn extra stars based on overall intensity.
+		targetCount := baseStars + int(intensity*float64(maxStars-baseStars))
+		if targetCount > maxStars {
+			targetCount = maxStars
+		}
+		for len(sf.stars) < targetCount {
+			sf.stars = append(sf.stars, sf.newStar(false))
+		}
+	} else {
+		// No audio: gradually shed extra stars back to base count.
+		if len(sf.stars) > baseStars {
+			sf.stars = sf.stars[:len(sf.stars)-2]
+		}
 	}
+
 	dt := 0.015 * speedMul
+	alive := sf.stars[:0]
 	for i := range sf.stars {
 		s := &sf.stars[i]
 		s.z -= s.speed * dt
 		if s.z <= 0.01 {
+			// Recycle star if we're at or below target count, otherwise drop it.
+			if sf.audioData == nil && len(alive) >= baseStars {
+				continue
+			}
 			sf.stars[i] = sf.newStar(false)
 		}
+		alive = append(alive, sf.stars[i])
 	}
+	sf.stars = alive
 }
 
 func (sf *Starfield) View(progressMs, width, height int) string {
@@ -89,6 +122,12 @@ func (sf *Starfield) View(progressMs, width, height int) string {
 	halfW := float64(width) / 2
 	halfH := float64(height) / 2
 
+	// Compute audio intensity for color boost.
+	var intensity float64
+	if sf.audioData != nil {
+		intensity = float64(sf.audioData.Bass)*0.5 + float64(sf.audioData.Mid)*0.3 + float64(sf.audioData.Peak)*0.2
+	}
+
 	for _, s := range sf.stars {
 		px := s.x/s.z*halfW + halfW
 		py := s.y/s.z*halfH + halfH
@@ -108,12 +147,18 @@ func (sf *Starfield) View(progressMs, width, height int) string {
 			charIdx = len(starChars) - 1
 		}
 
-		lum := 0.3 + closeness*0.7
+		lum := 0.3 + closeness*0.7 + intensity*0.2
+		if lum > 1.0 {
+			lum = 1.0
+		}
 		hue := math.Mod(s.x*180+s.y*180+200, 360)
 		if hue < 0 {
 			hue += 360
 		}
-		sat := 0.1 + closeness*0.3
+		sat := 0.1 + closeness*0.3 + intensity*0.5
+		if sat > 1.0 {
+			sat = 1.0
+		}
 
 		r, g, b := hslToRGB(hue, sat, lum)
 		idx := row*width + col
