@@ -66,9 +66,13 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 		return ""
 	}
 
-	halfH := height / 2
-	if halfH < 1 {
-		halfH = 1
+	topH := (height + 1) / 2
+	botH := height / 2
+	if topH < 1 {
+		topH = 1
+	}
+	if botH < 1 {
+		botH = 1
 	}
 
 	bgR, bgG, bgB := termBG()
@@ -96,10 +100,10 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 	rowsWritten := 0
 
 	// Top half (rows from top to center).
-	for row := halfH - 1; row >= 0; row-- {
+	for row := topH - 1; row >= 0; row-- {
 		for col := range width {
 			c := cols[col]
-			barHeight := c.amp * float64(halfH)
+			barHeight := c.amp * float64(topH)
 			cellLevel := barHeight - float64(row)
 
 			if cellLevel <= 0 {
@@ -121,23 +125,14 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 		}
 	}
 
-	// Center separator for odd heights.
-	if height%2 == 1 && rowsWritten < height {
-		buf.WriteString(strings.Repeat(" ", width))
-		rowsWritten++
-		if rowsWritten < height {
-			buf.WriteRune('\n')
-		}
-	}
-
 	// Bottom half (mirror).
-	for row := range halfH {
+	for row := range botH {
 		if rowsWritten >= height {
 			break
 		}
 		for col := range width {
 			c := cols[col]
-			barHeight := c.amp * float64(halfH)
+			barHeight := c.amp * float64(botH)
 			cellLevel := barHeight - float64(row)
 
 			if cellLevel <= 0 {
