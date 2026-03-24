@@ -74,6 +74,8 @@ Librespot config options in `config.json`:
 
 When enabled, tuify launches librespot as a subprocess with `-60`, `--volume-ctrl fixed`, and `--disable-audio-cache`. Audio is piped through tuify for playback and real-time FFT analysis.
 
+Select "tuify" in "Connect to a device" in Spotify client.
+
 ## Usage
 
 ```bash
