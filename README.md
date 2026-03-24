@@ -5,6 +5,7 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
  Optional [librespot](https://github.com/librespot-org/librespot) integration for direct audio streaming and real-time audio-reactive visualizers.
 
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+[![Hypercommit](https://img.shields.io/badge/Hypercommit-DB2475)](https://hypercommit.com/tuify)
 
 ![Tuify screenshot](img/recording.gif)
 ![Tuify visualizers](img/visualizers.gif)
