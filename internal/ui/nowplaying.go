@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -21,19 +22,25 @@ type clearErrorMsg struct{}
 type delayedPollMsg struct{}
 
 type nowPlayingModel struct {
-	client      *spotify.Client
-	track       string
-	artist      string
-	trackURI    string
-	imageURL    string
-	playing     bool
-	shuffling   bool
-	hasTrack    bool
-	errMsg      string
-	width       int
-	progressMs  int
-	durationMs  int
-	seekPending bool
+	client         *spotify.Client
+	track          string
+	artist         string
+	trackURI       string
+	imageURL       string
+	playing        bool
+	shuffling      bool
+	hasTrack       bool
+	errMsg         string
+	width          int
+	progressMs     int
+	durationMs     int
+	seekPending    bool
+	lastUserAction time.Time // zero value means no action yet; pollInterval treats this as idle
+	skipNextPoll   bool
+}
+
+func (m *nowPlayingModel) recordUserAction() {
+	m.lastUserAction = time.Now()
 }
 
 func newNowPlaying(client *spotify.Client) nowPlayingModel {
@@ -45,9 +52,26 @@ func (m nowPlayingModel) Init() tea.Cmd {
 }
 
 func (m nowPlayingModel) tick() tea.Cmd {
-	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+	interval := m.pollInterval()
+	return tea.Tick(interval, func(t time.Time) tea.Msg {
 		return nowPlayingTickMsg(t)
 	})
+}
+
+func (m nowPlayingModel) pollInterval() time.Duration {
+	if !m.hasTrack {
+		return 10 * time.Second
+	}
+	if !m.playing {
+		return 30 * time.Second
+	}
+	if m.durationMs-m.progressMs < 15000 {
+		return 3 * time.Second
+	}
+	if time.Since(m.lastUserAction) < 30*time.Second {
+		return 5 * time.Second
+	}
+	return 15 * time.Second
 }
 
 func (m nowPlayingModel) progressTick() tea.Cmd {
@@ -68,9 +92,11 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 	switch msg := msg.(type) {
 	case playerStateMsg:
 		if msg.err != nil {
+			log.Printf("[poll] GetPlayerState error: %v", msg.err)
 			return m, nil
 		}
 		if msg.state != nil {
+			prevURI := m.trackURI
 			m.track = msg.state.TrackName
 			m.artist = msg.state.ArtistName
 			m.trackURI = msg.state.TrackURI
@@ -82,26 +108,41 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 			}
 			m.durationMs = msg.state.DurationMs
 			m.hasTrack = true
+			if m.trackURI != prevURI {
+				log.Printf("[poll] track changed → %s — %s", m.track, m.artist)
+			}
 		} else {
 			m.hasTrack = false
+			log.Printf("[poll] no active playback")
 		}
 		return m, nil
 
 	case nowPlayingTickMsg:
+		if m.skipNextPoll {
+			m.skipNextPoll = false
+			return m, m.tick()
+		}
+		log.Printf("[poll] polling GetPlayerState (next in %s)", m.pollInterval())
 		return m, tea.Batch(m.pollState(), m.tick())
 
 	case progressTickMsg:
 		cmds := []tea.Cmd{m.progressTick()}
 		if m.playing && m.hasTrack {
 			m.progressMs += 1000
-			if m.progressMs >= m.durationMs {
+			if m.progressMs > m.durationMs {
 				m.progressMs = m.durationMs
+			}
+			if m.progressMs >= m.durationMs {
 				cmds = append(cmds, m.pollState())
 			}
 		}
 		return m, tea.Batch(cmds...)
 
 	case delayedPollMsg:
+		if m.skipNextPoll {
+			m.skipNextPoll = false
+			return m, nil
+		}
 		return m, m.pollState()
 
 	case clearErrorMsg:

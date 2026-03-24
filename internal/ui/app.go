@@ -172,18 +172,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		case " ":
+			m.nowPlaying.recordUserAction()
 			return m, m.togglePlayPause()
 		case "n":
+			m.nowPlaying.recordUserAction()
 			return m, m.nextTrack()
 		case "p":
+			m.nowPlaying.recordUserAction()
 			return m, m.previousTrack()
 		case "r":
+			m.nowPlaying.recordUserAction()
 			return m, m.toggleShuffle()
 		case "s":
+			m.nowPlaying.recordUserAction()
 			return m, m.stopPlayback()
 		case "a":
+			m.nowPlaying.recordUserAction()
 			return m, m.seekRelative(-5000)
 		case "d":
+			m.nowPlaying.recordUserAction()
 			return m, m.seekRelative(5000)
 		case "v":
 			if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
@@ -246,6 +253,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, errCmd
 		}
+		// User action already triggers a poll; skip the next scheduled one to avoid double-polling
+		m.nowPlaying.skipNextPoll = true
 		if msg.seek {
 			// Single delayed poll to re-sync, no immediate poll to avoid snapping back
 			return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
