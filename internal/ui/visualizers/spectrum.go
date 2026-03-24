@@ -63,7 +63,7 @@ func (s *Spectrum) Advance() {
 	}
 }
 
-func (s *Spectrum) View(progressMs, width, height int) string {
+func (s *Spectrum) View(width, height int) string {
 	if !s.inited || width < 1 || height < 1 {
 		return ""
 	}

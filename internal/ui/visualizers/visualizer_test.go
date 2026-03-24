@@ -13,7 +13,7 @@ import (
 
 func TestOscillogram_ViewBeforeInit(t *testing.T) {
 	o := NewOscillogram()
-	got := o.View(0, 80, 10)
+	got := o.View(80, 10)
 	if got != "" {
 		t.Errorf("View before Init should return empty, got %q", got)
 	}
@@ -29,7 +29,7 @@ func TestOscillogram_NoAudioShowsRestingBars(t *testing.T) {
 	o := NewOscillogram()
 	o.Init("seed", 10000)
 	height := 10
-	got := o.View(0, 80, height)
+	got := o.View(80, height)
 	lines := strings.Split(got, "\n")
 	if len(lines) != height {
 		t.Errorf("expected %d lines, got %d", height, len(lines))
@@ -43,10 +43,10 @@ func TestOscillogram_NoAudioShowsRestingBars(t *testing.T) {
 func TestOscillogram_ViewZeroDimensions(t *testing.T) {
 	o := NewOscillogram()
 	o.Init("seed", 10000)
-	if got := o.View(0, 0, 10); got != "" {
+	if got := o.View(0, 10); got != "" {
 		t.Errorf("width=0 should return empty, got %q", got)
 	}
-	if got := o.View(0, 10, 0); got != "" {
+	if got := o.View(10, 0); got != "" {
 		t.Errorf("height=0 should return empty, got %q", got)
 	}
 }
@@ -55,7 +55,7 @@ func TestOscillogram_ViewDimensions(t *testing.T) {
 	o := NewOscillogram()
 	o.Init("seed", 10000)
 	for _, height := range []int{1, 2, 3, 10, 21} {
-		got := o.View(0, 40, height)
+		got := o.View(40, height)
 		lines := strings.Split(got, "\n")
 		if len(lines) != height {
 			t.Errorf("height=%d: expected %d lines, got %d", height, height, len(lines))
@@ -67,7 +67,7 @@ func TestOscillogram_ViewDimensions(t *testing.T) {
 
 func TestStarfield_ViewBeforeInit(t *testing.T) {
 	sf := NewStarfield()
-	got := sf.View(0, 80, 10)
+	got := sf.View(80, 10)
 	if got != "" {
 		t.Errorf("View before Init should return empty, got %q", got)
 	}
@@ -84,7 +84,7 @@ func TestStarfield_ViewDimensions(t *testing.T) {
 	sf.Init("test-seed", 30000)
 
 	height := 10
-	got := sf.View(0, 80, height)
+	got := sf.View(80, height)
 	lines := strings.Split(got, "\n")
 	if len(lines) != height {
 		t.Errorf("expected %d lines, got %d", height, len(lines))
@@ -95,10 +95,10 @@ func TestStarfield_ViewZeroDimensions(t *testing.T) {
 	sf := NewStarfield()
 	sf.Init("seed", 10000)
 
-	if got := sf.View(0, 0, 10); got != "" {
+	if got := sf.View(0, 10); got != "" {
 		t.Errorf("width=0 should return empty, got %q", got)
 	}
-	if got := sf.View(0, 10, 0); got != "" {
+	if got := sf.View(10, 0); got != "" {
 		t.Errorf("height=0 should return empty, got %q", got)
 	}
 }
@@ -110,7 +110,7 @@ func TestStarfield_AdvanceDoesNotPanic(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		sf.Advance()
 	}
-	got := sf.View(0, 40, 10)
+	got := sf.View(40, 10)
 	if got == "" {
 		t.Error("should produce output after many advances")
 	}
@@ -121,9 +121,9 @@ func TestStarfield_ResizeGrid(t *testing.T) {
 	sf.Init("seed", 10000)
 
 	// First render at one size
-	sf.View(0, 40, 10)
+	sf.View(40, 10)
 	// Render at different size — should resize grid without panic
-	got := sf.View(0, 80, 20)
+	got := sf.View(80, 20)
 	lines := strings.Split(got, "\n")
 	if len(lines) != 20 {
 		t.Errorf("expected 20 lines after resize, got %d", len(lines))
@@ -144,7 +144,7 @@ func testImage(w, h int) image.Image {
 
 func TestAlbumArt_ViewBeforeInit(t *testing.T) {
 	a := NewAlbumArt()
-	got := a.View(0, 80, 10)
+	got := a.View(80, 10)
 	if got != "" {
 		t.Errorf("View before Init should return empty, got %q", got)
 	}
@@ -160,10 +160,10 @@ func TestAlbumArt_ViewZeroDimensions(t *testing.T) {
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
 
-	if got := a.View(0, 0, 10); got != "" {
+	if got := a.View(0, 10); got != "" {
 		t.Errorf("width=0 should return empty, got %q", got)
 	}
-	if got := a.View(0, 10, 0); got != "" {
+	if got := a.View(10, 0); got != "" {
 		t.Errorf("height=0 should return empty, got %q", got)
 	}
 }
@@ -174,7 +174,7 @@ func TestAlbumArt_ViewDimensions(t *testing.T) {
 	a.SetImage(testImage(64, 64))
 
 	height := 10
-	got := a.View(0, 80, height)
+	got := a.View(80, height)
 	lines := strings.Split(got, "\n")
 	if len(lines) != height {
 		t.Errorf("expected %d lines, got %d", height, len(lines))
@@ -186,8 +186,8 @@ func TestAlbumArt_ResizeGrid(t *testing.T) {
 	a.Init("seed", 10000)
 	a.SetImage(testImage(64, 64))
 
-	a.View(0, 40, 10)
-	got := a.View(0, 80, 20)
+	a.View(40, 10)
+	got := a.View(80, 20)
 	lines := strings.Split(got, "\n")
 	if len(lines) != 20 {
 		t.Errorf("expected 20 lines after resize, got %d", len(lines))
@@ -203,7 +203,7 @@ func TestAlbumArt_Deterministic(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		a1.Advance()
 	}
-	v1 := a1.View(0, 40, 10)
+	v1 := a1.View(40, 10)
 
 	a2 := NewAlbumArt()
 	a2.Init("same-seed", 10000)
@@ -211,7 +211,7 @@ func TestAlbumArt_Deterministic(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		a2.Advance()
 	}
-	v2 := a2.View(0, 40, 10)
+	v2 := a2.View(40, 10)
 
 	if v1 != v2 {
 		t.Error("same seed and image should produce identical output")
@@ -230,7 +230,7 @@ func TestAlbumArt_AdvanceRespectsFrames(t *testing.T) {
 	}
 
 	// First View sets totalFrames via computeGrid
-	a.View(0, 20, 10)
+	a.View(20, 10)
 
 	// Advance should now increment frame
 	a.Advance()
@@ -243,7 +243,7 @@ func TestAlbumArt_ResolvesAfterEnoughAdvances(t *testing.T) {
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
 	a.SetImage(testImage(16, 16))
-	a.View(0, 20, 10) // trigger computeGrid
+	a.View(20, 10) // trigger computeGrid
 
 	for i := 0; i < 200; i++ {
 		a.Advance()
@@ -265,7 +265,7 @@ func TestAlbumArt_MusicNoteFallback(t *testing.T) {
 
 func TestSpectrum_ViewBeforeInit(t *testing.T) {
 	s := NewSpectrum()
-	got := s.View(0, 80, 10)
+	got := s.View(80, 10)
 	if got != "" {
 		t.Errorf("View before Init should return empty, got %q", got)
 	}
@@ -281,10 +281,10 @@ func TestSpectrum_ViewZeroDimensions(t *testing.T) {
 	s := NewSpectrum()
 	s.Init("seed", 10000)
 
-	if got := s.View(0, 0, 10); got != "" {
+	if got := s.View(0, 10); got != "" {
 		t.Errorf("width=0 should return empty, got %q", got)
 	}
-	if got := s.View(0, 10, 0); got != "" {
+	if got := s.View(10, 0); got != "" {
 		t.Errorf("height=0 should return empty, got %q", got)
 	}
 }
@@ -294,7 +294,7 @@ func TestSpectrum_ViewDimensions(t *testing.T) {
 	s.Init("seed", 10000)
 
 	height := 10
-	got := s.View(0, 80, height)
+	got := s.View(80, height)
 	lines := strings.Split(got, "\n")
 	if len(lines) != height {
 		t.Errorf("expected %d lines, got %d", height, len(lines))

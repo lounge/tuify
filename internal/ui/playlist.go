@@ -84,22 +84,10 @@ func (v playlistView) Update(msg tea.Msg) (playlistView, tea.Cmd) {
 		return v, nil
 	}
 
-	var cmd tea.Cmd
-	v.list, cmd = v.list.Update(msg)
-	cmds := []tea.Cmd{cmd}
-
-	if v.triggerLoad() {
-		cmds = append(cmds, v.fetchMore())
-	}
-
-	return v, tea.Batch(cmds...)
+	return v, v.updateList(msg, v.fetchMore)
 }
 
 func (v *playlistView) retryLoad() tea.Cmd {
-	v.lazyList.retryLoad()
+	v.prepareRetry()
 	return v.fetchMore()
-}
-
-func (v playlistView) View() string {
-	return v.list.View()
 }

@@ -84,22 +84,10 @@ func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 		return v, nil
 	}
 
-	var cmd tea.Cmd
-	v.list, cmd = v.list.Update(msg)
-	cmds := []tea.Cmd{cmd}
-
-	if v.triggerLoad() {
-		cmds = append(cmds, v.fetchMore())
-	}
-
-	return v, tea.Batch(cmds...)
+	return v, v.updateList(msg, v.fetchMore)
 }
 
 func (v *episodeView) retryLoad() tea.Cmd {
-	v.lazyList.retryLoad()
+	v.prepareRetry()
 	return v.fetchMore()
-}
-
-func (v episodeView) View() string {
-	return v.list.View()
 }

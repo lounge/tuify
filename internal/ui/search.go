@@ -140,6 +140,13 @@ func (v *searchView) resetPagination() {
 	v.syncURI = ""
 }
 
+// startLoading resets pagination and puts the view into loading state.
+func (v *searchView) startLoading() {
+	v.resetPagination()
+	v.pending = 1
+	v.list.SetItems([]list.Item{loadingStatusItem})
+}
+
 func (v searchView) debounce() tea.Cmd {
 	seq := v.debounceSeq
 	query := v.searchQuery
@@ -298,7 +305,7 @@ func (v *searchView) rebuildList() {
 
 	if v.syncURI != "" {
 		for i, item := range items {
-			if u, ok := item.(interface{ URI() string }); ok && u.URI() == v.syncURI {
+			if u, ok := item.(uriItem); ok && u.URI() == v.syncURI {
 				v.list.Select(i)
 				v.syncURI = ""
 				break
@@ -309,7 +316,7 @@ func (v *searchView) rebuildList() {
 
 func (v *searchView) selectByURI(uri string) bool {
 	for i, item := range v.list.Items() {
-		if u, ok := item.(interface{ URI() string }); ok && u.URI() == uri {
+		if u, ok := item.(uriItem); ok && u.URI() == uri {
 			v.list.Select(i)
 			v.syncURI = ""
 			return false
@@ -325,7 +332,7 @@ func (v searchView) queueFrom(uri string) []string {
 	var uris []string
 	found := false
 	for _, item := range v.items {
-		if u, ok := item.(interface{ URI() string }); ok {
+		if u, ok := item.(uriItem); ok {
 			if u.URI() == uri {
 				found = true
 			}
@@ -349,18 +356,14 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 		if ai, ok := item.(albumItem); ok {
 			v.depth = 1
 			v.selectedAlbum = struct{ id, uri, name string }{ai.id, ai.uri, ai.name}
-			v.resetPagination()
-			v.pending = 1
-			v.list.SetItems([]list.Item{loadingStatusItem})
+			v.startLoading()
 			return v.fetchResults("", 0, 10)
 		}
 	case prefixShow:
 		if si, ok := item.(podcastItem); ok {
 			v.depth = 1
 			v.selectedShow = struct{ id, uri, name string }{si.id, si.uri, si.name}
-			v.resetPagination()
-			v.pending = 1
-			v.list.SetItems([]list.Item{loadingStatusItem})
+			v.startLoading()
 			return v.fetchResults("", 0, 10)
 		}
 	case prefixArtist:
@@ -368,18 +371,14 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 			if ai, ok := item.(artistItem); ok {
 				v.depth = 1
 				v.selectedArtist = struct{ id, name string }{ai.id, ai.name}
-				v.resetPagination()
-				v.pending = 1
-				v.list.SetItems([]list.Item{loadingStatusItem})
+				v.startLoading()
 				return v.fetchResults("", 0, 10)
 			}
 		} else if v.depth == 1 {
 			if ai, ok := item.(albumItem); ok {
 				v.depth = 2
 				v.selectedAlbum = struct{ id, uri, name string }{ai.id, ai.uri, ai.name}
-				v.resetPagination()
-				v.pending = 1
-				v.list.SetItems([]list.Item{loadingStatusItem})
+				v.startLoading()
 				return v.fetchResults("", 0, 10)
 			}
 		}
@@ -396,9 +395,7 @@ func (v *searchView) goBack() bool {
 		// artist→album→tracks: go back to artist→albums
 		v.depth = 1
 		v.selectedAlbum = struct{ id, uri, name string }{}
-		v.resetPagination()
-		v.pending = 1
-		v.list.SetItems([]list.Item{loadingStatusItem})
+		v.startLoading()
 		return true
 	}
 	// depth 1 → 0: go back to search results

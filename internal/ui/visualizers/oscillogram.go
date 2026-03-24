@@ -6,9 +6,7 @@ import (
 	"github.com/lounge/tuify/internal/audio"
 )
 
-var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
-
-// For the bottom half, we use standard block chars with swapped fg/bg.
+// lowerMasks are descending block fills used for the mirrored bottom half.
 var lowerMasks = [7]string{"▇", "▆", "▅", "▄", "▃", "▂", "▁"}
 
 const (
@@ -61,7 +59,7 @@ func (o *Oscillogram) Advance() {
 	}
 }
 
-func (o *Oscillogram) View(progressMs, width, height int) string {
+func (o *Oscillogram) View(width, height int) string {
 	if !o.inited || width < 1 || height < 1 {
 		return ""
 	}

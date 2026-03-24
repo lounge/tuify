@@ -12,7 +12,7 @@ import (
 type Visualizer interface {
 	Init(seed string, durationMs int)
 	Advance()
-	View(progressMs, width, height int) string
+	View(width, height int) string
 }
 
 type ImageAware interface {
@@ -82,6 +82,9 @@ func ansiFgBg(fgR, fgG, fgB, bgR, bgG, bgB int) string {
 }
 
 const ansiReset = "\x1b[0m"
+
+// upperBlocks are ascending block-fill characters used by spectrum and oscillogram.
+var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
 
 // termBG returns the terminal background color as RGB.
 func termBG() (int, int, int) {

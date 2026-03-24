@@ -85,22 +85,10 @@ func (v trackView) Update(msg tea.Msg) (trackView, tea.Cmd) {
 		return v, nil
 	}
 
-	var cmd tea.Cmd
-	v.list, cmd = v.list.Update(msg)
-	cmds := []tea.Cmd{cmd}
-
-	if v.triggerLoad() {
-		cmds = append(cmds, v.fetchMore())
-	}
-
-	return v, tea.Batch(cmds...)
+	return v, v.updateList(msg, v.fetchMore)
 }
 
 func (v *trackView) retryLoad() tea.Cmd {
-	v.lazyList.retryLoad()
+	v.prepareRetry()
 	return v.fetchMore()
-}
-
-func (v trackView) View() string {
-	return v.list.View()
 }

@@ -6,10 +6,16 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
 var loadingStyle = lipgloss.NewStyle().Foreground(colorSubtle)
+
+// uriItem is implemented by list items that have a Spotify URI.
+type uriItem interface {
+	URI() string
+}
 
 type statusItem struct {
 	text    string
@@ -102,13 +108,30 @@ func (l *lazyList) triggerLoad() bool {
 	return false
 }
 
-// retryLoad resets the list into a loading state for a retry.
-func (l *lazyList) retryLoad() {
+// prepareRetry resets the list into a loading state for a retry.
+func (l *lazyList) prepareRetry() {
 	l.hasMore = true
 	l.loading = true
 	l.items = removeStatusItems(l.items)
 	l.items = append(l.items, loadingStatusItem)
 	l.list.SetItems(l.items)
+}
+
+// updateList forwards a message to the inner list and triggers a fetch if
+// the cursor is near the end. Use as the default branch in view Update methods.
+func (l *lazyList) updateList(msg tea.Msg, fetchMore func() tea.Cmd) tea.Cmd {
+	var cmd tea.Cmd
+	l.list, cmd = l.list.Update(msg)
+	cmds := []tea.Cmd{cmd}
+	if l.triggerLoad() {
+		cmds = append(cmds, fetchMore())
+	}
+	return tea.Batch(cmds...)
+}
+
+// View renders the inner list.
+func (l lazyList) View() string {
+	return l.list.View()
 }
 
 // openSearch enters search mode. Returns true if the caller should trigger
@@ -132,7 +155,7 @@ func (l *lazyList) closeSearch() {
 // findByURI locates an item by URI. Items must implement URI() string.
 func (l *lazyList) findByURI(uri string) (int, bool) {
 	for i, item := range l.items {
-		if u, ok := item.(interface{ URI() string }); ok && u.URI() == uri {
+		if u, ok := item.(uriItem); ok && u.URI() == uri {
 			return i, true
 		}
 	}

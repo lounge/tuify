@@ -104,7 +104,7 @@ func (sf *Starfield) Advance() {
 	sf.stars = alive
 }
 
-func (sf *Starfield) View(progressMs, width, height int) string {
+func (sf *Starfield) View(width, height int) string {
 	if !sf.inited || width < 1 || height < 1 {
 		return ""
 	}

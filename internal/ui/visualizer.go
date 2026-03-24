@@ -189,12 +189,12 @@ func (m *visualizerModel) setFallbackImage() {
 	m.setImageOnAware(visualizers.MusicNoteFallback())
 }
 
-func (m visualizerModel) View(progressMs, width, height int) string {
+func (m visualizerModel) View(width, height int) string {
 	if m.trackID == "" {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
 			loadingStyle.Render("No track"))
 	}
-	return m.viz().View(progressMs, width, height)
+	return m.viz().View(width, height)
 }
 
 func isPlayableURI(uri string) bool {

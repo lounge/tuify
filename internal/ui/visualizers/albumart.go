@@ -66,7 +66,7 @@ func (a *AlbumArt) Advance() {
 	}
 }
 
-func (a *AlbumArt) View(progressMs, width, height int) string {
+func (a *AlbumArt) View(width, height int) string {
 	if !a.inited || width < 1 || height < 1 {
 		return ""
 	}

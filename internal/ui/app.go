@@ -581,7 +581,7 @@ func (m Model) View() string {
 	contentHeight := m.height - nowPlayingHeight
 
 	if m.visualizer.active {
-		b.WriteString(m.visualizer.View(m.nowPlaying.progressMs, m.width, contentHeight))
+		b.WriteString(m.visualizer.View(m.width, contentHeight))
 	} else {
 		// Breadcrumb (skip on home)
 		if m.currentView() != viewHome {
