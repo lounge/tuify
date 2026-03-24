@@ -76,8 +76,8 @@ func ansiFg(r, g, b int) string {
 }
 
 // ansiFgBg returns ANSI 24-bit foreground + background escapes.
-func ansiFgBg(fr, fg, fb, br, bg, bb int) string {
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm", fr, fg, fb, br, bg, bb)
+func ansiFgBg(fgR, fgG, fgB, bgR, bgG, bgB int) string {
+	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm", fgR, fgG, fgB, bgR, bgG, bgB)
 }
 
 const ansiReset = "\x1b[0m"

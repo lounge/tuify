@@ -21,7 +21,7 @@ import (
 
 func main() {
 	// Audio worker subcommand: librespot pipes PCM to stdin, we play + FFT.
-	if len(os.Args) > 1 && os.Args[0] != "" && os.Args[1] == "--audio-worker" {
+	if len(os.Args) > 1 && os.Args[1] == "--audio-worker" {
 		runAudioWorker(os.Args[2:])
 		return
 	}

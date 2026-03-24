@@ -156,7 +156,11 @@ func (m *visualizerModel) drainImageCh() {
 				continue
 			}
 			if len(m.imageCache) >= 20 {
+				cur := m.imageCache[m.imageURL]
 				m.imageCache = make(map[string]image.Image)
+				if cur != nil {
+					m.imageCache[m.imageURL] = cur
+				}
 			}
 			m.imageCache[result.url] = result.img
 			if result.url == m.imageURL {

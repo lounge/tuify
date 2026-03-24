@@ -10,7 +10,9 @@ import (
 // Wire protocol constants.
 const (
 	protocolMagic = 0x54554649 // "TUFI"
-	frameSize     = 4 + 256 + 4 + 4 // magic + 64 bands + peak + progressMs = 268 bytes
+	// magic(4) + bands(NumBands×4) + peak(4) + progressMs(4) = 268 bytes.
+	// Bass/Mid/High are recomputed on decode, not transmitted.
+	frameSize = 4 + NumBands*4 + 4 + 4
 )
 
 // EncodeFrame writes a FrequencyData as a fixed-size binary frame to w.
@@ -19,7 +21,7 @@ func EncodeFrame(w io.Writer, fd *FrequencyData) error {
 
 	binary.LittleEndian.PutUint32(buf[0:4], protocolMagic)
 
-	for i := range 64 {
+	for i := range NumBands {
 		binary.LittleEndian.PutUint32(buf[4+i*4:4+i*4+4], math.Float32bits(fd.Bands[i]))
 	}
 
@@ -42,7 +44,7 @@ func DecodeFrame(r io.Reader, fd *FrequencyData) error {
 		return fmt.Errorf("invalid frame magic: 0x%08x", magic)
 	}
 
-	for i := range 64 {
+	for i := range NumBands {
 		fd.Bands[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[4+i*4 : 4+i*4+4]))
 	}
 

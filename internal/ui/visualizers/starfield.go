@@ -78,7 +78,11 @@ func (sf *Starfield) Advance() {
 	} else {
 		// No audio: gradually shed extra stars back to base count.
 		if len(sf.stars) > baseStars {
-			sf.stars = sf.stars[:len(sf.stars)-2]
+			newLen := len(sf.stars) - 2
+			if newLen < baseStars {
+				newLen = baseStars
+			}
+			sf.stars = sf.stars[:newLen]
 		}
 	}
 
@@ -167,7 +171,7 @@ func (sf *Starfield) View(progressMs, width, height int) string {
 	}
 
 	var buf strings.Builder
-	buf.Grow(size * 4)
+	buf.Grow(size * 20)
 
 	for r := range height {
 		for c := range width {

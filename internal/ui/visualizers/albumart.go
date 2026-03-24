@@ -144,6 +144,8 @@ func (a *AlbumArt) colorAt(px, py, offsetX, offsetY int, bgColor int32) int32 {
 
 func (a *AlbumArt) computeGrid(numBlocks int) {
 	a.numBlocks = numBlocks
+	a.frame = 0
+	a.resolved = false
 	total := numBlocks * numBlocks
 	a.totalFrames = 150
 

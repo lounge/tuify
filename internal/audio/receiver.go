@@ -6,6 +6,7 @@ import (
 	"net"
 	"os"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -18,6 +19,7 @@ type Receiver struct {
 	lastUpdate atomic.Int64 // unix nanos of last frame
 	connected  atomic.Bool
 	done       chan struct{}
+	stopOnce   sync.Once
 }
 
 // NewReceiver creates a Receiver with an auto-generated socket path.
@@ -74,7 +76,7 @@ func (r *Receiver) acceptLoop() {
 				return
 			default:
 				log.Printf("[audio-receiver] accept error: %v", err)
-				return
+				continue // transient error — keep accepting
 			}
 		}
 		log.Printf("[audio-receiver] worker connected")
@@ -114,16 +116,18 @@ func (r *Receiver) readLoop(conn net.Conn) {
 	}
 }
 
-// Stop closes the listener and cleans up the socket file.
+// Stop closes the listener and cleans up the socket file. Safe to call multiple times.
 func (r *Receiver) Stop() {
-	close(r.done)
-	if r.listener != nil {
-		r.listener.Close()
-	}
-	if runtime.GOOS != "windows" {
-		_ = os.Remove(r.socketPath)
-	}
-	log.Printf("[audio-receiver] stopped")
+	r.stopOnce.Do(func() {
+		close(r.done)
+		if r.listener != nil {
+			r.listener.Close()
+		}
+		if runtime.GOOS != "windows" {
+			_ = os.Remove(r.socketPath)
+		}
+		log.Printf("[audio-receiver] stopped")
+	})
 }
 
 // Latest returns the most recent FrequencyData, or nil if no fresh data.

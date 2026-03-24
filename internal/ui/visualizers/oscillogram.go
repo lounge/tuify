@@ -12,10 +12,15 @@ var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "�
 // For the bottom half, we use standard block chars with swapped fg/bg.
 var lowerMasks = [7]string{"▇", "▆", "▅", "▄", "▃", "▂", "▁"}
 
-const oscMinAmp = 0.005 // resting bar height for the idle gradient line
+const (
+	oscMinAmp      = 0.005  // resting bar height for the idle gradient line
+	oscDecayActive = 0.82   // band release decay per tick when audio is present
+	oscDecayIdle   = 0.88   // band decay per tick when no audio
+)
 
 type Oscillogram struct {
-	bands [64]float32 // smoothed band values
+	bands  [audio.NumBands]float32 // smoothed band values
+	inited bool
 }
 
 type oscCol struct {
@@ -28,31 +33,36 @@ func NewOscillogram() *Oscillogram {
 }
 
 func (o *Oscillogram) Init(seed string, durationMs int) {
-	o.bands = [64]float32{}
+	o.bands = [audio.NumBands]float32{}
+	o.inited = true
 }
 
 func (o *Oscillogram) SetAudioData(data *audio.FrequencyData) {
 	if data != nil {
-		for i := range 64 {
+		for i := range audio.NumBands {
 			target := data.Bands[i]
 			if target > o.bands[i] {
 				o.bands[i] = target // fast attack
 			} else {
-				o.bands[i] *= 0.82 // smooth release
+				o.bands[i] *= oscDecayActive
 			}
 		}
 	} else {
 		// Decay toward resting level.
-		for i := range 64 {
-			o.bands[i] *= 0.88
+		for i := range audio.NumBands {
+			o.bands[i] *= oscDecayIdle
 		}
 	}
 }
 
-func (o *Oscillogram) Advance() {}
+func (o *Oscillogram) Advance() {
+	if !o.inited {
+		return
+	}
+}
 
 func (o *Oscillogram) View(progressMs, width, height int) string {
-	if width < 1 || height < 1 {
+	if !o.inited || width < 1 || height < 1 {
 		return ""
 	}
 
@@ -70,15 +80,15 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 
 	cols := make([]oscCol, width)
 	for col := range width {
-		bandIdx := col * 64 / width
-		if bandIdx >= 64 {
-			bandIdx = 63
+		bandIdx := col * audio.NumBands / width
+		if bandIdx >= audio.NumBands {
+			bandIdx = audio.NumBands - 1
 		}
 		amp := float64(o.bands[bandIdx])
 		if amp < oscMinAmp {
 			amp = oscMinAmp
 		}
-		hue := float64(bandIdx) / 64.0 * 300.0
+		hue := float64(bandIdx) / float64(audio.NumBands) * 300.0
 		sat := 0.7 + amp*0.3
 		lum := 0.25 + amp*0.35
 		r, g, b := hslToRGB(hue, sat, lum)
@@ -87,6 +97,8 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 
 	var buf strings.Builder
 	buf.Grow(width * height * 20)
+
+	rowsWritten := 0
 
 	// Top half (rows from top to center).
 	for row := halfH - 1; row >= 0; row-- {
@@ -108,17 +120,26 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 			buf.WriteString(upperBlocks[blockIdx])
 			buf.WriteString(ansiReset)
 		}
-		buf.WriteRune('\n')
+		rowsWritten++
+		if rowsWritten < height {
+			buf.WriteRune('\n')
+		}
 	}
 
 	// Center separator for odd heights.
-	if height%2 == 1 {
+	if height%2 == 1 && rowsWritten < height {
 		buf.WriteString(strings.Repeat(" ", width))
-		buf.WriteRune('\n')
+		rowsWritten++
+		if rowsWritten < height {
+			buf.WriteRune('\n')
+		}
 	}
 
 	// Bottom half (mirror).
 	for row := range halfH {
+		if rowsWritten >= height {
+			break
+		}
 		for col := range width {
 			c := cols[col]
 			barHeight := c.amp * float64(halfH)
@@ -140,7 +161,8 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 				buf.WriteString(ansiReset)
 			}
 		}
-		if row < halfH-1 {
+		rowsWritten++
+		if rowsWritten < height {
 			buf.WriteRune('\n')
 		}
 	}

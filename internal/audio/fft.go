@@ -54,10 +54,10 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 	logMin := math.Log10(minFreq)
 	logMax := math.Log10(maxFreq)
 
-	for band := range 64 {
+	for band := range NumBands {
 		// Logarithmic band edges.
-		loFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band)/64.0)
-		hiFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band+1)/64.0)
+		loFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band)/float64(NumBands))
+		hiFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band+1)/float64(NumBands))
 
 		loBin := int(loFreq / binHz)
 		hiBin := int(hiFreq / binHz)

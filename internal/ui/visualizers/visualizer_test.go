@@ -5,12 +5,29 @@ import (
 	"image/color"
 	"strings"
 	"testing"
+
+	"github.com/lounge/tuify/internal/audio"
 )
 
 // --- Oscillogram tests ---
 
+func TestOscillogram_ViewBeforeInit(t *testing.T) {
+	o := NewOscillogram()
+	got := o.View(0, 80, 10)
+	if got != "" {
+		t.Errorf("View before Init should return empty, got %q", got)
+	}
+}
+
+func TestOscillogram_AdvanceBeforeInit(t *testing.T) {
+	o := NewOscillogram()
+	// Should not panic.
+	o.Advance()
+}
+
 func TestOscillogram_NoAudioShowsRestingBars(t *testing.T) {
 	o := NewOscillogram()
+	o.Init("seed", 10000)
 	height := 10
 	got := o.View(0, 80, height)
 	lines := strings.Split(got, "\n")
@@ -25,11 +42,24 @@ func TestOscillogram_NoAudioShowsRestingBars(t *testing.T) {
 
 func TestOscillogram_ViewZeroDimensions(t *testing.T) {
 	o := NewOscillogram()
+	o.Init("seed", 10000)
 	if got := o.View(0, 0, 10); got != "" {
 		t.Errorf("width=0 should return empty, got %q", got)
 	}
 	if got := o.View(0, 10, 0); got != "" {
 		t.Errorf("height=0 should return empty, got %q", got)
+	}
+}
+
+func TestOscillogram_ViewDimensions(t *testing.T) {
+	o := NewOscillogram()
+	o.Init("seed", 10000)
+	for _, height := range []int{1, 2, 3, 10, 21} {
+		got := o.View(0, 40, height)
+		lines := strings.Split(got, "\n")
+		if len(lines) != height {
+			t.Errorf("height=%d: expected %d lines, got %d", height, height, len(lines))
+		}
 	}
 }
 
@@ -228,5 +258,72 @@ func TestAlbumArt_MusicNoteFallback(t *testing.T) {
 	bounds := img.Bounds()
 	if bounds.Dx() != 16 || bounds.Dy() != 16 {
 		t.Errorf("expected 16x16 fallback, got %dx%d", bounds.Dx(), bounds.Dy())
+	}
+}
+
+// --- Spectrum tests ---
+
+func TestSpectrum_ViewBeforeInit(t *testing.T) {
+	s := NewSpectrum()
+	got := s.View(0, 80, 10)
+	if got != "" {
+		t.Errorf("View before Init should return empty, got %q", got)
+	}
+}
+
+func TestSpectrum_AdvanceBeforeInit(t *testing.T) {
+	s := NewSpectrum()
+	// Should not panic.
+	s.Advance()
+}
+
+func TestSpectrum_ViewZeroDimensions(t *testing.T) {
+	s := NewSpectrum()
+	s.Init("seed", 10000)
+
+	if got := s.View(0, 0, 10); got != "" {
+		t.Errorf("width=0 should return empty, got %q", got)
+	}
+	if got := s.View(0, 10, 0); got != "" {
+		t.Errorf("height=0 should return empty, got %q", got)
+	}
+}
+
+func TestSpectrum_ViewDimensions(t *testing.T) {
+	s := NewSpectrum()
+	s.Init("seed", 10000)
+
+	height := 10
+	got := s.View(0, 80, height)
+	lines := strings.Split(got, "\n")
+	if len(lines) != height {
+		t.Errorf("expected %d lines, got %d", height, len(lines))
+	}
+}
+
+func TestSpectrum_DecaysToZero(t *testing.T) {
+	s := NewSpectrum()
+	s.Init("seed", 10000)
+
+	// Feed some audio data, then remove it and advance many times.
+	s.SetAudioData(&audio.FrequencyData{
+		Bands: [audio.NumBands]float32{0.5, 0.6, 0.7, 0.8},
+		Peak:  0.8,
+		Bass:  0.5,
+	})
+	s.Advance()
+
+	// Remove audio and decay.
+	s.SetAudioData(nil)
+	for i := 0; i < 200; i++ {
+		s.Advance()
+	}
+
+	// All bands should be near zero after enough decay.
+	for i, v := range s.prevBands {
+		if v > 0.001 {
+			t.Errorf("prevBands[%d]=%.4f should be near zero after decay", i, v)
+			break
+		}
 	}
 }

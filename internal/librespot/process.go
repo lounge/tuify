@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -54,7 +55,7 @@ func (p *Process) Args() []string {
 		"--backend", "subprocess",
 		"--device", p.config.AudioWorker,
 		"--bitrate", strconv.Itoa(p.config.Bitrate),
-		"--initial-volume", "100",
+		"--initial-volume", "60",
 		"--volume-ctrl", "fixed",
 		"--disable-audio-cache",
 	}
@@ -106,6 +107,9 @@ func (p *Process) Start() error {
 		} else {
 			log.Printf("[librespot] exited normally")
 		}
+		p.mu.Lock()
+		p.cmd = nil
+		p.mu.Unlock()
 		close(p.done)
 	}()
 
@@ -125,22 +129,20 @@ func (p *Process) Stop() error {
 
 	log.Printf("[librespot] stopping")
 
-	if err := cmd.Process.Kill(); err != nil {
-		return err
+	// Send SIGTERM for graceful shutdown (SIGINT on Windows).
+	if err := cmd.Process.Signal(os.Interrupt); err != nil {
+		// Process may already be dead; try Kill as fallback.
+		_ = cmd.Process.Kill()
 	}
 
 	select {
 	case <-done:
-		// Process exited.
+		// Process exited cleanly.
 	case <-time.After(5 * time.Second):
 		log.Printf("[librespot] force killing after 5s timeout")
 		_ = cmd.Process.Kill()
 		<-done
 	}
-
-	p.mu.Lock()
-	p.cmd = nil
-	p.mu.Unlock()
 
 	return nil
 }
