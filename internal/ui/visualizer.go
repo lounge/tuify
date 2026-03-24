@@ -194,15 +194,7 @@ func (m visualizerModel) View(progressMs, width, height int) string {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
 			loadingStyle.Render("No track"))
 	}
-	vizHeight := height
-	if height > 2 {
-		vizHeight = height - 1
-		viz := m.viz().View(progressMs, width, vizHeight)
-		hint := helpStyle.Render("← →")
-		hintLine := lipgloss.PlaceHorizontal(width, lipgloss.Center, hint)
-		return viz + "\n" + hintLine
-	}
-	return m.viz().View(progressMs, width, vizHeight)
+	return m.viz().View(progressMs, width, height)
 }
 
 func isPlayableURI(uri string) bool {
