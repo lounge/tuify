@@ -189,5 +189,7 @@ func openBrowser(url string) {
 	}
 	if err := cmd.Start(); err != nil {
 		log.Printf("[auth] failed to open browser: %v", err)
+		return
 	}
+	go cmd.Wait()
 }

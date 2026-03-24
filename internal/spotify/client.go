@@ -556,7 +556,7 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 	return nil, http.StatusTooManyRequests, fmt.Errorf("Spotify API 429: rate limited after retries")
 }
 
-func (c *Client) apiGet(ctx context.Context, url string, result interface{}) error {
+func (c *Client) apiGet(ctx context.Context, url string, result any) error {
 	body, status, err := c.doWithRetry(ctx, url)
 	if err != nil {
 		return err

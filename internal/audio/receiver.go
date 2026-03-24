@@ -17,7 +17,6 @@ type Receiver struct {
 	listener   net.Listener
 	latest     atomic.Pointer[FrequencyData]
 	lastUpdate atomic.Int64 // unix nanos of last frame
-	connected  atomic.Bool
 	done       chan struct{}
 	stopOnce   sync.Once
 }
@@ -80,7 +79,6 @@ func (r *Receiver) acceptLoop() {
 			}
 		}
 		log.Printf("[audio-receiver] worker connected")
-		r.connected.Store(true)
 		go r.readLoop(conn)
 	}
 }
@@ -88,7 +86,6 @@ func (r *Receiver) acceptLoop() {
 func (r *Receiver) readLoop(conn net.Conn) {
 	defer func() {
 		conn.Close()
-		r.connected.Store(false)
 		log.Printf("[audio-receiver] worker disconnected")
 	}()
 
@@ -142,9 +139,4 @@ func (r *Receiver) Latest() *FrequencyData {
 // SocketPath returns the path for the audio worker to connect to.
 func (r *Receiver) SocketPath() string {
 	return r.socketPath
-}
-
-// Connected returns true if an audio worker is actively sending data.
-func (r *Receiver) Connected() bool {
-	return r.connected.Load()
 }

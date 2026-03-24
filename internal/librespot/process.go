@@ -147,27 +147,6 @@ func (p *Process) Stop() error {
 	return nil
 }
 
-// Running returns true if the process is alive.
-func (p *Process) Running() bool {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if p.done == nil {
-		return false
-	}
-	select {
-	case <-p.done:
-		return false
-	default:
-		return true
-	}
-}
-
-// DeviceName returns the configured Spotify Connect device name.
-func (p *Process) DeviceName() string {
-	return p.config.DeviceName
-}
-
 // pipeLog reads lines from r and writes them to the log with the given prefix.
 // Filters out noisy libmdns warnings.
 func pipeLog(prefix string, r io.Reader) {

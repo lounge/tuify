@@ -162,10 +162,8 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 		cmds := []tea.Cmd{m.progressTick()}
 		if m.playing && m.hasTrack {
 			m.progressMs += 1000
-			if m.progressMs > m.durationMs {
-				m.progressMs = m.durationMs
-			}
 			if m.progressMs >= m.durationMs {
+				m.progressMs = m.durationMs
 				cmds = append(cmds, m.pollState())
 			}
 		}

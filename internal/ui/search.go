@@ -68,6 +68,10 @@ var searchHintText = strings.Join([]string{
 	"s:  show → episode",
 }, "\n")
 
+type selectedRef struct {
+	id, uri, name string
+}
+
 type searchView struct {
 	list        list.Model
 	client      *spotify.Client
@@ -85,9 +89,9 @@ type searchView struct {
 	syncURI     string
 
 	// drill-down state
-	selectedArtist struct{ id, name string }
-	selectedAlbum  struct{ id, uri, name string }
-	selectedShow   struct{ id, uri, name string }
+	selectedArtist selectedRef
+	selectedAlbum  selectedRef
+	selectedShow   selectedRef
 
 	// items backing the list at current depth
 	items []list.Item
@@ -123,9 +127,9 @@ func (v *searchView) resetToDepth0() {
 	v.query = ""
 	v.searchErr = nil
 	v.syncURI = ""
-	v.selectedArtist = struct{ id, name string }{}
-	v.selectedAlbum = struct{ id, uri, name string }{}
-	v.selectedShow = struct{ id, uri, name string }{}
+	v.selectedArtist = selectedRef{}
+	v.selectedAlbum = selectedRef{}
+	v.selectedShow = selectedRef{}
 	v.list.SetItems(nil)
 }
 
@@ -355,14 +359,14 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 	case prefixAlbum:
 		if ai, ok := item.(albumItem); ok {
 			v.depth = 1
-			v.selectedAlbum = struct{ id, uri, name string }{ai.id, ai.uri, ai.name}
+			v.selectedAlbum = selectedRef{id: ai.id, uri: ai.uri, name: ai.name}
 			v.startLoading()
 			return v.fetchResults("", 0, 10)
 		}
 	case prefixShow:
 		if si, ok := item.(podcastItem); ok {
 			v.depth = 1
-			v.selectedShow = struct{ id, uri, name string }{si.id, si.uri, si.name}
+			v.selectedShow = selectedRef{id: si.id, uri: si.uri, name: si.name}
 			v.startLoading()
 			return v.fetchResults("", 0, 10)
 		}
@@ -370,14 +374,14 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 		if v.depth == 0 {
 			if ai, ok := item.(artistItem); ok {
 				v.depth = 1
-				v.selectedArtist = struct{ id, name string }{ai.id, ai.name}
+				v.selectedArtist = selectedRef{id: ai.id, name: ai.name}
 				v.startLoading()
 				return v.fetchResults("", 0, 10)
 			}
 		} else if v.depth == 1 {
 			if ai, ok := item.(albumItem); ok {
 				v.depth = 2
-				v.selectedAlbum = struct{ id, uri, name string }{ai.id, ai.uri, ai.name}
+				v.selectedAlbum = selectedRef{id: ai.id, uri: ai.uri, name: ai.name}
 				v.startLoading()
 				return v.fetchResults("", 0, 10)
 			}
@@ -394,15 +398,15 @@ func (v *searchView) goBack() bool {
 	if v.depth == 2 {
 		// artist→album→tracks: go back to artist→albums
 		v.depth = 1
-		v.selectedAlbum = struct{ id, uri, name string }{}
+		v.selectedAlbum = selectedRef{}
 		v.startLoading()
 		return true
 	}
 	// depth 1 → 0: go back to search results
 	v.depth = 0
-	v.selectedArtist = struct{ id, name string }{}
-	v.selectedAlbum = struct{ id, uri, name string }{}
-	v.selectedShow = struct{ id, uri, name string }{}
+	v.selectedArtist = selectedRef{}
+	v.selectedAlbum = selectedRef{}
+	v.selectedShow = selectedRef{}
 	v.resetPagination()
 	// Re-commit the original search
 	if v.query != "" {
@@ -509,9 +513,9 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 		v.hasMore = false
 		v.pending = 1
 		v.searchErr = nil
-		v.selectedArtist = struct{ id, name string }{}
-		v.selectedAlbum = struct{ id, uri, name string }{}
-		v.selectedShow = struct{ id, uri, name string }{}
+		v.selectedArtist = selectedRef{}
+		v.selectedAlbum = selectedRef{}
+		v.selectedShow = selectedRef{}
 		v.list.SetItems([]list.Item{loadingStatusItem})
 		return v, v.fetchResults(term, 0, 10)
 

@@ -84,24 +84,16 @@ func (m visualizerModel) tick() tea.Cmd {
 
 func (m *visualizerModel) advance() {
 	m.drainImageCh()
+	var fd *audio.FrequencyData
 	if m.audioRecv != nil {
-		fd := m.audioRecv.Latest()
-		if fd != nil {
-			for _, v := range m.vizList {
-				if aa, ok := v.(visualizers.AudioAware); ok {
-					aa.SetAudioData(fd)
-				}
-			}
-		} else {
-			// No fresh data (paused or disconnected): clear audio on visualizers.
-			for _, v := range m.vizList {
-				if aa, ok := v.(visualizers.AudioAware); ok {
-					aa.SetAudioData(nil)
-				}
-			}
-		}
+		fd = m.audioRecv.Latest() // nil when paused or disconnected
 	}
 	for _, v := range m.vizList {
+		if m.audioRecv != nil {
+			if aa, ok := v.(visualizers.AudioAware); ok {
+				aa.SetAudioData(fd)
+			}
+		}
 		v.Advance()
 	}
 }

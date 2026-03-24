@@ -155,7 +155,7 @@ func TestSearchView_ContextURI(t *testing.T) {
 	v := searchView{
 		prefix:        prefixAlbum,
 		depth:         1,
-		selectedAlbum: struct{ id, uri, name string }{"a1", "spotify:album:a1", "Album"},
+		selectedAlbum: selectedRef{id: "a1", uri: "spotify:album:a1", name: "Album"},
 	}
 	if got := v.contextURI(); got != "spotify:album:a1" {
 		t.Errorf("contextURI for album depth 1: got %q", got)
@@ -164,7 +164,7 @@ func TestSearchView_ContextURI(t *testing.T) {
 	v2 := searchView{
 		prefix:       prefixShow,
 		depth:        1,
-		selectedShow: struct{ id, uri, name string }{"s1", "spotify:show:s1", "Show"},
+		selectedShow: selectedRef{id: "s1", uri: "spotify:show:s1", name: "Show"},
 	}
 	if got := v2.contextURI(); got != "spotify:show:s1" {
 		t.Errorf("contextURI for show depth 1: got %q", got)
@@ -173,7 +173,7 @@ func TestSearchView_ContextURI(t *testing.T) {
 	v3 := searchView{
 		prefix:        prefixArtist,
 		depth:         2,
-		selectedAlbum: struct{ id, uri, name string }{"a2", "spotify:album:a2", "Album"},
+		selectedAlbum: selectedRef{id: "a2", uri: "spotify:album:a2", name: "Album"},
 	}
 	if got := v3.contextURI(); got != "spotify:album:a2" {
 		t.Errorf("contextURI for artist depth 2: got %q", got)
@@ -201,7 +201,7 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 			searchView{
 				prefix:         prefixArtist,
 				depth:          1,
-				selectedArtist: struct{ id, name string }{"a1", "Queen"},
+				selectedArtist: selectedRef{id: "a1", name: "Queen"},
 			},
 			"Home > Search > Queen",
 		},
@@ -210,8 +210,8 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 			searchView{
 				prefix:         prefixArtist,
 				depth:          2,
-				selectedArtist: struct{ id, name string }{"a1", "Queen"},
-				selectedAlbum:  struct{ id, uri, name string }{"al1", "u", "A Night at the Opera"},
+				selectedArtist: selectedRef{id: "a1", name: "Queen"},
+				selectedAlbum:  selectedRef{id: "al1", uri: "u", name: "A Night at the Opera"},
 			},
 			"Home > Search > Queen > A Night at the Opera",
 		},
@@ -220,7 +220,7 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 			searchView{
 				prefix:        prefixAlbum,
 				depth:         1,
-				selectedAlbum: struct{ id, uri, name string }{"al1", "u", "Dark Side"},
+				selectedAlbum: selectedRef{id: "al1", uri: "u", name: "Dark Side"},
 			},
 			"Home > Search > Dark Side",
 		},
@@ -229,7 +229,7 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 			searchView{
 				prefix:       prefixShow,
 				depth:        1,
-				selectedShow: struct{ id, uri, name string }{"s1", "u", "My Podcast"},
+				selectedShow: selectedRef{id: "s1", uri: "u", name: "My Podcast"},
 			},
 			"Home > Search > My Podcast",
 		},
