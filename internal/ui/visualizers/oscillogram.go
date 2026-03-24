@@ -3,7 +3,6 @@ package visualizers
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/audio"
 )
 
@@ -19,8 +18,9 @@ const (
 )
 
 type Oscillogram struct {
-	bands  [audio.NumBands]float32 // smoothed band values
-	inited bool
+	audioData *audio.FrequencyData
+	bands     [audio.NumBands]float32 // smoothed band values
+	inited    bool
 }
 
 type oscCol struct {
@@ -38,9 +38,16 @@ func (o *Oscillogram) Init(seed string, durationMs int) {
 }
 
 func (o *Oscillogram) SetAudioData(data *audio.FrequencyData) {
-	if data != nil {
+	o.audioData = data
+}
+
+func (o *Oscillogram) Advance() {
+	if !o.inited {
+		return
+	}
+	if o.audioData != nil {
 		for i := range audio.NumBands {
-			target := data.Bands[i]
+			target := o.audioData.Bands[i]
 			if target > o.bands[i] {
 				o.bands[i] = target // fast attack
 			} else {
@@ -48,16 +55,9 @@ func (o *Oscillogram) SetAudioData(data *audio.FrequencyData) {
 			}
 		}
 	} else {
-		// Decay toward resting level.
 		for i := range audio.NumBands {
 			o.bands[i] *= oscDecayIdle
 		}
-	}
-}
-
-func (o *Oscillogram) Advance() {
-	if !o.inited {
-		return
 	}
 }
 
@@ -71,12 +71,7 @@ func (o *Oscillogram) View(progressMs, width, height int) string {
 		halfH = 1
 	}
 
-	var bgR, bgG, bgB int
-	if lipgloss.HasDarkBackground() {
-		bgR, bgG, bgB = 0, 0, 0
-	} else {
-		bgR, bgG, bgB = 255, 255, 255
-	}
+	bgR, bgG, bgB := termBG()
 
 	cols := make([]oscCol, width)
 	for col := range width {

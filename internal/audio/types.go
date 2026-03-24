@@ -13,6 +13,32 @@ type FrequencyData struct {
 	ProgressMs int32       // playback progress derived from PCM sample count
 }
 
+// Band boundary indices for convenience fields.
+const (
+	bassEnd = 8  // bands 0–7
+	midEnd  = 32 // bands 8–31
+	// bands 32–63 = high
+)
+
+// ComputeConvenienceFields fills Bass, Mid, and High from Bands.
+func (fd *FrequencyData) ComputeConvenienceFields() {
+	fd.Bass, fd.Mid, fd.High = 0, 0, 0
+	for i := 0; i < bassEnd; i++ {
+		fd.Bass += fd.Bands[i]
+	}
+	fd.Bass /= bassEnd
+
+	for i := bassEnd; i < midEnd; i++ {
+		fd.Mid += fd.Bands[i]
+	}
+	fd.Mid /= float32(midEnd - bassEnd)
+
+	for i := midEnd; i < NumBands; i++ {
+		fd.High += fd.Bands[i]
+	}
+	fd.High /= float32(NumBands - midEnd)
+}
+
 // PCMFormat describes the expected audio format from librespot.
 type PCMFormat struct {
 	SampleRate int

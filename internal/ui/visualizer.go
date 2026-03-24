@@ -4,6 +4,7 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -152,7 +153,11 @@ func (m *visualizerModel) drainImageCh() {
 	for {
 		select {
 		case result := <-m.imageCh:
-			if result.err != nil || result.img == nil {
+			if result.err != nil {
+				log.Printf("[visualizer] image fetch error for %s: %v", result.url, result.err)
+				continue
+			}
+			if result.img == nil {
 				continue
 			}
 			if len(m.imageCache) >= 20 {

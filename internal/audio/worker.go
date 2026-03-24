@@ -1,10 +1,12 @@
 package audio
 
 import (
+	"context"
 	"encoding/binary"
 	"io"
 	"log"
 	"net"
+	"runtime"
 	"time"
 
 	"github.com/ebitengine/oto/v3"
@@ -16,8 +18,8 @@ type Worker struct {
 	SocketPath string
 }
 
-// Run is the main loop. It blocks until stdin is closed or an error occurs.
-func (w *Worker) Run(stdin io.Reader) error {
+// Run is the main loop. It blocks until the context is cancelled, stdin is closed, or an error occurs.
+func (w *Worker) Run(ctx context.Context, stdin io.Reader) error {
 	otoCtx, ready, err := oto.NewContext(&oto.NewContextOptions{
 		SampleRate:   w.Format.SampleRate,
 		ChannelCount: w.Format.Channels,
@@ -28,7 +30,11 @@ func (w *Worker) Run(stdin io.Reader) error {
 	}
 	<-ready
 
-	conn, err := net.Dial("unix", w.SocketPath)
+	network := "unix"
+	if runtime.GOOS == "windows" {
+		network = "tcp"
+	}
+	conn, err := net.Dial(network, w.SocketPath)
 	if err != nil {
 		return err
 	}
@@ -43,9 +49,14 @@ func (w *Worker) Run(stdin io.Reader) error {
 
 	log.Printf("[audio-worker] playing, socket=%s", w.SocketPath)
 
-	// Block until player finishes (stdin EOF).
+	// Block until player finishes (stdin EOF) or context is cancelled.
 	for player.IsPlaying() {
-		time.Sleep(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			log.Printf("[audio-worker] context cancelled, shutting down")
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
 	}
 
 	log.Printf("[audio-worker] stdin closed, shutting down")

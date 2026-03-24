@@ -69,7 +69,6 @@ type ModelOption func(*Model)
 func WithAudioReceiver(r *audio.Receiver) ModelOption {
 	return func(m *Model) {
 		if r != nil {
-			m.visualizer.audioRecv = r
 			m.visualizer = newVisualizerModel(true)
 			m.visualizer.audioRecv = r
 		}
@@ -193,7 +192,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case " ":
 			m.nowPlaying.recordUserAction()
-			return m, m.togglePlayPause()
+			wasPlaying := m.nowPlaying.playing
+			m.nowPlaying.playing = !wasPlaying
+			m.nowPlaying.playPausePending = true
+			return m, m.togglePlayPause(wasPlaying)
 		case "n":
 			m.nowPlaying.recordUserAction()
 			return m, m.nextTrack()
@@ -263,6 +265,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.deviceID = msg.deviceID
 		}
 		if msg.err != nil {
+			if m.nowPlaying.playPausePending {
+				m.nowPlaying.playPausePending = false
+				m.nowPlaying.playing = !m.nowPlaying.playing // revert optimistic flip
+			}
 			var errCmd tea.Cmd
 			m.nowPlaying, errCmd = m.nowPlaying.SetError(msg.err.Error())
 			if msg.seek {
@@ -459,10 +465,9 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 	}
 }
 
-func (m Model) togglePlayPause() tea.Cmd {
-	playing := m.nowPlaying.playing
+func (m Model) togglePlayPause(wasPlaying bool) tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
-		if playing {
+		if wasPlaying {
 			return c.Pause(ctx, id)
 		}
 		return c.Resume(ctx, id)

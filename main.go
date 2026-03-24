@@ -138,7 +138,7 @@ func runAudioWorker(args []string) {
 		Format:     audio.DefaultFormat,
 		SocketPath: socketPath,
 	}
-	if err := w.Run(os.Stdin); err != nil {
+	if err := w.Run(context.Background(), os.Stdin); err != nil {
 		fmt.Fprintf(os.Stderr, "[audio-worker] error: %v\n", err)
 		os.Exit(1)
 	}

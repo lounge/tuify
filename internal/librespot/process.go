@@ -123,7 +123,7 @@ func (p *Process) Stop() error {
 	done := p.done
 	p.mu.Unlock()
 
-	if cmd == nil || cmd.Process == nil {
+	if cmd == nil || cmd.Process == nil || done == nil {
 		return nil
 	}
 

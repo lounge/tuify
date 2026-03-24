@@ -3,7 +3,6 @@ package visualizers
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/audio"
 )
 
@@ -69,12 +68,7 @@ func (s *Spectrum) View(progressMs, width, height int) string {
 		return ""
 	}
 
-	var bgR, bgG, bgB int
-	if lipgloss.HasDarkBackground() {
-		bgR, bgG, bgB = 0, 0, 0
-	} else {
-		bgR, bgG, bgB = 255, 255, 255
-	}
+	bgR, bgG, bgB := termBG()
 
 	var buf strings.Builder
 	buf.Grow(width * height * 20)

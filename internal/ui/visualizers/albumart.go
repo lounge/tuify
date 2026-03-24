@@ -9,6 +9,9 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
+// dissolveFrames is the number of animation frames for the album art dissolve effect (~5 s at 30 fps).
+const dissolveFrames = 150
+
 type AlbumArt struct {
 	img      image.Image
 	hasImage bool
@@ -147,7 +150,7 @@ func (a *AlbumArt) computeGrid(numBlocks int) {
 	a.frame = 0
 	a.resolved = false
 	total := numBlocks * numBlocks
-	a.totalFrames = 150
+	a.totalFrames = dissolveFrames
 
 	a.pixels = make([]int32, total)
 	if a.hasImage && a.img != nil {

@@ -34,7 +34,7 @@ func socketPathForPlatform() string {
 	if runtime.GOOS == "windows" {
 		// Windows doesn't support unix domain sockets reliably; use a temp file path
 		// that will be replaced with TCP in the listen logic.
-		return fmt.Sprintf("localhost:0")
+		return "localhost:0"
 	}
 	return fmt.Sprintf("/tmp/tuify-audio-%d.sock", os.Getpid())
 }

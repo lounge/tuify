@@ -7,6 +7,9 @@ import (
 	"github.com/madelynnblue/go-dsp/fft"
 )
 
+// peakDecay controls how fast the running peak normalizer decays per FFT frame (~46 ms).
+const peakDecay = 0.999
+
 // Analyzer performs FFT analysis on PCM audio chunks and produces FrequencyData.
 type Analyzer struct {
 	window  []float64 // precomputed Hann window coefficients
@@ -97,7 +100,7 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 	if float64(maxBand) > a.peakMax {
 		a.peakMax = float64(maxBand)
 	} else {
-		a.peakMax *= 0.999 // slow decay
+		a.peakMax *= peakDecay
 	}
 	if a.peakMax < 1.0 {
 		a.peakMax = 1.0
@@ -112,23 +115,15 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 		}
 	}
 
-	fd.Peak = maxBand * scale
-
-	// Compute convenience fields.
-	for i := 0; i < 8; i++ {
-		fd.Bass += fd.Bands[i]
+	// Peak from normalized bands — represents instantaneous loudness (0–1).
+	fd.Peak = 0
+	for _, b := range fd.Bands {
+		if b > fd.Peak {
+			fd.Peak = b
+		}
 	}
-	fd.Bass /= 8
 
-	for i := 8; i < 32; i++ {
-		fd.Mid += fd.Bands[i]
-	}
-	fd.Mid /= 24
-
-	for i := 32; i < 64; i++ {
-		fd.High += fd.Bands[i]
-	}
-	fd.High /= 32
+	fd.ComputeConvenienceFields()
 
 	return fd
 }

@@ -5,6 +5,7 @@ import (
 	"image"
 	"math"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/audio"
 )
 
@@ -81,3 +82,11 @@ func ansiFgBg(fgR, fgG, fgB, bgR, bgG, bgB int) string {
 }
 
 const ansiReset = "\x1b[0m"
+
+// termBG returns the terminal background color as RGB.
+func termBG() (int, int, int) {
+	if lipgloss.HasDarkBackground() {
+		return 0, 0, 0
+	}
+	return 255, 255, 255
+}

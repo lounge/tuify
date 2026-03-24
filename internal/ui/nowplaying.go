@@ -34,9 +34,10 @@ type nowPlayingModel struct {
 	width          int
 	progressMs     int
 	durationMs     int
-	seekPending    bool
-	lastUserAction time.Time // zero value means no action yet; pollInterval treats this as idle
-	skipNextPoll   bool
+	seekPending      bool
+	playPausePending bool
+	lastUserAction   time.Time // zero value means no action yet; pollInterval treats this as idle
+	skipNextPoll     bool
 }
 
 func (m *nowPlayingModel) recordUserAction() {
@@ -101,11 +102,22 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 			m.artist = msg.state.ArtistName
 			m.trackURI = msg.state.TrackURI
 			m.imageURL = msg.state.ImageURL
-			m.playing = msg.state.Playing
-			m.shuffling = msg.state.Shuffling
-			if !m.seekPending {
-				m.progressMs = msg.state.ProgressMs
+			// Track changed — pending play/pause is stale, accept fresh state
+			if m.playPausePending && msg.state.TrackURI != prevURI {
+				m.playPausePending = false
 			}
+			if m.playPausePending {
+				if msg.state.Playing == m.playing {
+					m.playPausePending = false
+					m.progressMs = msg.state.ProgressMs
+				}
+			} else {
+				m.playing = msg.state.Playing
+				if !m.seekPending {
+					m.progressMs = msg.state.ProgressMs
+				}
+			}
+			m.shuffling = msg.state.Shuffling
 			m.durationMs = msg.state.DurationMs
 			m.hasTrack = true
 			if m.trackURI != prevURI {

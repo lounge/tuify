@@ -29,6 +29,7 @@ type Starfield struct {
 	gridW     int
 	gridH     int
 	audioData *audio.FrequencyData
+	intensity float64 // audio intensity, computed in Advance()
 }
 
 func NewStarfield() *Starfield {
@@ -57,18 +58,18 @@ func (sf *Starfield) Advance() {
 
 	// Audio-reactive parameters.
 	speedMul := 0.15 // slow drift when idle/paused
-	intensity := 0.0
+	sf.intensity = 0
 	if sf.audioData != nil {
 		bass := float64(sf.audioData.Bass)
 		mid := float64(sf.audioData.Mid)
 		peak := float64(sf.audioData.Peak)
-		intensity = bass*0.5 + mid*0.3 + peak*0.2
+		sf.intensity = bass*0.5 + mid*0.3 + peak*0.2
 
 		// Speed: 0.5× quiet, up to 8× on heavy bass hits.
 		speedMul = 0.5 + bass*7.5
 
 		// Spawn extra stars based on overall intensity.
-		targetCount := baseStars + int(intensity*float64(maxStars-baseStars))
+		targetCount := baseStars + int(sf.intensity*float64(maxStars-baseStars))
 		if targetCount > maxStars {
 			targetCount = maxStars
 		}
@@ -126,12 +127,6 @@ func (sf *Starfield) View(progressMs, width, height int) string {
 	halfW := float64(width) / 2
 	halfH := float64(height) / 2
 
-	// Compute audio intensity for color boost.
-	var intensity float64
-	if sf.audioData != nil {
-		intensity = float64(sf.audioData.Bass)*0.5 + float64(sf.audioData.Mid)*0.3 + float64(sf.audioData.Peak)*0.2
-	}
-
 	for _, s := range sf.stars {
 		px := s.x/s.z*halfW + halfW
 		py := s.y/s.z*halfH + halfH
@@ -151,7 +146,7 @@ func (sf *Starfield) View(progressMs, width, height int) string {
 			charIdx = len(starChars) - 1
 		}
 
-		lum := 0.3 + closeness*0.7 + intensity*0.2
+		lum := 0.3 + closeness*0.7 + sf.intensity*0.2
 		if lum > 1.0 {
 			lum = 1.0
 		}
@@ -159,7 +154,7 @@ func (sf *Starfield) View(progressMs, width, height int) string {
 		if hue < 0 {
 			hue += 360
 		}
-		sat := 0.1 + closeness*0.3 + intensity*0.5
+		sat := 0.1 + closeness*0.3 + sf.intensity*0.5
 		if sat > 1.0 {
 			sat = 1.0
 		}
