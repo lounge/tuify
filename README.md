@@ -50,12 +50,19 @@ go build
 On first run, Tuify will prompt you for your Spotify Client ID:
 
 1. Go to https://developer.spotify.com/dashboard and create an app
-2. Set the redirect URI to `http://127.0.0.1:4444/callback`
+2. Set the redirect URI to `http://127.0.0.1:4444/callback` (or a custom URL — see config below)
 3. Check Web API checkbox
 3. Copy your Client ID and paste it when prompted
 4. A browser window will open to authorize with Spotify
 
 Configuration, auth tokens, and debug logs are stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`).
+
+### General Config Options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `client_id` | `""` | Spotify Developer App Client ID |
+| `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
 
 ### Librespot Setup
 

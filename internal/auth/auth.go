@@ -16,12 +16,12 @@ import (
 	"runtime"
 	"time"
 
+	"net/url"
+
 	"github.com/lounge/tuify/internal/config"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
 	"golang.org/x/oauth2"
 )
-
-const redirectURL = "http://127.0.0.1:4444/callback"
 
 // savingTokenSource wraps a TokenSource and persists the token to disk
 // whenever it is refreshed, so refreshed tokens survive app restarts.
@@ -44,7 +44,7 @@ func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 	return tok, nil
 }
 
-func NewAuthenticator(clientID string) *spotifyauth.Authenticator {
+func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 	return spotifyauth.New(
 		spotifyauth.WithClientID(clientID),
 		spotifyauth.WithRedirectURL(redirectURL),
@@ -71,7 +71,13 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) *http.Cl
 	}
 }
 
-func Login(a *spotifyauth.Authenticator) (*oauth2.Token, error) {
+func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, error) {
+	parsed, err := url.Parse(redirectURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid redirect URL: %w", err)
+	}
+	addr := ":" + parsed.Port()
+
 	verifier := generateRandomBase64(32)
 	challenge := generateCodeChallenge(verifier)
 	state := generateRandomBase64(16)
@@ -81,7 +87,7 @@ func Login(a *spotifyauth.Authenticator) (*oauth2.Token, error) {
 
 	mux := http.NewServeMux()
 	server := &http.Server{
-		Addr:    ":4444",
+		Addr:    addr,
 		Handler: mux,
 	}
 

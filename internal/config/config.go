@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 )
 
+const DefaultRedirectURL = "http://127.0.0.1:4444/callback"
+
 type Config struct {
 	ClientID          string `json:"client_id"`
 	EnableLibrespot   bool   `json:"enable_librespot,omitempty"`
@@ -15,6 +17,7 @@ type Config struct {
 	DeviceName        string `json:"device_name,omitempty"`
 	Bitrate           int    `json:"bitrate,omitempty"`
 	SpotifyUsername   string `json:"spotify_username,omitempty"`
+	RedirectURL       string `json:"redirect_url,omitempty"`
 }
 
 func Dir() string {

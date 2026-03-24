@@ -50,11 +50,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	authenticator := auth.NewAuthenticator(cfg.ClientID)
+	redirectURL := cfg.RedirectURL
+	if redirectURL == "" {
+		redirectURL = config.DefaultRedirectURL
+	}
+	authenticator := auth.NewAuthenticator(cfg.ClientID, redirectURL)
 
 	if token == nil {
 		fmt.Println("No saved session found. Starting login...")
-		token, err = auth.Login(authenticator)
+		token, err = auth.Login(authenticator, redirectURL)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "Login failed: %v\n", err)
 			os.Exit(1)
