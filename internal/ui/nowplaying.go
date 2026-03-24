@@ -152,12 +152,10 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 			}
 		} else {
 			m.hasTrack = false
-			log.Printf("[poll] no active playback")
 		}
 		return m, nil
 
 	case nowPlayingTickMsg:
-		log.Printf("[poll] polling GetPlayerState (next in %s)", m.pollInterval())
 		return m, tea.Batch(m.pollState(), m.tick())
 
 	case progressTickMsg:

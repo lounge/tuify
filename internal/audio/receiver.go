@@ -110,8 +110,6 @@ func (r *Receiver) readLoop(conn net.Conn) {
 		if frames == 1 {
 			log.Printf("[audio-receiver] first frame received: bass=%.2f mid=%.2f high=%.2f",
 				fd.Bass, fd.Mid, fd.High)
-		} else if frames%500 == 0 {
-			log.Printf("[audio-receiver] %d frames received", frames)
 		}
 	}
 }

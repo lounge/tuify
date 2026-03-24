@@ -77,7 +77,7 @@ func main() {
 	if cfg.EnableLibrespot {
 		audioRecv := audio.NewReceiver()
 		if err := audioRecv.Start(); err != nil {
-			log.Printf("Warning: audio receiver failed: %v", err)
+			log.Printf("[startup] audio receiver failed: %v", err)
 		} else {
 			defer audioRecv.Stop()
 			opts = append(opts, ui.WithAudioReceiver(audioRecv))
@@ -103,7 +103,7 @@ func main() {
 				Username:    cfg.SpotifyUsername,
 			})
 			if err := librespotProc.Start(); err != nil {
-				log.Printf("Warning: librespot failed to start: %v", err)
+				log.Printf("[startup] librespot failed to start: %v", err)
 			} else {
 				defer librespotProc.Stop()
 			}

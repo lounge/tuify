@@ -37,7 +37,9 @@ func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 	}
 	if s.last == nil || tok.AccessToken != s.last.AccessToken {
 		s.last = tok
-		_ = SaveToken(tok)
+		if err := SaveToken(tok); err != nil {
+			log.Printf("[auth] failed to persist refreshed token: %v", err)
+		}
 	}
 	return tok, nil
 }
@@ -186,6 +188,6 @@ func openBrowser(url string) {
 		return
 	}
 	if err := cmd.Start(); err != nil {
-		log.Printf("failed to open browser: %v", err)
+		log.Printf("[auth] failed to open browser: %v", err)
 	}
 }
