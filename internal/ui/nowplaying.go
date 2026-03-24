@@ -63,16 +63,16 @@ func (m nowPlayingModel) pollInterval() time.Duration {
 	if !m.hasTrack {
 		return 10 * time.Second
 	}
+	if time.Since(m.lastUserAction) < 30*time.Second {
+		return 5 * time.Second
+	}
 	if !m.playing {
-		return 30 * time.Second
+		return 15 * time.Second
 	}
 	if m.durationMs-m.progressMs < 15000 {
 		return 3 * time.Second
 	}
-	if time.Since(m.lastUserAction) < 30*time.Second {
-		return 5 * time.Second
-	}
-	return 15 * time.Second
+	return 10 * time.Second
 }
 
 func (m nowPlayingModel) progressTick() tea.Cmd {
@@ -98,6 +98,9 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 		}
 		if msg.state != nil {
 			prevURI := m.trackURI
+			prevPlaying := m.playing
+			prevShuffling := m.shuffling
+
 			m.track = msg.state.TrackName
 			m.artist = msg.state.ArtistName
 			m.trackURI = msg.state.TrackURI
@@ -126,6 +129,24 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 			}
 			m.durationMs = msg.state.DurationMs
 			m.hasTrack = true
+
+			// Detect external state changes (from Spotify client, not tuify)
+			// and boost polling so follow-up changes are caught quickly.
+			externalChange := false
+			if !m.playPausePending && m.playing != prevPlaying {
+				externalChange = true
+			}
+			if prevURI != "" && m.trackURI != prevURI {
+				externalChange = true
+			}
+			if !m.shufflePending && m.shuffling != prevShuffling {
+				externalChange = true
+			}
+			if externalChange {
+				log.Printf("[poll] external change detected, boosting poll rate")
+				m.recordUserAction()
+			}
+
 			if m.trackURI != prevURI {
 				log.Printf("[poll] track changed → %s — %s", m.track, m.artist)
 			}
