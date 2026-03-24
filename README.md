@@ -136,7 +136,8 @@ tuify/
 │   │   ├── fft.go           # FFT → 64 logarithmic frequency bands
 │   │   ├── protocol.go      # Binary frame encoding/decoding
 │   │   └── types.go         # AudioFrame, frequency band definitions
-│   ├── config/              # Configuration management
+│   ├── config/
+│   │   └── config.go        # Configuration management
 │   ├── librespot/
 │   │   └── process.go       # Librespot subprocess lifecycle management
 │   ├── spotify/             # Spotify API client wrapper
