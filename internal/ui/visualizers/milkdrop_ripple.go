@@ -1,47 +1,30 @@
 package visualizers
 
-import (
-	"math"
+import "math"
 
-	"github.com/lounge/tuify/internal/audio"
+const (
+	rippleBaseAmp   = 0.05 // wave amplitude at zero bass
+	rippleBassAmp   = 0.08 // additional amplitude per unit bass
+	rippleBaseFreq  = 12.0 // radial wave frequency at zero mid
+	rippleMidFreq   = 8.0  // additional frequency per unit mid
+	rippleBaseSpeed = 2.0  // wave propagation speed at zero energy
+	rippleSpeedMul  = 3.0  // speed multiplier for audio energy
 )
 
-// MilkdropRipple displaces pixels along radial sine waves, creating expanding
-// concentric ripples. Bass amplifies the ripple intensity; mids increase
-// frequency density.
-type MilkdropRipple struct {
-	milkdropBase
+// NewMilkdropRipple creates a Milkdrop preset that displaces pixels along
+// radial sine waves, creating expanding concentric ripples.
+func NewMilkdropRipple() *MilkdropPreset {
+	return &MilkdropPreset{warp: rippleWarp}
 }
 
-func NewMilkdropRipple() *MilkdropRipple {
-	return &MilkdropRipple{}
-}
-
-func (v *MilkdropRipple) Init(seed string, durationMs int) { v.mdInit() }
-
-func (v *MilkdropRipple) SetAudioData(data *audio.FrequencyData) { v.mdSetAudioData(data) }
-
-func (v *MilkdropRipple) Advance() { v.advanceBase(v.warp) }
-
-func (v *MilkdropRipple) View(w, h int) string {
-	if !v.inited || w < 1 || h < 1 {
-		return ""
-	}
-	v.resize(w, h)
-	return v.render(w, h)
-}
-
-func (v *MilkdropRipple) warp(nx, ny, t, bass, mid float64) (float64, float64) {
+func rippleWarp(nx, ny, t, bass, mid float64) (float64, float64) {
 	r := math.Sqrt(nx*nx + ny*ny)
 	theta := math.Atan2(ny, nx)
 
-	// Radial sine wave displacement.
-	amp := 0.05 + bass*0.08
-	freq := 12.0 + mid*8.0
-	speed := 2.0 + (bass*0.5+mid*0.3)*3.0
+	amp := rippleBaseAmp + bass*rippleBassAmp
+	freq := rippleBaseFreq + mid*rippleMidFreq
+	speed := rippleBaseSpeed + (bass*mdEnergyBass+mid*mdEnergyMid)*rippleSpeedMul
 	disp := amp * math.Sin(r*freq-t*speed)
 
-	sx := nx + math.Cos(theta)*disp
-	sy := ny + math.Sin(theta)*disp
-	return sx, sy
+	return nx + math.Cos(theta)*disp, ny + math.Sin(theta)*disp
 }

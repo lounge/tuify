@@ -1,50 +1,33 @@
 package visualizers
 
-import (
-	"math"
+import "math"
 
-	"github.com/lounge/tuify/internal/audio"
+const (
+	tunnelBaseDepth = 0.3  // depth at zero bass
+	tunnelBassDepth = 0.2  // additional depth per unit bass
+	tunnelEpsilon   = 0.1  // prevents division by zero at center
+	tunnelMaxRadius = 1.8  // clamp ceiling for source radius
+	tunnelRotSpeed  = 0.05 // time-based rotation speed
+	tunnelMidRot    = 0.1  // additional rotation per unit mid
 )
 
-// MilkdropTunnel warps the framebuffer using an inverse-radius mapping to create
-// an infinite tunnel rushing toward the viewer. Bass deepens the tunnel; mids add
-// a slow twist.
-type MilkdropTunnel struct {
-	milkdropBase
+// NewMilkdropTunnel creates a Milkdrop preset using inverse-radius mapping to
+// produce an infinite tunnel rushing toward the viewer.
+func NewMilkdropTunnel() *MilkdropPreset {
+	return &MilkdropPreset{warp: tunnelWarp}
 }
 
-func NewMilkdropTunnel() *MilkdropTunnel {
-	return &MilkdropTunnel{}
-}
-
-func (v *MilkdropTunnel) Init(seed string, durationMs int) { v.mdInit() }
-
-func (v *MilkdropTunnel) SetAudioData(data *audio.FrequencyData) { v.mdSetAudioData(data) }
-
-func (v *MilkdropTunnel) Advance() { v.advanceBase(v.warp) }
-
-func (v *MilkdropTunnel) View(w, h int) string {
-	if !v.inited || w < 1 || h < 1 {
-		return ""
-	}
-	v.resize(w, h)
-	return v.render(w, h)
-}
-
-func (v *MilkdropTunnel) warp(nx, ny, t, bass, mid float64) (float64, float64) {
+func tunnelWarp(nx, ny, t, bass, mid float64) (float64, float64) {
 	r := math.Sqrt(nx*nx + ny*ny)
 	theta := math.Atan2(ny, nx)
 
-	// Inverse radius: center maps to far, edges map to near.
-	depth := 0.3 + bass*0.2
-	sr := depth / (r + 0.1)
-	// Clamp to prevent wild source coordinates.
-	if sr > 1.8 {
-		sr = 1.8
+	depth := tunnelBaseDepth + bass*tunnelBassDepth
+	sr := depth / (r + tunnelEpsilon)
+	if sr > tunnelMaxRadius {
+		sr = tunnelMaxRadius
 	}
 
-	// Slow rotation driven by time and mids.
-	theta += 0.05*t + mid*0.1
+	theta += tunnelRotSpeed*t + mid*tunnelMidRot
 
 	return sr * math.Cos(theta), sr * math.Sin(theta)
 }

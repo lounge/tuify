@@ -1,51 +1,36 @@
 package visualizers
 
-import (
-	"math"
+import "math"
 
-	"github.com/lounge/tuify/internal/audio"
+const (
+	kaleidoBaseSegs = 5.0  // base number of mirror segments
+	kaleidoBassSegs = 3.0  // additional segments per unit bass
+	kaleidoMinSegs  = 4.0  // minimum segment count
+	kaleidoMaxSegs  = 8.0  // maximum segment count
+	kaleidoRotSpeed = 0.1  // time-based rotation speed
+	kaleidoMidRot   = 0.2  // additional rotation per unit mid
+	kaleidoZoom     = 1.02 // zoom factor per frame
 )
 
-// MilkdropKaleidoscope folds the framebuffer into mirror-symmetric sectors.
-// The number of segments shifts with bass energy, creating morphing flashes of
-// symmetry.
-type MilkdropKaleidoscope struct {
-	milkdropBase
+// NewMilkdropKaleidoscope creates a Milkdrop preset that folds the framebuffer
+// into mirror-symmetric sectors. Bass shifts the number of segments.
+func NewMilkdropKaleidoscope() *MilkdropPreset {
+	return &MilkdropPreset{warp: kaleidoscopeWarp}
 }
 
-func NewMilkdropKaleidoscope() *MilkdropKaleidoscope {
-	return &MilkdropKaleidoscope{}
-}
-
-func (v *MilkdropKaleidoscope) Init(seed string, durationMs int) { v.mdInit() }
-
-func (v *MilkdropKaleidoscope) SetAudioData(data *audio.FrequencyData) { v.mdSetAudioData(data) }
-
-func (v *MilkdropKaleidoscope) Advance() { v.advanceBase(v.warp) }
-
-func (v *MilkdropKaleidoscope) View(w, h int) string {
-	if !v.inited || w < 1 || h < 1 {
-		return ""
-	}
-	v.resize(w, h)
-	return v.render(w, h)
-}
-
-func (v *MilkdropKaleidoscope) warp(nx, ny, t, bass, mid float64) (float64, float64) {
+func kaleidoscopeWarp(nx, ny, t, bass, mid float64) (float64, float64) {
 	r := math.Sqrt(nx*nx + ny*ny)
 	theta := math.Atan2(ny, nx)
 
-	// Number of mirror segments: 4–8, driven by bass.
-	numSegs := 5 + bass*3
-	if numSegs < 4 {
-		numSegs = 4
-	} else if numSegs > 8 {
-		numSegs = 8
+	numSegs := kaleidoBaseSegs + bass*kaleidoBassSegs
+	if numSegs < kaleidoMinSegs {
+		numSegs = kaleidoMinSegs
+	} else if numSegs > kaleidoMaxSegs {
+		numSegs = kaleidoMaxSegs
 	}
 	seg := math.Pi / numSegs
 
-	// Rotate slowly over time, highs add extra spin.
-	theta += 0.1*t + mid*0.2
+	theta += kaleidoRotSpeed*t + mid*kaleidoMidRot
 
 	// Fold angle into one segment and mirror.
 	theta = math.Mod(theta, 2*seg)
@@ -56,8 +41,7 @@ func (v *MilkdropKaleidoscope) warp(nx, ny, t, bass, mid float64) (float64, floa
 		theta = 2*seg - theta
 	}
 
-	// Slight zoom for feedback.
-	r *= 1.02
+	r *= kaleidoZoom
 
 	return r * math.Cos(theta), r * math.Sin(theta)
 }

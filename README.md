@@ -22,7 +22,8 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
   - `s:` Show → Episode drill-down
 - **Now Playing** — Live progress bar, track info, shuffle state
 - **Librespot Integration** — Optional embedded Spotify Connect player via [librespot](https://github.com/librespot-org/librespot), streaming audio directly through tuify
-- **Audio-Reactive Visualizers** — Album art, spectrum analyzer, starfield, and oscillogram — all driven by real-time FFT audio analysis when librespot is enabled
+- **Audio-Reactive Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and four Milkdrop-style presets — all driven by real-time FFT audio analysis when librespot is enabled
+- **Lyrics** — Fetches and displays lyrics from Genius.com (best-effort match, not always exact)
 
 ## Prerequisites
 
@@ -111,7 +112,7 @@ Select "tuify" in "Connect to a device" in Spotify client.
 | `s` | Stop |
 | `/` | Search |
 | `v` | Toggle visualizer |
-| `←` / `→` | Cycle visualizers (all 4 with librespot; album art only without) |
+| `←` / `→` | Cycle visualizers (all 9 with librespot; album art + lyrics without) |
 | `q` | Quit |
 
 ### Vim Mode
@@ -137,10 +138,17 @@ All standard keybindings continue to work. Vim mode adds:
 
 | Visualizer | Description | Requires Librespot |
 |------------|-------------|--------------------|
-| Album Art | Displays track artwork | No |
+| Album Art | Displays track artwork as ASCII art | No |
+| Lyrics | Displays lyrics fetched from Genius.com | No |
 | Spectrum | Frequency spectrum analyzer with colored bars and peak indicators | Yes |
 | Starfield | 3D starfield reacting to bass and intensity | Yes |
 | Oscillogram | Mirrored waveform display with smooth attack/decay | Yes |
+| Milkdrop Spiral | Feedback warp visualizer — rotating spiral driven by bass | Yes |
+| Milkdrop Tunnel | Feedback warp visualizer — infinite rushing tunnel | Yes |
+| Milkdrop Kaleidoscope | Feedback warp visualizer — mirror-symmetric sectors that morph with bass | Yes |
+| Milkdrop Ripple | Feedback warp visualizer — expanding concentric ripples | Yes |
+
+The Milkdrop presets use a framebuffer feedback loop with half-block rendering for doubled vertical resolution. Each frame, the previous frame is warped (rotated, zoomed, displaced) based on the audio, with luminance decay and color cycling creating flowing psychedelic trails.
 
 ## Project Structure
 
@@ -157,6 +165,8 @@ tuify/
 │   │   └── types.go         # AudioFrame, frequency band definitions
 │   ├── config/
 │   │   └── config.go        # Configuration management
+│   ├── lyrics/
+│   │   └── genius.go        # Genius.com lyrics search and scraping
 │   ├── librespot/
 │   │   └── process.go       # Librespot subprocess lifecycle management
 │   ├── spotify/             # Spotify API client wrapper
@@ -177,11 +187,17 @@ tuify/
 │       ├── styles.go        # Colors and styling
 │       ├── common.go        # Shared types and lazyList
 │       └── visualizers/
-│           ├── common.go    # Shared visualizer utilities
-│           ├── albumart.go  # Album art display
-│           ├── spectrum.go  # Spectrum analyzer (audio-reactive)
-│           ├── oscillogram.go # Waveform display (audio-reactive)
-│           └── starfield.go # 3D starfield (audio-reactive)
+│           ├── common.go        # Shared visualizer utilities
+│           ├── albumart.go      # Album art display
+│           ├── lyrics.go        # Lyrics display
+│           ├── spectrum.go      # Spectrum analyzer (audio-reactive)
+│           ├── oscillogram.go   # Waveform display (audio-reactive)
+│           ├── starfield.go     # 3D starfield (audio-reactive)
+│           ├── milkdrop_base.go # Milkdrop feedback warp engine
+│           ├── milkdrop_spiral.go      # Spiral warp preset
+│           ├── milkdrop_tunnel.go      # Tunnel warp preset
+│           ├── milkdrop_kaleidoscope.go # Kaleidoscope warp preset
+│           └── milkdrop_ripple.go      # Ripple warp preset
 └── go.mod
 ```
 

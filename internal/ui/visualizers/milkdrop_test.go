@@ -7,26 +7,19 @@ import (
 	"github.com/lounge/tuify/internal/audio"
 )
 
-// --- helpers ---
-
-type milkdropViz interface {
-	Visualizer
-	AudioAware
-}
-
-func testMilkdropViewBeforeInit(t *testing.T, v milkdropViz, name string) {
+func testMilkdropViewBeforeInit(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	if got := v.View(80, 10); got != "" {
 		t.Errorf("%s: View before Init should return empty, got len=%d", name, len(got))
 	}
 }
 
-func testMilkdropAdvanceBeforeInit(t *testing.T, v milkdropViz, name string) {
+func testMilkdropAdvanceBeforeInit(t *testing.T, v *MilkdropPreset) {
 	t.Helper()
 	v.Advance() // must not panic
 }
 
-func testMilkdropViewZero(t *testing.T, v milkdropViz, name string) {
+func testMilkdropViewZero(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	v.Init("seed", 10000)
 	if got := v.View(0, 10); got != "" {
@@ -37,7 +30,7 @@ func testMilkdropViewZero(t *testing.T, v milkdropViz, name string) {
 	}
 }
 
-func testMilkdropViewDimensions(t *testing.T, v milkdropViz, name string) {
+func testMilkdropViewDimensions(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	v.Init("seed", 10000)
 	for _, height := range []int{1, 2, 5, 10} {
@@ -49,7 +42,7 @@ func testMilkdropViewDimensions(t *testing.T, v milkdropViz, name string) {
 	}
 }
 
-func testMilkdropResize(t *testing.T, v milkdropViz, name string) {
+func testMilkdropResize(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	v.Init("seed", 10000)
 	v.View(40, 10)
@@ -60,12 +53,11 @@ func testMilkdropResize(t *testing.T, v milkdropViz, name string) {
 	}
 }
 
-func testMilkdropDecay(t *testing.T, v milkdropViz, name string) {
+func testMilkdropDecay(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	v.Init("seed", 10000)
 	v.View(20, 10) // trigger initial resize
 
-	// Feed audio.
 	v.SetAudioData(&audio.FrequencyData{
 		Bands: [audio.NumBands]float32{0.8, 0.7, 0.6, 0.5},
 		Peak:  0.8,
@@ -77,29 +69,12 @@ func testMilkdropDecay(t *testing.T, v milkdropViz, name string) {
 		v.Advance()
 	}
 
-	// Remove audio and let it decay.
 	v.SetAudioData(nil)
 	for range 300 {
 		v.Advance()
 	}
 
-	// Check that the framebuffer has decayed to near-black.
-	// Access the embedded base to inspect pixels.
-	var base *milkdropBase
-	switch vt := v.(type) {
-	case *MilkdropSpiral:
-		base = &vt.milkdropBase
-	case *MilkdropTunnel:
-		base = &vt.milkdropBase
-	case *MilkdropKaleidoscope:
-		base = &vt.milkdropBase
-	case *MilkdropRipple:
-		base = &vt.milkdropBase
-	}
-	if base == nil {
-		t.Fatalf("%s: could not access milkdropBase", name)
-	}
-	for i, p := range base.fb {
+	for i, p := range v.framebuffer() {
 		if p.l > 0.01 {
 			t.Errorf("%s: pixel %d has l=%.4f, expected near zero after decay", name, i, p.l)
 			break
@@ -113,7 +88,7 @@ func TestMilkdropSpiral_ViewBeforeInit(t *testing.T) {
 	testMilkdropViewBeforeInit(t, NewMilkdropSpiral(), "Spiral")
 }
 func TestMilkdropSpiral_AdvanceBeforeInit(t *testing.T) {
-	testMilkdropAdvanceBeforeInit(t, NewMilkdropSpiral(), "Spiral")
+	testMilkdropAdvanceBeforeInit(t, NewMilkdropSpiral())
 }
 func TestMilkdropSpiral_ViewZeroDimensions(t *testing.T) {
 	testMilkdropViewZero(t, NewMilkdropSpiral(), "Spiral")
@@ -134,7 +109,7 @@ func TestMilkdropTunnel_ViewBeforeInit(t *testing.T) {
 	testMilkdropViewBeforeInit(t, NewMilkdropTunnel(), "Tunnel")
 }
 func TestMilkdropTunnel_AdvanceBeforeInit(t *testing.T) {
-	testMilkdropAdvanceBeforeInit(t, NewMilkdropTunnel(), "Tunnel")
+	testMilkdropAdvanceBeforeInit(t, NewMilkdropTunnel())
 }
 func TestMilkdropTunnel_ViewZeroDimensions(t *testing.T) {
 	testMilkdropViewZero(t, NewMilkdropTunnel(), "Tunnel")
@@ -155,7 +130,7 @@ func TestMilkdropKaleidoscope_ViewBeforeInit(t *testing.T) {
 	testMilkdropViewBeforeInit(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
 }
 func TestMilkdropKaleidoscope_AdvanceBeforeInit(t *testing.T) {
-	testMilkdropAdvanceBeforeInit(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
+	testMilkdropAdvanceBeforeInit(t, NewMilkdropKaleidoscope())
 }
 func TestMilkdropKaleidoscope_ViewZeroDimensions(t *testing.T) {
 	testMilkdropViewZero(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
@@ -176,7 +151,7 @@ func TestMilkdropRipple_ViewBeforeInit(t *testing.T) {
 	testMilkdropViewBeforeInit(t, NewMilkdropRipple(), "Ripple")
 }
 func TestMilkdropRipple_AdvanceBeforeInit(t *testing.T) {
-	testMilkdropAdvanceBeforeInit(t, NewMilkdropRipple(), "Ripple")
+	testMilkdropAdvanceBeforeInit(t, NewMilkdropRipple())
 }
 func TestMilkdropRipple_ViewZeroDimensions(t *testing.T) {
 	testMilkdropViewZero(t, NewMilkdropRipple(), "Ripple")

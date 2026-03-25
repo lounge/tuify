@@ -1,43 +1,25 @@
 package visualizers
 
-import (
-	"math"
+import "math"
 
-	"github.com/lounge/tuify/internal/audio"
+const (
+	spiralRotRate   = 0.35  // rotation per unit bass
+	spiralTimeDrift = 0.018 // slow time-based rotation
+	spiralZoom      = 1.03  // zoom-in factor per frame
 )
 
-// MilkdropSpiral warps the framebuffer in a rotating spiral that tightens with
-// bass energy. The feedback loop produces flowing trails that curl into the center.
-type MilkdropSpiral struct {
-	milkdropBase
+// NewMilkdropSpiral creates a Milkdrop preset that warps the framebuffer in a
+// rotating spiral. Bass tightens the spiral; time adds a slow drift.
+func NewMilkdropSpiral() *MilkdropPreset {
+	return &MilkdropPreset{warp: spiralWarp}
 }
 
-func NewMilkdropSpiral() *MilkdropSpiral {
-	return &MilkdropSpiral{}
-}
-
-func (v *MilkdropSpiral) Init(seed string, durationMs int) { v.mdInit() }
-
-func (v *MilkdropSpiral) SetAudioData(data *audio.FrequencyData) { v.mdSetAudioData(data) }
-
-func (v *MilkdropSpiral) Advance() { v.advanceBase(v.warp) }
-
-func (v *MilkdropSpiral) View(w, h int) string {
-	if !v.inited || w < 1 || h < 1 {
-		return ""
-	}
-	v.resize(w, h)
-	return v.render(w, h)
-}
-
-func (v *MilkdropSpiral) warp(nx, ny, t, bass, mid float64) (float64, float64) {
+func spiralWarp(nx, ny, t, bass, _ float64) (float64, float64) {
 	r := math.Sqrt(nx*nx + ny*ny)
 	theta := math.Atan2(ny, nx)
 
-	// Bass drives rotation speed, time adds slow drift.
-	theta += 0.35*bass + 0.018*t
-	// Slight zoom-in pulls content toward center, feeding the spiral.
-	r *= 1.03
+	theta += spiralRotRate*bass + spiralTimeDrift*t
+	r *= spiralZoom
 
 	return r * math.Cos(theta), r * math.Sin(theta)
 }

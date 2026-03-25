@@ -103,3 +103,20 @@ func termBG() (int, int, int) {
 	}
 	return 255, 255, 255
 }
+
+// lerpAngle interpolates two hue values (0–360) taking the shortest arc.
+func lerpAngle(a, b, t float64) float64 {
+	diff := b - a
+	if diff > 180 {
+		diff -= 360
+	} else if diff < -180 {
+		diff += 360
+	}
+	h := a + diff*t
+	if h < 0 {
+		h += 360
+	} else if h >= 360 {
+		h -= 360
+	}
+	return h
+}
