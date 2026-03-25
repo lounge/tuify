@@ -15,12 +15,13 @@ var (
 )
 
 type Lyrics struct {
-	lines      []string
-	durationMs int
-	progressMs int
-	loading    bool
-	noLyrics   bool
-	inited     bool
+	lines        []string
+	durationMs   int
+	progressMs   int
+	loading      bool
+	noLyrics     bool
+	instrumental bool
+	inited       bool
 }
 
 func NewLyrics() *Lyrics {
@@ -33,6 +34,7 @@ func (l *Lyrics) Init(seed string, durationMs int) {
 	l.lines = nil
 	l.loading = true
 	l.noLyrics = false
+	l.instrumental = false
 	l.inited = true
 }
 
@@ -40,6 +42,14 @@ func (l *Lyrics) SetLyrics(lines []string) {
 	l.lines = lines
 	l.loading = false
 	l.noLyrics = len(lines) == 0
+	l.instrumental = false
+}
+
+func (l *Lyrics) SetInstrumental() {
+	l.lines = nil
+	l.loading = false
+	l.noLyrics = false
+	l.instrumental = true
 }
 
 func (l *Lyrics) SetProgress(progressMs int) {
@@ -57,6 +67,10 @@ func (l *Lyrics) View(width, height int) string {
 	if l.loading {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
 			lyricsDimStyle.Render("Loading lyrics..."))
+	}
+	if l.instrumental {
+		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
+			lyricsDimStyle.Render("Instrumental"))
 	}
 	if l.noLyrics {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,

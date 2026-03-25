@@ -1,7 +1,9 @@
 package lyrics
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -13,6 +15,9 @@ import (
 	"golang.org/x/net/html"
 )
 
+// ErrInstrumental is returned when Genius marks a song as instrumental.
+var ErrInstrumental = errors.New("instrumental")
+
 var (
 	httpClient = &http.Client{Timeout: 10 * time.Second}
 	reRemix    = regexp.MustCompile(`(?i)\s*[-–—]\s*(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)\b.*$`)
@@ -21,16 +26,21 @@ var (
 
 // Search finds lyrics for a track on Genius.
 // Returns the lyrics text or an error. Returns empty string if no lyrics found.
-func Search(track, artist string) (string, error) {
+// Returns ErrInstrumental if Genius marks the song as instrumental.
+// The context can be used to cancel or set a deadline on the search.
+func Search(ctx context.Context, track, artist string) (string, error) {
 	query := improveQuery(artist + " " + track)
-	songURL, err := searchSong(query, artist)
+	result, err := searchSong(ctx, query, artist)
 	if err != nil {
 		return "", err
 	}
-	if songURL == "" {
+	if result.url == "" {
 		return "", nil
 	}
-	return scrapeLyrics(songURL)
+	if result.instrumental {
+		return "", ErrInstrumental
+	}
+	return scrapeLyrics(ctx, result.url)
 }
 
 func improveQuery(s string) string {
@@ -39,15 +49,24 @@ func improveQuery(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func searchSong(query, artist string) (string, error) {
+type songResult struct {
+	url          string
+	instrumental bool
+}
+
+func searchSong(ctx context.Context, query, artist string) (songResult, error) {
 	endpoint := "https://genius.com/api/search?q=" + url.QueryEscape(query)
-	resp, err := httpClient.Get(endpoint)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", fmt.Errorf("genius search: %w", err)
+		return songResult{}, fmt.Errorf("genius search: %w", err)
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("genius search: status %d", resp.StatusCode)
+		return songResult{}, fmt.Errorf("genius search: status %d", resp.StatusCode)
 	}
 
 	var result struct {
@@ -62,19 +81,20 @@ func searchSong(query, artist string) (string, error) {
 					URL                string `json:"url"`
 					ArtistNames        string `json:"artist_names"`
 					PrimaryArtistNames string `json:"primary_artist_names"`
+					Instrumental       bool   `json:"instrumental"`
 				} `json:"result"`
 			} `json:"hits"`
 		} `json:"response"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return "", fmt.Errorf("genius search: %w", err)
+		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
 	if result.Meta.Status != 200 {
 		msg := result.Meta.Message
 		if msg == "" {
 			msg = fmt.Sprintf("status %d", result.Meta.Status)
 		}
-		return "", fmt.Errorf("genius search: %s", msg)
+		return songResult{}, fmt.Errorf("genius search: %s", msg)
 	}
 	artistLower := strings.ToLower(artist)
 	for _, hit := range result.Response.Hits {
@@ -88,13 +108,17 @@ func searchSong(query, artist string) (string, error) {
 			!strings.Contains(strings.ToLower(hit.Result.PrimaryArtistNames), artistLower) {
 			continue
 		}
-		return hit.Result.URL, nil
+		return songResult{url: hit.Result.URL, instrumental: hit.Result.Instrumental}, nil
 	}
-	return "", nil
+	return songResult{}, nil
 }
 
-func scrapeLyrics(songURL string) (string, error) {
-	resp, err := httpClient.Get(songURL)
+func scrapeLyrics(ctx context.Context, songURL string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, songURL, nil)
+	if err != nil {
+		return "", fmt.Errorf("genius fetch: %w", err)
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("genius fetch: %w", err)
 	}

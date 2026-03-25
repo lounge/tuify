@@ -27,6 +27,7 @@ type AudioAware interface {
 // LyricsAware is implemented by visualizers that display lyrics.
 type LyricsAware interface {
 	SetLyrics(lines []string)
+	SetInstrumental()
 }
 
 // ProgressAware is implemented by visualizers that need real-time playback progress.

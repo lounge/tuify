@@ -71,13 +71,10 @@ func (p *Process) Args() []string {
 }
 
 // Start launches the librespot process. If the process crashes, it will be
-// automatically restarted with exponential backoff (2s, 4s, 8s, capped at 30s).
-// The backoff resets after 60 seconds of stable uptime.
+// automatically restarted with backoff proportional to how quickly it died
+// (2s–30s). The delay resets after 60 seconds of stable uptime.
 func (p *Process) Start() error {
-	if err := p.launch(); err != nil {
-		return err
-	}
-	return nil
+	return p.launch()
 }
 
 // launch starts the underlying OS process (no restart logic here).
@@ -142,9 +139,10 @@ const (
 	restartBaseDelay = 2 * time.Second
 	restartMaxDelay  = 30 * time.Second
 	stableThreshold  = 60 * time.Second
+	stopTimeout      = 5 * time.Second
 )
 
-// scheduleRestart handles automatic restart with exponential backoff.
+// scheduleRestart handles automatic restart with linear backoff.
 func (p *Process) scheduleRestart(lastStart time.Time) {
 	p.mu.Lock()
 	if p.stopped {
@@ -154,11 +152,11 @@ func (p *Process) scheduleRestart(lastStart time.Time) {
 	p.mu.Unlock()
 
 	// Determine backoff delay based on how long the process was alive.
+	// The faster it died, the longer we wait (up to restartMaxDelay).
+	// If it ran longer than stableThreshold, restart quickly.
 	uptime := time.Since(lastStart)
 	delay := restartBaseDelay
 	if uptime < stableThreshold {
-		// Short-lived: use exponential backoff based on how quickly it died.
-		// The faster it died, the longer we wait (up to max).
 		ratio := float64(stableThreshold-uptime) / float64(stableThreshold)
 		delay = time.Duration(float64(restartMaxDelay) * ratio)
 		if delay < restartBaseDelay {
@@ -205,8 +203,8 @@ func (p *Process) Stop() error {
 
 	select {
 	case <-done:
-	case <-time.After(5 * time.Second):
-		log.Printf("[librespot] force killing after 5s timeout")
+	case <-time.After(stopTimeout):
+		log.Printf("[librespot] force killing after %v timeout", stopTimeout)
 		_ = cmd.Process.Kill()
 		<-done
 	}
