@@ -42,6 +42,11 @@ type Process struct {
 	done     chan struct{} // closed when process exits (per launch)
 	stopCh   chan struct{} // closed when Stop() is called to suppress restart
 	stopped  bool
+
+	// Broken session detection: track repeated audio key timeouts that
+	// indicate librespot reconnected but is stuck in a non-functional state.
+	audioKeyErrCount int
+	firstAudioKeyErr time.Time
 }
 
 // NewProcess creates a new Process with the given configuration.
@@ -111,8 +116,10 @@ func (p *Process) launch() error {
 		return fmt.Errorf("failed to start librespot: %w", err)
 	}
 
-	go pipeLog("[librespot:out]", stdout)
-	go pipeLog("[librespot:err]", stderr)
+	p.audioKeyErrCount = 0
+
+	go pipeLog("[librespot:out]", stdout, nil)
+	go pipeLog("[librespot:err]", stderr, p.monitorStderr)
 
 	startedAt := time.Now()
 	done := p.done
@@ -140,6 +147,9 @@ const (
 	restartMaxDelay  = 30 * time.Second
 	stableThreshold  = 60 * time.Second
 	stopTimeout      = 5 * time.Second
+
+	audioKeyErrWindow    = 60 * time.Second
+	audioKeyErrThreshold = 2
 )
 
 // scheduleRestart handles automatic restart with linear backoff.
@@ -212,9 +222,41 @@ func (p *Process) Stop() error {
 	return nil
 }
 
+// monitorStderr checks for repeated audio key timeouts that indicate a broken
+// session (librespot reconnected internally but can't decrypt audio). After
+// seeing audioKeyErrThreshold timeouts within audioKeyErrWindow, we force-kill
+// the process so the auto-restart logic can start a clean session.
+func (p *Process) monitorStderr(line string) {
+	if !strings.Contains(line, "Audio key response timeout") {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+
+	now := time.Now()
+	if now.Sub(p.firstAudioKeyErr) > audioKeyErrWindow {
+		p.audioKeyErrCount = 0
+		p.firstAudioKeyErr = now
+	}
+	p.audioKeyErrCount++
+
+	if p.audioKeyErrCount >= audioKeyErrThreshold {
+		log.Printf("[librespot] %d audio key timeouts in %v — killing for clean restart",
+			p.audioKeyErrCount, now.Sub(p.firstAudioKeyErr).Round(time.Second))
+		p.audioKeyErrCount = 0
+		_ = p.cmd.Process.Kill()
+	}
+}
+
 // pipeLog reads lines from r and writes them to the log with the given prefix.
-// Filters out noisy libmdns warnings.
-func pipeLog(prefix string, r io.Reader) {
+// Filters out noisy libmdns warnings. If onLine is non-nil, it is called for
+// each non-filtered line.
+func pipeLog(prefix string, r io.Reader, onLine func(string)) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -222,5 +264,8 @@ func pipeLog(prefix string, r io.Reader) {
 			continue
 		}
 		log.Printf("%s %s", prefix, line)
+		if onLine != nil {
+			onLine(line)
+		}
 	}
 }
