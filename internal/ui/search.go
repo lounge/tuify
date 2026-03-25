@@ -97,8 +97,8 @@ type searchView struct {
 	items []list.Item
 }
 
-func newSearchView(client *spotify.Client, width, height int) searchView {
-	l := newList(width, height)
+func newSearchView(client *spotify.Client, width, height int, vimMode bool) searchView {
+	l := newList(width, height, vimMode)
 	l.SetItems(nil)
 	return searchView{
 		list:      l,

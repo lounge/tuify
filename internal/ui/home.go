@@ -17,9 +17,10 @@ var homeItems = []homeItem{
 }
 
 type homeView struct {
-	cursor int
-	width  int
-	height int
+	cursor  int
+	width   int
+	height  int
+	vimMode bool
 }
 
 func newHomeView(width, height int) homeView {
@@ -36,6 +37,14 @@ func (v homeView) Update(msg tea.Msg) (homeView, tea.Cmd) {
 		case "down", "j":
 			if v.cursor < len(homeItems)-1 {
 				v.cursor++
+			}
+		case "g":
+			if v.vimMode {
+				v.cursor = 0
+			}
+		case "G":
+			if v.vimMode {
+				v.cursor = len(homeItems) - 1
 			}
 		}
 	}

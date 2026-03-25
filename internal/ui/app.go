@@ -59,6 +59,7 @@ type Model struct {
 	width      int
 	height     int
 	seekSeq    int
+	vimMode    bool
 }
 
 // ModelOption configures optional Model features.
@@ -75,6 +76,11 @@ func WithAudioReceiver(r *audio.Receiver) ModelOption {
 	}
 }
 
+// WithVimMode enables vim-style keybindings (h/l for back/select, ctrl+d/u half-page, etc.).
+func WithVimMode() ModelOption {
+	return func(m *Model) { m.vimMode = true }
+}
+
 func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 	m := Model{
 		viewStack:  []viewKind{viewHome},
@@ -85,6 +91,9 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 	}
 	for _, opt := range opts {
 		opt(&m)
+	}
+	if m.vimMode {
+		m.home.vimMode = true
 	}
 	return m
 }
@@ -187,6 +196,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 
+		// Vim-only bindings (before standard dispatch).
+		if m.vimMode {
+			switch msg.String() {
+			case "h":
+				return m.handleBack()
+			case "l":
+				return m.handleEnter()
+			case ",":
+				m.nowPlaying.recordUserAction()
+				return m, m.seekRelative(-5000)
+			case ".":
+				m.nowPlaying.recordUserAction()
+				return m, m.seekRelative(5000)
+			case "ctrl+d":
+				return m.halfPage(1)
+			case "ctrl+u":
+				return m.halfPage(-1)
+			}
+		}
+
 		switch msg.String() {
 		case "ctrl+c", "q":
 			return m, tea.Quit
@@ -234,17 +263,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 		case "esc":
-			if m.visualizer.active {
-				m.visualizer.active = false
-				return m, nil
-			}
-			if m.currentView() == viewSearch && m.search.depth > 0 {
-				if m.search.goBack() {
-					return m, m.search.goBackFetchCmd()
-				}
-			}
-			m.popView()
-			return m, nil
+			return m.handleBack()
 		case "enter":
 			return m.handleEnter()
 		case "/":
@@ -372,21 +391,81 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+func (m Model) handleBack() (tea.Model, tea.Cmd) {
+	if m.visualizer.active {
+		m.visualizer.active = false
+		return m, nil
+	}
+	if m.currentView() == viewSearch && m.search.depth > 0 {
+		if m.search.goBack() {
+			return m, m.search.goBackFetchCmd()
+		}
+	}
+	m.popView()
+	return m, nil
+}
+
+func (m Model) halfPage(dir int) (tea.Model, tea.Cmd) {
+	l := m.currentList()
+	if l == nil {
+		return m, nil
+	}
+	half := m.listHeight() / 4 // list items are ~2 lines tall
+	if half < 1 {
+		half = 1
+	}
+	idx := l.Index() + dir*half
+	if idx < 0 {
+		idx = 0
+	}
+	if max := len(l.Items()) - 1; idx > max {
+		idx = max
+	}
+	l.Select(idx)
+	return m, nil
+}
+
+func (m Model) currentList() *list.Model {
+	switch m.currentView() {
+	case viewSearch:
+		if m.search.client != nil {
+			return &m.search.list
+		}
+	case viewPlaylists:
+		if m.playlists.client != nil {
+			return &m.playlists.list
+		}
+	case viewTracks:
+		if m.tracks.client != nil {
+			return &m.tracks.list
+		}
+	case viewPodcasts:
+		if m.podcasts.client != nil {
+			return &m.podcasts.list
+		}
+	case viewEpisodes:
+		if m.episodes.client != nil {
+			return &m.episodes.list
+		}
+	}
+	return nil
+}
+
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	switch m.currentView() {
 	case viewHome:
 		hi := m.home.selectedItem()
 		switch hi.kind {
 		case viewSearch:
-			m.search = newSearchView(m.client, m.width, m.listHeight())
+			m.search = newSearchView(m.client, m.width, m.listHeight(), m.vimMode)
 			m.pushView(viewSearch)
 			return m, nil
 		case viewPlaylists:
-			m.playlists = newPlaylistView(m.client, m.width, m.listHeight())
+			m.playlists = newPlaylistView(m.client, m.width, m.listHeight(), m.vimMode)
 			m.pushView(viewPlaylists)
 			return m, m.playlists.Init()
 		case viewPodcasts:
-			m.podcasts = newPodcastView(m.client, m.width, m.listHeight())
+			m.podcasts = newPodcastView(m.client, m.width, m.listHeight(), m.vimMode)
 			m.pushView(viewPodcasts)
 			return m, m.podcasts.Init()
 		}
@@ -405,7 +484,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	case viewPlaylists:
 		selected := m.playlists.list.SelectedItem()
 		if pi, ok := selected.(playlistItem); ok {
-			m.tracks = newTrackView(m.client, pi.id, pi.name, m.width, m.listHeight())
+			m.tracks = newTrackView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
 			m.pushView(viewTracks)
 			return m, m.tracks.Init()
 		}
@@ -423,7 +502,7 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	case viewPodcasts:
 		selected := m.podcasts.list.SelectedItem()
 		if pi, ok := selected.(podcastItem); ok {
-			m.episodes = newEpisodeView(m.client, pi.id, pi.name, m.width, m.listHeight())
+			m.episodes = newEpisodeView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
 			m.pushView(viewEpisodes)
 			return m, m.episodes.Init()
 		}
@@ -637,7 +716,7 @@ func (m Model) View() string {
 		}
 	}
 	vizAvailable := m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI)
-	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery, vizAvailable))
+	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery, vizAvailable, m.vimMode))
 
 	return b.String()
 }

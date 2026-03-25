@@ -32,9 +32,9 @@ type podcastView struct {
 	client *spotify.Client
 }
 
-func newPodcastView(client *spotify.Client, width, height int) podcastView {
+func newPodcastView(client *spotify.Client, width, height int, vimMode bool) podcastView {
 	return podcastView{
-		lazyList: newLazyList(width, height),
+		lazyList: newLazyList(width, height, vimMode),
 		client:   client,
 	}
 }

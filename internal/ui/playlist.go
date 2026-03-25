@@ -34,9 +34,9 @@ type playlistView struct {
 	client *spotify.Client
 }
 
-func newPlaylistView(client *spotify.Client, width, height int) playlistView {
+func newPlaylistView(client *spotify.Client, width, height int, vimMode bool) playlistView {
 	return playlistView{
-		lazyList: newLazyList(width, height),
+		lazyList: newLazyList(width, height, vimMode),
 		client:   client,
 	}
 }

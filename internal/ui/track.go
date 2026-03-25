@@ -38,9 +38,9 @@ type trackView struct {
 	playlistName string
 }
 
-func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int) trackView {
+func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int, vimMode bool) trackView {
 	return trackView{
-		lazyList:     newLazyList(width, height),
+		lazyList:     newLazyList(width, height, vimMode),
 		client:       client,
 		playlistID:   playlistID,
 		playlistName: playlistName,

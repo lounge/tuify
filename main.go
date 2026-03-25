@@ -77,6 +77,10 @@ func main() {
 
 	var opts []ui.ModelOption
 
+	if cfg.VimMode {
+		opts = append(opts, ui.WithVimMode())
+	}
+
 	// Start librespot + audio receiver if enabled.
 	if cfg.EnableLibrespot {
 		audioRecv := audio.NewReceiver()

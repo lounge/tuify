@@ -45,8 +45,8 @@ type lazyList struct {
 	syncURI     string
 }
 
-func newLazyList(width, height int) lazyList {
-	l := newList(width, height)
+func newLazyList(width, height int, vimMode bool) lazyList {
+	l := newList(width, height, vimMode)
 	initial := []list.Item{loadingStatusItem}
 	l.SetItems(initial)
 	return lazyList{
@@ -268,12 +268,16 @@ type playbackResultMsg struct {
 	seek     bool // true for seek results (uses lighter post-action polling)
 }
 
-func newList(width, height int) list.Model {
+func newList(width, height int, vimMode bool) list.Model {
 	l := list.New(nil, newListDelegate(), width, height)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(false)
+	if vimMode {
+		l.KeyMap.PrevPage.SetKeys("left", "pgup", "b", "u")
+		l.KeyMap.NextPage.SetKeys("right", "pgdown", "f")
+	}
 	return l
 }
 

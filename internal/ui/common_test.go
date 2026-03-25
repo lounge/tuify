@@ -32,7 +32,7 @@ func TestFormatDuration(t *testing.T) {
 // --- lazyList tests ---
 
 func newTestLazyList() lazyList {
-	return newLazyList(80, 20)
+	return newLazyList(80, 20, false)
 }
 
 func TestLazyList_TriggerLoad_NearEnd(t *testing.T) {

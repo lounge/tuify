@@ -11,13 +11,14 @@ import (
 const DefaultRedirectURL = "http://127.0.0.1:4444/callback"
 
 type Config struct {
-	ClientID          string `json:"client_id"`
-	EnableLibrespot   bool   `json:"enable_librespot,omitempty"`
-	LibrespotPath     string `json:"librespot_path,omitempty"`
-	DeviceName        string `json:"device_name,omitempty"`
-	Bitrate           int    `json:"bitrate,omitempty"`
-	SpotifyUsername   string `json:"spotify_username,omitempty"`
-	RedirectURL       string `json:"redirect_url,omitempty"`
+	ClientID        string `json:"client_id"`
+	EnableLibrespot bool   `json:"enable_librespot,omitempty"`
+	LibrespotPath   string `json:"librespot_path,omitempty"`
+	DeviceName      string `json:"device_name,omitempty"`
+	Bitrate         int    `json:"bitrate,omitempty"`
+	SpotifyUsername string `json:"spotify_username,omitempty"`
+	RedirectURL     string `json:"redirect_url,omitempty"`
+	VimMode         bool   `json:"vim_mode,omitempty"`
 }
 
 func Dir() string {

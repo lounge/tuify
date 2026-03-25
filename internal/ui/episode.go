@@ -37,9 +37,9 @@ type episodeView struct {
 	showName string
 }
 
-func newEpisodeView(client *spotify.Client, showID, showName string, width, height int) episodeView {
+func newEpisodeView(client *spotify.Client, showID, showName string, width, height int, vimMode bool) episodeView {
 	return episodeView{
-		lazyList: newLazyList(width, height),
+		lazyList: newLazyList(width, height, vimMode),
 		client:   client,
 		showID:   showID,
 		showName: showName,

@@ -45,6 +45,18 @@ cd tuify
 go build
 ```
 
+## Usage
+
+```bash
+./tuify
+```
+
+## Testing
+
+```bash
+go test ./...
+```
+
 ## Setup
 
 On first run, Tuify will prompt you for your Spotify Client ID:
@@ -63,6 +75,7 @@ Configuration, auth tokens, and debug logs are stored in `~/.config/tuify/` (or 
 |--------|---------|-------------|
 | `client_id` | `""` | Spotify Developer App Client ID |
 | `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
+| `vim_mode` | `false` | Enable vim-style keybindings (see [Vim Mode](#vim-mode)) |
 
 ### Librespot Setup
 
@@ -75,21 +88,15 @@ Librespot config options in `config.json`:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `enable_librespot` | `false` | Enable librespot integration |
-| `librespot_path` | `"librespot"` | Path to librespot binary |
-| `device_name` | `"tuify"` | Spotify Connect device name |
-| `bitrate` | `320` | Audio bitrate (96, 160, or 320 kbps) |
-| `spotify_username` | `""` | Optional Spotify username for direct auth |
+| `enable_librespot` | `true` | Enable librespot integration |
+| `librespot_path` | `"librespot"` | **Optional** Path to librespot binary |
+| `device_name` | `"tuify"` | **Optional** Spotify Connect device name |
+| `bitrate` | `320` | **Optional** Audio bitrate (96, 160, or 320 kbps) |
+| `spotify_username` | `""` | **Optional** Optional Spotify username for direct auth |
 
 When enabled, tuify launches librespot as a subprocess with `-60`, `--volume-ctrl fixed`, and `--disable-audio-cache`. Audio is piped through tuify for playback and real-time FFT analysis.
 
 Select "tuify" in "Connect to a device" in Spotify client.
-
-## Usage
-
-```bash
-./tuify
-```
 
 ### Keybindings
 
@@ -108,6 +115,25 @@ Select "tuify" in "Connect to a device" in Spotify client.
 | `←` / `→` | Cycle visualizers (all 4 with librespot; album art only without) |
 | `q` | Quit |
 
+### Vim Mode
+
+Enable vim-style keybindings by setting `"vim_mode": true` in your config:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `vim_mode` | `true` | Enable vim-style keybindings (see [Vim Mode](#vim-mode)) |
+
+All standard keybindings continue to work. Vim mode adds:
+
+| Key | Action |
+|-----|--------|
+| `h` | Go back (same as `Esc`) |
+| `l` | Select / drill down (same as `Enter`) |
+| `j` / `k` | Cursor down / up |
+| `g` / `G` | Jump to first / last item |
+| `Ctrl+d` / `Ctrl+u` | Half-page down / up |
+| `,` / `.` | Seek backward / forward |
+
 ### Visualizers
 
 | Visualizer | Description | Requires Librespot |
@@ -116,12 +142,6 @@ Select "tuify" in "Connect to a device" in Spotify client.
 | Spectrum | Frequency spectrum analyzer with colored bars and peak indicators | Yes |
 | Starfield | 3D starfield reacting to bass and intensity | Yes |
 | Oscillogram | Mirrored waveform display with smooth attack/decay | Yes |
-
-## Testing
-
-```bash
-go test ./...
-```
 
 ## Project Structure
 

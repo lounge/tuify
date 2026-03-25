@@ -22,18 +22,18 @@ type clearErrorMsg struct{}
 type delayedPollMsg struct{}
 
 type nowPlayingModel struct {
-	client         *spotify.Client
-	track          string
-	artist         string
-	trackURI       string
-	imageURL       string
-	playing        bool
-	shuffling      bool
-	hasTrack       bool
-	errMsg         string
-	width          int
-	progressMs     int
-	durationMs     int
+	client           *spotify.Client
+	track            string
+	artist           string
+	trackURI         string
+	imageURL         string
+	playing          bool
+	shuffling        bool
+	hasTrack         bool
+	errMsg           string
+	width            int
+	progressMs       int
+	durationMs       int
 	seekPending      bool
 	playPausePending bool
 	shufflePending   bool
@@ -190,7 +190,7 @@ func (m nowPlayingModel) SetError(msg string) (nowPlayingModel, tea.Cmd) {
 	})
 }
 
-func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery string, vizAvailable bool) string {
+func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery string, vizAvailable, vimMode bool) string {
 	if m.errMsg != "" {
 		return nowPlayingStyle.Width(m.width).Render(
 			fmt.Sprintf("%s\n\n\n\n", errorStyle.Render(m.errMsg)),
@@ -234,13 +234,17 @@ func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery stri
 	} else {
 		vizHint := ""
 		if vizAvailable {
-			vizHint = "  v:visualizer"
+			vizHint = "  v:viz"
 		}
 		searchHint := ""
 		if searchEnabled {
 			searchHint = "  /:search"
 		}
-		help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop" + searchHint + vizHint + "  q:quit")
+		if vimMode {
+			help = helpStyle.Render("hjkl:navigate  space:play  n:next  p:prev  ,/.:seek  r:shuffle  s:stop" + searchHint + vizHint + "  q:quit")
+		} else {
+			help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop" + searchHint + vizHint + "  q:quit")
+		}
 	}
 	return nowPlayingStyle.Width(m.width).Render(
 		fmt.Sprintf("%s\n\n%s\n\n%s", status, progress, help),
