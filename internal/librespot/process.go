@@ -43,10 +43,9 @@ type Process struct {
 	stopCh   chan struct{} // closed when Stop() is called to suppress restart
 	stopped  bool
 
-	// Broken session detection: track repeated audio key timeouts that
-	// indicate librespot reconnected but is stuck in a non-functional state.
-	audioKeyErrCount int
-	firstAudioKeyErr time.Time
+	// Broken session detection: an audio key timeout followed by spirc
+	// shutdown means librespot is stuck in a non-functional state.
+	sawAudioKeyErr bool
 }
 
 // NewProcess creates a new Process with the given configuration.
@@ -116,7 +115,7 @@ func (p *Process) launch() error {
 		return fmt.Errorf("failed to start librespot: %w", err)
 	}
 
-	p.audioKeyErrCount = 0
+	p.sawAudioKeyErr = false
 
 	go pipeLog("[librespot:out]", stdout, nil)
 	go pipeLog("[librespot:err]", stderr, p.monitorStderr)
@@ -148,8 +147,6 @@ const (
 	stableThreshold  = 60 * time.Second
 	stopTimeout      = 5 * time.Second
 
-	audioKeyErrWindow    = 60 * time.Second
-	audioKeyErrThreshold = 2
 )
 
 // scheduleRestart handles automatic restart with linear backoff.
@@ -222,33 +219,32 @@ func (p *Process) Stop() error {
 	return nil
 }
 
-// monitorStderr checks for repeated audio key timeouts that indicate a broken
-// session (librespot reconnected internally but can't decrypt audio). After
-// seeing audioKeyErrThreshold timeouts within audioKeyErrWindow, we force-kill
-// the process so the auto-restart logic can start a clean session.
+// monitorStderr detects broken sessions where librespot reconnects internally
+// but can't play audio. The sequence is: audio key timeout → spirc unexpected
+// shutdown → reconnect → still broken. We kill on spirc shutdown if preceded
+// by an audio key error, so the auto-restart can start a clean session.
 func (p *Process) monitorStderr(line string) {
-	if !strings.Contains(line, "Audio key response timeout") {
+	if strings.Contains(line, "Audio key response timeout") {
+		p.mu.Lock()
+		p.sawAudioKeyErr = true
+		p.mu.Unlock()
 		return
 	}
 
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	if strings.Contains(line, "Spirc shut down unexpectedly") {
+		p.mu.Lock()
+		defer p.mu.Unlock()
 
-	if p.cmd == nil || p.cmd.Process == nil {
-		return
-	}
+		if !p.sawAudioKeyErr {
+			return
+		}
+		p.sawAudioKeyErr = false
 
-	now := time.Now()
-	if now.Sub(p.firstAudioKeyErr) > audioKeyErrWindow {
-		p.audioKeyErrCount = 0
-		p.firstAudioKeyErr = now
-	}
-	p.audioKeyErrCount++
+		if p.cmd == nil || p.cmd.Process == nil {
+			return
+		}
 
-	if p.audioKeyErrCount >= audioKeyErrThreshold {
-		log.Printf("[librespot] %d audio key timeouts in %v — killing for clean restart",
-			p.audioKeyErrCount, now.Sub(p.firstAudioKeyErr).Round(time.Second))
-		p.audioKeyErrCount = 0
+		log.Printf("[librespot] broken session detected (audio key timeout + spirc shutdown) — killing for clean restart")
 		_ = p.cmd.Process.Kill()
 	}
 }
