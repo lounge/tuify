@@ -23,7 +23,7 @@ var (
 // Returns the lyrics text or an error. Returns empty string if no lyrics found.
 func Search(track, artist string) (string, error) {
 	query := improveQuery(artist + " " + track)
-	songURL, err := searchSong(query)
+	songURL, err := searchSong(query, artist)
 	if err != nil {
 		return "", err
 	}
@@ -39,7 +39,7 @@ func improveQuery(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func searchSong(query string) (string, error) {
+func searchSong(query, artist string) (string, error) {
 	endpoint := "https://genius.com/api/search?q=" + url.QueryEscape(query)
 	resp, err := httpClient.Get(endpoint)
 	if err != nil {
@@ -59,8 +59,9 @@ func searchSong(query string) (string, error) {
 			Hits []struct {
 				Type   string `json:"type"`
 				Result struct {
-					URL         string `json:"url"`
-					ArtistNames string `json:"artist_names"`
+					URL                string `json:"url"`
+					ArtistNames        string `json:"artist_names"`
+					PrimaryArtistNames string `json:"primary_artist_names"`
 				} `json:"result"`
 			} `json:"hits"`
 		} `json:"response"`
@@ -75,10 +76,19 @@ func searchSong(query string) (string, error) {
 		}
 		return "", fmt.Errorf("genius search: %s", msg)
 	}
+	artistLower := strings.ToLower(artist)
 	for _, hit := range result.Response.Hits {
-		if hit.Type == "song" && !strings.Contains(hit.Result.ArtistNames, "Genius") {
-			return hit.Result.URL, nil
+		if hit.Type != "song" {
+			continue
 		}
+		if strings.Contains(hit.Result.ArtistNames, "Genius") {
+			continue
+		}
+		if !strings.Contains(strings.ToLower(hit.Result.ArtistNames), artistLower) &&
+			!strings.Contains(strings.ToLower(hit.Result.PrimaryArtistNames), artistLower) {
+			continue
+		}
+		return hit.Result.URL, nil
 	}
 	return "", nil
 }
