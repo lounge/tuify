@@ -121,7 +121,7 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `vim_mode` | `true` | Enable vim-style keybindings (see [Vim Mode](#vim-mode)) |
+| `vim_mode` | `true` | Enable vim-style keybindings |
 
 All standard keybindings continue to work. Vim mode adds:
 
