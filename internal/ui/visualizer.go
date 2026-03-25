@@ -52,6 +52,10 @@ func newVisualizerModel(hasAudio bool) visualizerModel {
 			visualizers.NewStarfield(),
 			visualizers.NewSpectrum(),
 			visualizers.NewOscillogram(),
+			visualizers.NewMilkdropSpiral(),
+			visualizers.NewMilkdropTunnel(),
+			visualizers.NewMilkdropKaleidoscope(),
+			visualizers.NewMilkdropRipple(),
 		}
 	} else {
 		vizList = []visualizers.Visualizer{
