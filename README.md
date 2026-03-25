@@ -75,7 +75,6 @@ Configuration, auth tokens, and debug logs are stored in `~/.config/tuify/` (or 
 |--------|---------|-------------|
 | `client_id` | `""` | Spotify Developer App Client ID |
 | `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
-| `vim_mode` | `false` | Enable vim-style keybindings (see [Vim Mode](#vim-mode)) |
 
 ### Librespot Setup
 
