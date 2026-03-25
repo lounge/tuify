@@ -194,10 +194,10 @@ tuify/
 │           ├── oscillogram.go   # Waveform display (audio-reactive)
 │           ├── starfield.go     # 3D starfield (audio-reactive)
 │           ├── milkdrop_base.go # Milkdrop feedback warp engine
-│           ├── milkdrop_spiral.go      # Spiral warp preset
-│           ├── milkdrop_tunnel.go      # Tunnel warp preset
+│           ├── milkdrop_spiral.go       # Spiral warp preset
+│           ├── milkdrop_tunnel.go       # Tunnel warp preset
 │           ├── milkdrop_kaleidoscope.go # Kaleidoscope warp preset
-│           └── milkdrop_ripple.go      # Ripple warp preset
+│           └── milkdrop_ripple.go       # Ripple warp preset
 └── go.mod
 ```
 
