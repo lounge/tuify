@@ -30,7 +30,7 @@ var (
 // The context can be used to cancel or set a deadline on the search.
 func Search(ctx context.Context, track, artist string) (string, error) {
 	query := improveQuery(artist + " " + track)
-	result, err := searchSong(ctx, query, artist)
+	result, err := searchSong(ctx, query, track, artist)
 	if err != nil {
 		return "", err
 	}
@@ -46,6 +46,7 @@ func Search(ctx context.Context, track, artist string) (string, error) {
 func improveQuery(s string) string {
 	s = reParens.ReplaceAllString(s, "")
 	s = reRemix.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "&", " ")
 	return strings.TrimSpace(s)
 }
 
@@ -54,7 +55,7 @@ type songResult struct {
 	instrumental bool
 }
 
-func searchSong(ctx context.Context, query, artist string) (songResult, error) {
+func searchSong(ctx context.Context, query, track, artist string) (songResult, error) {
 	endpoint := "https://genius.com/api/search?q=" + url.QueryEscape(query)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
@@ -79,6 +80,7 @@ func searchSong(ctx context.Context, query, artist string) (songResult, error) {
 				Type   string `json:"type"`
 				Result struct {
 					URL                string `json:"url"`
+					Title              string `json:"title"`
 					ArtistNames        string `json:"artist_names"`
 					PrimaryArtistNames string `json:"primary_artist_names"`
 					Instrumental       bool   `json:"instrumental"`
@@ -97,6 +99,7 @@ func searchSong(ctx context.Context, query, artist string) (songResult, error) {
 		return songResult{}, fmt.Errorf("genius search: %s", msg)
 	}
 	artistLower := strings.ToLower(artist)
+	trackClean := strings.ToLower(improveQuery(track))
 	for _, hit := range result.Response.Hits {
 		if hit.Type != "song" {
 			continue
@@ -106,6 +109,10 @@ func searchSong(ctx context.Context, query, artist string) (songResult, error) {
 		}
 		if !strings.Contains(strings.ToLower(hit.Result.ArtistNames), artistLower) &&
 			!strings.Contains(strings.ToLower(hit.Result.PrimaryArtistNames), artistLower) {
+			continue
+		}
+		titleClean := strings.ToLower(improveQuery(hit.Result.Title))
+		if !strings.Contains(titleClean, trackClean) && !strings.Contains(trackClean, titleClean) {
 			continue
 		}
 		return songResult{url: hit.Result.URL, instrumental: hit.Result.Instrumental}, nil
