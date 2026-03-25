@@ -34,18 +34,23 @@ func (c *Config) setDefaults() {
 	}
 }
 
-// Process manages a librespot child process.
+// Process manages a librespot child process with automatic restart on crash.
 type Process struct {
-	mu     sync.Mutex
-	cmd    *exec.Cmd
-	config Config
-	done   chan struct{}
+	mu       sync.Mutex
+	cmd      *exec.Cmd
+	config   Config
+	done     chan struct{} // closed when process exits (per launch)
+	stopCh   chan struct{} // closed when Stop() is called to suppress restart
+	stopped  bool
 }
 
 // NewProcess creates a new Process with the given configuration.
 func NewProcess(cfg Config) *Process {
 	cfg.setDefaults()
-	return &Process{config: cfg}
+	return &Process{
+		config: cfg,
+		stopCh: make(chan struct{}),
+	}
 }
 
 // Args returns the librespot command-line arguments.
@@ -65,20 +70,32 @@ func (p *Process) Args() []string {
 	return args
 }
 
-// Start launches the librespot process.
+// Start launches the librespot process. If the process crashes, it will be
+// automatically restarted with exponential backoff (2s, 4s, 8s, capped at 30s).
+// The backoff resets after 60 seconds of stable uptime.
 func (p *Process) Start() error {
+	if err := p.launch(); err != nil {
+		return err
+	}
+	return nil
+}
+
+// launch starts the underlying OS process (no restart logic here).
+func (p *Process) launch() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
 	if p.cmd != nil {
 		return fmt.Errorf("librespot already running")
 	}
+	if p.stopped {
+		return fmt.Errorf("librespot process has been stopped")
+	}
 
 	args := p.Args()
 	p.cmd = exec.Command(p.config.BinaryPath, args...)
 	p.done = make(chan struct{})
 
-	// Capture stdout and stderr so we can see librespot's logs and subprocess output.
 	stdout, err := p.cmd.StdoutPipe()
 	if err != nil {
 		p.cmd = nil
@@ -100,6 +117,9 @@ func (p *Process) Start() error {
 	go pipeLog("[librespot:out]", stdout)
 	go pipeLog("[librespot:err]", stderr)
 
+	startedAt := time.Now()
+	done := p.done
+
 	go func() {
 		err := p.cmd.Wait()
 		if err != nil {
@@ -110,15 +130,65 @@ func (p *Process) Start() error {
 		p.mu.Lock()
 		p.cmd = nil
 		p.mu.Unlock()
-		close(p.done)
+		close(done)
+
+		p.scheduleRestart(startedAt)
 	}()
 
 	return nil
 }
 
+const (
+	restartBaseDelay = 2 * time.Second
+	restartMaxDelay  = 30 * time.Second
+	stableThreshold  = 60 * time.Second
+)
+
+// scheduleRestart handles automatic restart with exponential backoff.
+func (p *Process) scheduleRestart(lastStart time.Time) {
+	p.mu.Lock()
+	if p.stopped {
+		p.mu.Unlock()
+		return
+	}
+	p.mu.Unlock()
+
+	// Determine backoff delay based on how long the process was alive.
+	uptime := time.Since(lastStart)
+	delay := restartBaseDelay
+	if uptime < stableThreshold {
+		// Short-lived: use exponential backoff based on how quickly it died.
+		// The faster it died, the longer we wait (up to max).
+		ratio := float64(stableThreshold-uptime) / float64(stableThreshold)
+		delay = time.Duration(float64(restartMaxDelay) * ratio)
+		if delay < restartBaseDelay {
+			delay = restartBaseDelay
+		}
+	}
+
+	log.Printf("[librespot] restarting in %v (uptime was %v)", delay.Round(time.Second), uptime.Round(time.Second))
+
+	select {
+	case <-time.After(delay):
+	case <-p.stopCh:
+		return
+	}
+
+	if err := p.launch(); err != nil {
+		log.Printf("[librespot] restart failed: %v", err)
+	}
+}
+
 // Stop sends SIGTERM, waits up to 5 seconds, then SIGKILL.
+// Suppresses any pending or future automatic restarts.
 func (p *Process) Stop() error {
 	p.mu.Lock()
+	if p.stopped {
+		p.mu.Unlock()
+		return nil
+	}
+	p.stopped = true
+	close(p.stopCh)
 	cmd := p.cmd
 	done := p.done
 	p.mu.Unlock()
@@ -129,15 +199,12 @@ func (p *Process) Stop() error {
 
 	log.Printf("[librespot] stopping")
 
-	// Send SIGTERM for graceful shutdown (SIGINT on Windows).
 	if err := cmd.Process.Signal(os.Interrupt); err != nil {
-		// Process may already be dead; try Kill as fallback.
 		_ = cmd.Process.Kill()
 	}
 
 	select {
 	case <-done:
-		// Process exited cleanly.
 	case <-time.After(5 * time.Second):
 		log.Printf("[librespot] force killing after 5s timeout")
 		_ = cmd.Process.Kill()
