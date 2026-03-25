@@ -12,6 +12,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/audio"
+	"github.com/lounge/tuify/internal/lyrics"
 	"github.com/lounge/tuify/internal/ui/visualizers"
 )
 
@@ -23,15 +24,23 @@ type fetchResult struct {
 	err error
 }
 
+type lyricsFetchResult struct {
+	trackID string
+	lines   []string
+	err     error
+}
+
 type visualizerModel struct {
-	active     bool
-	trackID    string
-	vizList    []visualizers.Visualizer
-	vizIdx     int
-	imageURL   string
-	imageCache map[string]image.Image
-	imageCh    chan fetchResult
-	audioRecv  *audio.Receiver
+	active      bool
+	trackID     string
+	vizList     []visualizers.Visualizer
+	vizIdx      int
+	imageURL    string
+	imageCache  map[string]image.Image
+	imageCh     chan fetchResult
+	lyricsCh    chan lyricsFetchResult
+	lyricsCache map[string][]string
+	audioRecv   *audio.Receiver
 }
 
 func newVisualizerModel(hasAudio bool) visualizerModel {
@@ -39,19 +48,23 @@ func newVisualizerModel(hasAudio bool) visualizerModel {
 	if hasAudio {
 		vizList = []visualizers.Visualizer{
 			visualizers.NewAlbumArt(),
-			visualizers.NewSpectrum(),
+			visualizers.NewLyrics(),
 			visualizers.NewStarfield(),
+			visualizers.NewSpectrum(),
 			visualizers.NewOscillogram(),
 		}
 	} else {
 		vizList = []visualizers.Visualizer{
 			visualizers.NewAlbumArt(),
+			visualizers.NewLyrics(),
 		}
 	}
 	return visualizerModel{
-		vizList:    vizList,
-		imageCache: make(map[string]image.Image),
-		imageCh:    make(chan fetchResult, 1),
+		vizList:     vizList,
+		imageCache:  make(map[string]image.Image),
+		imageCh:     make(chan fetchResult, 1),
+		lyricsCh:    make(chan lyricsFetchResult, 1),
+		lyricsCache: make(map[string][]string),
 	}
 }
 
@@ -59,18 +72,20 @@ func (m *visualizerModel) viz() visualizers.Visualizer {
 	return m.vizList[m.vizIdx]
 }
 
-func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL string) tea.Cmd {
+func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track, artist string) tea.Cmd {
 	if m.active {
 		m.active = false
 		return nil
 	}
 	m.active = true
 	m.drainImageCh()
+	m.drainLyricsCh()
 	if trackID != m.trackID {
 		m.trackID = trackID
 		for _, v := range m.vizList {
 			v.Init(trackID, durationMs)
 		}
+		m.loadLyrics(trackID, track, artist)
 	}
 	m.loadImage(imageURL)
 	return m.tick()
@@ -82,8 +97,9 @@ func (m visualizerModel) tick() tea.Cmd {
 	})
 }
 
-func (m *visualizerModel) advance() {
+func (m *visualizerModel) advance(progressMs int) {
 	m.drainImageCh()
+	m.drainLyricsCh()
 	var fd *audio.FrequencyData
 	if m.audioRecv != nil {
 		fd = m.audioRecv.Latest() // nil when paused or disconnected
@@ -94,6 +110,9 @@ func (m *visualizerModel) advance() {
 				aa.SetAudioData(fd)
 			}
 		}
+		if pa, ok := v.(visualizers.ProgressAware); ok {
+			pa.SetProgress(progressMs)
+		}
 		v.Advance()
 	}
 }
@@ -102,10 +121,66 @@ func (m *visualizerModel) cycle(delta int) {
 	m.vizIdx = (m.vizIdx + delta + len(m.vizList)) % len(m.vizList)
 }
 
-func (m *visualizerModel) onTrackChange(trackID string, durationMs int) {
+func (m *visualizerModel) onTrackChange(trackID string, durationMs int, track, artist string) {
 	m.trackID = trackID
 	for _, v := range m.vizList {
 		v.Init(trackID, durationMs)
+	}
+	m.loadLyrics(trackID, track, artist)
+}
+
+func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
+	if cached, ok := m.lyricsCache[trackID]; ok {
+		m.setLyricsOnAware(cached)
+		return
+	}
+	ch := m.lyricsCh
+	go func() {
+		text, err := lyrics.Search(track, artist)
+		var lines []string
+		if err == nil && text != "" {
+			lines = strings.Split(text, "\n")
+		}
+		select {
+		case ch <- lyricsFetchResult{trackID: trackID, lines: lines, err: err}:
+		default:
+		}
+	}()
+}
+
+func (m *visualizerModel) drainLyricsCh() {
+	for {
+		select {
+		case result := <-m.lyricsCh:
+			if result.err != nil {
+				log.Printf("[visualizer] lyrics fetch error for %s: %v", result.trackID, result.err)
+				if result.trackID == m.trackID {
+					m.setLyricsOnAware(nil)
+				}
+				continue
+			}
+			if len(m.lyricsCache) >= 20 {
+				cur := m.lyricsCache[m.trackID]
+				m.lyricsCache = make(map[string][]string)
+				if cur != nil {
+					m.lyricsCache[m.trackID] = cur
+				}
+			}
+			m.lyricsCache[result.trackID] = result.lines
+			if result.trackID == m.trackID {
+				m.setLyricsOnAware(result.lines)
+			}
+		default:
+			return
+		}
+	}
+}
+
+func (m *visualizerModel) setLyricsOnAware(lines []string) {
+	for _, v := range m.vizList {
+		if la, ok := v.(visualizers.LyricsAware); ok {
+			la.SetLyrics(lines)
+		}
 	}
 }
 

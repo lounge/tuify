@@ -24,6 +24,16 @@ type AudioAware interface {
 	SetAudioData(data *audio.FrequencyData)
 }
 
+// LyricsAware is implemented by visualizers that display lyrics.
+type LyricsAware interface {
+	SetLyrics(lines []string)
+}
+
+// ProgressAware is implemented by visualizers that need real-time playback progress.
+type ProgressAware interface {
+	SetProgress(progressMs int)
+}
+
 func xorshift(s uint64) uint64 {
 	s ^= s << 13
 	s ^= s >> 7
