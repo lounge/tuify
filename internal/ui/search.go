@@ -12,6 +12,8 @@ import (
 	"github.com/lounge/tuify/internal/spotify"
 )
 
+const maxQueueURIs = 50
+
 // searchPrefix identifies the type of search.
 type searchPrefix int
 
@@ -22,6 +24,14 @@ const (
 	prefixArtist                      // "a:"
 	prefixShow                        // "s:"
 )
+
+var searchHintText = strings.Join([]string{
+	"t:  track search (default)",
+	"e:  episode search",
+	"a:  artist → album → track",
+	"l:  album → track",
+	"s:  show → episode",
+}, "\n")
 
 // parseSearch splits input into prefix + term. Returns prefixTrack for
 // unrecognised prefixes (the whole string becomes the term).
@@ -59,14 +69,6 @@ type searchResultMsg struct {
 }
 
 // ---------- searchView ----------
-
-var searchHintText = strings.Join([]string{
-	"t:  track search (default)",
-	"e:  episode search",
-	"a:  artist → album → track",
-	"l:  album → track",
-	"s:  show → episode",
-}, "\n")
 
 type selectedRef struct {
 	id, uri, name string
@@ -329,8 +331,6 @@ func (v *searchView) selectByURI(uri string) bool {
 	v.syncURI = uri
 	return v.pending == 0 && v.hasMore
 }
-
-const maxQueueURIs = 50
 
 func (v searchView) queueFrom(uri string) []string {
 	var uris []string

@@ -7,10 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 )
-
-var loadingStyle = lipgloss.NewStyle().Foreground(colorSubtle)
 
 // uriItem is implemented by list items that have a Spotify URI.
 type uriItem interface {

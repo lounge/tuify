@@ -80,6 +80,9 @@ var (
 	errorStyle = lipgloss.NewStyle().
 			Foreground(colorError)
 
+	loadingStyle = lipgloss.NewStyle().
+			Foreground(colorSubtle)
+
 	helpStyle = lipgloss.NewStyle().
 			Foreground(colorMuted)
 
