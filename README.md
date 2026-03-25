@@ -148,8 +148,6 @@ All standard keybindings continue to work. Vim mode adds:
 | Milkdrop Kaleidoscope | Feedback warp visualizer — mirror-symmetric sectors that morph with bass | Yes |
 | Milkdrop Ripple | Feedback warp visualizer — expanding concentric ripples | Yes |
 
-The Milkdrop presets use a framebuffer feedback loop with half-block rendering for doubled vertical resolution. Each frame, the previous frame is warped (rotated, zoomed, displaced) based on the audio, with luminance decay and color cycling creating flowing psychedelic trails.
-
 ## Project Structure
 
 ```
