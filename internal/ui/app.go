@@ -23,6 +23,13 @@ type seekFireMsg struct {
 	posMs int
 }
 
+// playbackResultMsg is used for all device-bound commands.
+type playbackResultMsg struct {
+	deviceID string
+	err      error
+	seek     bool // true for seek results (uses lighter post-action polling)
+}
+
 // searchCtx captures the parts that differ between API search and local filter search.
 type searchCtx struct {
 	query    *string
