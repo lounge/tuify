@@ -81,7 +81,8 @@ func renderGradientFill(filled int, solidHex, tipHex string) string {
 	for i := range gradLen - 1 {
 		t := float64(i+1) / float64(gradLen)
 		c := cSolid.BlendHcl(cTip, t).Clamped()
-		b.WriteString(lipgloss.NewStyle().Foreground(lipgloss.Color(c.Hex())).Render("━"))
+		r, g, bl := c.RGB255()
+		fmt.Fprintf(&b, "\x1b[38;2;%d;%d;%dm━\x1b[0m", r, g, bl)
 	}
 	b.WriteString(tipStyle.Render("●"))
 
