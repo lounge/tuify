@@ -246,41 +246,32 @@ func (p *Process) monitorStderr(line string) {
 	}
 
 	if strings.Contains(line, "Spirc shut down unexpectedly") {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-
-		if !p.sawAudioKeyErr {
-			return
-		}
-		p.sawAudioKeyErr = false
-
-		if p.cmd == nil || p.cmd.Process == nil {
-			return
-		}
-
-		log.Printf("[librespot] broken session detected (audio key timeout + spirc shutdown) — killing for clean restart")
-		_ = p.cmd.Process.Kill()
+		p.killIfAudioKeyErr("audio key timeout + spirc shutdown")
 		return
 	}
 
-	// Sequence 2: audio key timeout already happened, and now playback
-	// failed because the stream is unreadable without the decryption key.
 	if strings.Contains(line, "Unable to read audio file") {
-		p.mu.Lock()
-		defer p.mu.Unlock()
-
-		if !p.sawAudioKeyErr {
-			return
-		}
-		p.sawAudioKeyErr = false
-
-		if p.cmd == nil || p.cmd.Process == nil {
-			return
-		}
-
-		log.Printf("[librespot] broken session detected (audio key timeout + playback failure) — killing for clean restart")
-		_ = p.cmd.Process.Kill()
+		p.killIfAudioKeyErr("audio key timeout + playback failure")
 	}
+}
+
+// killIfAudioKeyErr kills the process if a preceding audio key error was seen,
+// triggering a clean restart via scheduleRestart.
+func (p *Process) killIfAudioKeyErr(reason string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if !p.sawAudioKeyErr {
+		return
+	}
+	p.sawAudioKeyErr = false
+
+	if p.cmd == nil || p.cmd.Process == nil {
+		return
+	}
+
+	log.Printf("[librespot] broken session detected (%s) — killing for clean restart", reason)
+	_ = p.cmd.Process.Kill()
 }
 
 // pipeLog reads lines from r and writes them to the log with the given prefix.
