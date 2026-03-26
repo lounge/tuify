@@ -34,8 +34,8 @@ type playlistView struct {
 	client *spotify.Client
 }
 
-func newPlaylistView(client *spotify.Client, width, height int, vimMode bool) playlistView {
-	return playlistView{
+func newPlaylistView(client *spotify.Client, width, height int, vimMode bool) *playlistView {
+	return &playlistView{
 		lazyList: newLazyList(width, height, vimMode),
 		client:   client,
 	}
@@ -66,13 +66,13 @@ func (v playlistView) fetchMore() tea.Cmd {
 	}
 }
 
-func (v playlistView) Update(msg tea.Msg) (playlistView, tea.Cmd) {
+func (v *playlistView) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case playlistsLoadedMsg:
 		v.onLoaded()
 		if msg.err != nil {
 			v.onError(msg.err)
-			return v, nil
+			return nil
 		}
 		var items []list.Item
 		for _, p := range msg.playlists {
@@ -81,13 +81,15 @@ func (v playlistView) Update(msg tea.Msg) (playlistView, tea.Cmd) {
 			})
 		}
 		v.append(items, msg.pageSize, msg.hasMore)
-		return v, nil
+		return nil
 	}
 
-	return v, v.updateList(msg, v.fetchMore)
+	return v.updateList(msg, v.fetchMore)
 }
 
 func (v *playlistView) retryLoad() tea.Cmd {
 	v.prepareRetry()
 	return v.fetchMore()
 }
+
+func (v *playlistView) Breadcrumb() string { return "Home > Playlists" }

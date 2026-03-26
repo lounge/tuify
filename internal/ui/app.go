@@ -2,7 +2,6 @@ package ui
 
 import (
 	"context"
-	"fmt"
 	"strings"
 	"time"
 
@@ -12,22 +11,11 @@ import (
 	"github.com/lounge/tuify/internal/spotify"
 )
 
-type viewKind int
-
-const (
-	viewHome viewKind = iota
-	viewSearch
-	viewPlaylists
-	viewTracks
-	viewPodcasts
-	viewEpisodes
-)
-
 const (
 	// now-playing: border-top + status + blank + progress + blank + help
 	nowPlayingHeight = 6
-	// breadcrumb text + margin-bottom: 2 lines + now-playing
-	chromeHeight = 2 + nowPlayingHeight
+	// breadcrumb text + margin-bottom: 2 lines
+	breadcrumbHeight = 2
 )
 
 type seekFireMsg struct {
@@ -45,13 +33,7 @@ type searchCtx struct {
 }
 
 type Model struct {
-	viewStack  []viewKind
-	home       homeView
-	search     searchView
-	playlists  playlistView
-	tracks     trackView
-	podcasts   podcastView
-	episodes   episodeView
+	viewStack  []view
 	nowPlaying *nowPlayingModel
 	visualizer *visualizerModel
 	client     *spotify.Client
@@ -82,9 +64,9 @@ func WithVimMode() ModelOption {
 }
 
 func NewModel(client *spotify.Client, opts ...ModelOption) Model {
+	home := newHomeView(0, 0)
 	m := Model{
-		viewStack:  []viewKind{viewHome},
-		home:       newHomeView(0, 0),
+		viewStack:  []view{home},
 		nowPlaying: newNowPlaying(client),
 		visualizer: newVisualizerModel(false),
 		client:     client,
@@ -93,16 +75,16 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 		opt(&m)
 	}
 	if m.vimMode {
-		m.home.vimMode = true
+		home.vimMode = true
 	}
 	return m
 }
 
-func (m Model) currentView() viewKind {
+func (m Model) currentView() view {
 	return m.viewStack[len(m.viewStack)-1]
 }
 
-func (m *Model) pushView(v viewKind) {
+func (m *Model) pushView(v view) {
 	m.viewStack = append(m.viewStack, v)
 }
 
@@ -117,7 +99,7 @@ func (m Model) Init() tea.Cmd {
 }
 
 func (m Model) listHeight() int {
-	return m.height - chromeHeight
+	return m.height - nowPlayingHeight - breadcrumbHeight
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -128,45 +110,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.nowPlaying.width = msg.Width
-		h := m.listHeight()
-		m.home.width = msg.Width
-		m.home.height = msg.Height - nowPlayingHeight
-		if m.search.client != nil {
-			m.search.list.SetSize(msg.Width, h)
-		}
-		if m.playlists.client != nil {
-			m.playlists.list.SetSize(msg.Width, h)
-		}
-		if m.tracks.client != nil {
-			m.tracks.list.SetSize(msg.Width, h)
-		}
-		if m.podcasts.client != nil {
-			m.podcasts.list.SetSize(msg.Width, h)
-		}
-		if m.episodes.client != nil {
-			m.episodes.list.SetSize(msg.Width, h)
+		for _, v := range m.viewStack {
+			h := m.height - nowPlayingHeight
+			if v.Breadcrumb() != "" {
+				h -= breadcrumbHeight
+			}
+			v.SetSize(msg.Width, h)
 		}
 		return m, nil
 
 	case tea.KeyMsg:
 		// Search input: API search with debounce
-		if m.currentView() == viewSearch && m.search.searching {
+		if sv, ok := m.currentView().(*searchView); ok && sv.searching {
 			sc := searchCtx{
-				query: &m.search.searchQuery,
-				list:  &m.search.list,
-				close: func() { m.search.closeSearch() },
+				query: &sv.searchQuery,
+				list:  &sv.list,
+				close: func() { sv.closeSearch() },
 				play: func(item list.Item) tea.Cmd {
 					// For container items, drill down instead of playing.
-					if !m.search.isPlayable() {
-						return m.search.drillDown(item)
+					if !sv.isPlayable() {
+						return sv.drillDown(item)
 					}
 					return m.playCurrentItem(item)
 				},
 				onChange: func() tea.Cmd {
-					m.search.debounceSeq++
-					_, term := parseSearch(m.search.searchQuery)
+					sv.debounceSeq++
+					_, term := parseSearch(sv.searchQuery)
 					if len([]rune(term)) >= 2 {
-						return m.search.debounce()
+						return sv.debounce()
 					}
 					return nil
 				},
@@ -267,8 +238,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "enter":
 			return m.handleEnter()
 		case "/":
-			if m.currentView() == viewSearch {
-				m.search.openSearch()
+			if sv, ok := m.currentView().(*searchView); ok {
+				sv.openSearch()
 				return m, nil
 			}
 			if sl != nil {
@@ -347,42 +318,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Sync list selection when the playing item changes
 	if m.nowPlaying.trackURI != prevURI {
-		switch m.currentView() {
-		case viewSearch:
-			if m.search.isPlayable() {
-				if m.search.selectByURI(m.nowPlaying.trackURI) {
-					if cmd := m.search.fetchMore(); cmd != nil {
-						cmds = append(cmds, cmd)
-					}
-				}
-			}
-		case viewTracks:
-			if m.tracks.selectByURI(m.nowPlaying.trackURI) {
-				cmds = append(cmds, m.tracks.fetchMore())
-			}
-		case viewEpisodes:
-			if m.episodes.selectByURI(m.nowPlaying.trackURI) {
-				cmds = append(cmds, m.episodes.fetchMore())
+		if sv, ok := m.currentView().(syncableView); ok {
+			if cmd := sv.SyncURI(m.nowPlaying.trackURI); cmd != nil {
+				cmds = append(cmds, cmd)
 			}
 		}
 	}
 
 	// Update current view
-	switch m.currentView() {
-	case viewHome:
-		m.home, cmd = m.home.Update(msg)
-	case viewSearch:
-		m.search, cmd = m.search.Update(msg)
-	case viewPlaylists:
-		m.playlists, cmd = m.playlists.Update(msg)
-	case viewTracks:
-		m.tracks, cmd = m.tracks.Update(msg)
-	case viewPodcasts:
-		m.podcasts, cmd = m.podcasts.Update(msg)
-	case viewEpisodes:
-		m.episodes, cmd = m.episodes.Update(msg)
-	}
-	if cmd != nil {
+	if cmd := m.currentView().Update(msg); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
 
@@ -394,9 +338,9 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 		m.visualizer.active = false
 		return m, nil
 	}
-	if m.currentView() == viewSearch && m.search.depth > 0 {
-		if m.search.goBack() {
-			return m, m.search.goBackFetchCmd()
+	if sv, ok := m.currentView().(*searchView); ok && sv.depth > 0 {
+		if sv.goBack() {
+			return m, sv.goBackFetchCmd()
 		}
 	}
 	m.popView()
@@ -424,96 +368,76 @@ func (m Model) halfPage(dir int) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) currentList() *list.Model {
-	switch m.currentView() {
-	case viewSearch:
-		if m.search.client != nil {
-			return &m.search.list
-		}
-	case viewPlaylists:
-		if m.playlists.client != nil {
-			return &m.playlists.list
-		}
-	case viewTracks:
-		if m.tracks.client != nil {
-			return &m.tracks.list
-		}
-	case viewPodcasts:
-		if m.podcasts.client != nil {
-			return &m.podcasts.list
-		}
-	case viewEpisodes:
-		if m.episodes.client != nil {
-			return &m.episodes.list
-		}
+	if lp, ok := m.currentView().(listProvider); ok {
+		return lp.List()
 	}
 	return nil
 }
 
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
-	switch m.currentView() {
-	case viewHome:
-		hi := m.home.selectedItem()
-		switch hi.kind {
-		case viewSearch:
-			m.search = newSearchView(m.client, m.width, m.listHeight(), m.vimMode)
-			m.pushView(viewSearch)
+	switch v := m.currentView().(type) {
+	case *homeView:
+		hi := v.selectedItem()
+		switch hi.name {
+		case "Search":
+			m.pushView(newSearchView(m.client, m.width, m.listHeight(), m.vimMode))
 			return m, nil
-		case viewPlaylists:
-			m.playlists = newPlaylistView(m.client, m.width, m.listHeight(), m.vimMode)
-			m.pushView(viewPlaylists)
-			return m, m.playlists.Init()
-		case viewPodcasts:
-			m.podcasts = newPodcastView(m.client, m.width, m.listHeight(), m.vimMode)
-			m.pushView(viewPodcasts)
-			return m, m.podcasts.Init()
+		case "Playlists":
+			pv := newPlaylistView(m.client, m.width, m.listHeight(), m.vimMode)
+			m.pushView(pv)
+			return m, pv.Init()
+		case "Podcasts":
+			pv := newPodcastView(m.client, m.width, m.listHeight(), m.vimMode)
+			m.pushView(pv)
+			return m, pv.Init()
 		}
-	case viewSearch:
-		selected := m.search.list.SelectedItem()
+	case *searchView:
+		selected := v.list.SelectedItem()
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.search.retry()
+			return m, v.retry()
 		}
-		if m.search.isPlayable() {
+		if v.isPlayable() {
 			if cmd := m.playCurrentItem(selected); cmd != nil {
 				return m, cmd
 			}
-		} else if cmd := m.search.drillDown(selected); cmd != nil {
+		} else if cmd := v.drillDown(selected); cmd != nil {
 			return m, cmd
 		}
-	case viewPlaylists:
-		selected := m.playlists.list.SelectedItem()
+	case *playlistView:
+		selected := v.list.SelectedItem()
 		if pi, ok := selected.(playlistItem); ok {
-			m.tracks = newTrackView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
-			m.pushView(viewTracks)
-			return m, m.tracks.Init()
+			tv := newTrackView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
+			m.pushView(tv)
+			return m, tv.Init()
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.playlists.retryLoad()
+			return m, v.retryLoad()
 		}
-	case viewTracks:
-		selected := m.tracks.list.SelectedItem()
+	case *trackView:
+		selected := v.list.SelectedItem()
 		if cmd := m.playCurrentItem(selected); cmd != nil {
 			return m, cmd
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.tracks.retryLoad()
+			return m, v.retryLoad()
 		}
-	case viewPodcasts:
-		selected := m.podcasts.list.SelectedItem()
+	case *podcastView:
+		selected := v.list.SelectedItem()
 		if pi, ok := selected.(podcastItem); ok {
-			m.episodes = newEpisodeView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
-			m.pushView(viewEpisodes)
-			return m, m.episodes.Init()
+			ev := newEpisodeView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
+			m.pushView(ev)
+			return m, ev.Init()
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.podcasts.retryLoad()
+			return m, v.retryLoad()
 		}
-	case viewEpisodes:
-		selected := m.episodes.list.SelectedItem()
+	case *episodeView:
+		selected := v.list.SelectedItem()
 		if cmd := m.playCurrentItem(selected); cmd != nil {
 			return m, cmd
 		}
 		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, m.episodes.retryLoad()
+			return m, v.retryLoad()
 		}
 	}
 	return m, nil
@@ -598,19 +522,16 @@ func (m Model) stopPlayback() tea.Cmd {
 }
 
 func (m *Model) searchableList() *lazyList {
-	switch m.currentView() {
-	case viewTracks:
-		return &m.tracks.lazyList
-	case viewEpisodes:
-		return &m.episodes.lazyList
+	if sp, ok := m.currentView().(searchableListProvider); ok {
+		return sp.SearchableList()
 	}
 	return nil
 }
 
 func (m Model) playCurrentItem(item list.Item) tea.Cmd {
-	switch m.currentView() {
-	case viewSearch:
-		ctx := m.search.contextURI()
+	switch v := m.currentView().(type) {
+	case *searchView:
+		ctx := v.contextURI()
 		if ctx != "" {
 			// Album or show context: use Spotify context URI for continuation
 			if ti, ok := item.(trackItem); ok {
@@ -622,29 +543,26 @@ func (m Model) playCurrentItem(item list.Item) tea.Cmd {
 		}
 		// No context (direct track/episode search): queue remaining items
 		if ti, ok := item.(trackItem); ok {
-			return m.playQueue(m.search.queueFrom(ti.uri))
+			return m.playQueue(v.queueFrom(ti.uri))
 		}
 		if ei, ok := item.(episodeItem); ok {
-			return m.playQueue(m.search.queueFrom(ei.uri))
+			return m.playQueue(v.queueFrom(ei.uri))
 		}
-	case viewTracks:
+	case *trackView:
 		if ti, ok := item.(trackItem); ok {
-			return m.playItem(ti.uri, "spotify:playlist:"+m.tracks.playlistID)
+			return m.playItem(ti.uri, "spotify:playlist:"+v.playlistID)
 		}
-	case viewEpisodes:
+	case *episodeView:
 		if ei, ok := item.(episodeItem); ok {
-			return m.playItem(ei.uri, "spotify:show:"+m.episodes.showID)
+			return m.playItem(ei.uri, "spotify:show:"+v.showID)
 		}
 	}
 	return nil
 }
 
 func (m Model) fetchSearchableView() tea.Cmd {
-	switch m.currentView() {
-	case viewTracks:
-		return m.tracks.fetchMore()
-	case viewEpisodes:
-		return m.episodes.fetchMore()
+	if sp, ok := m.currentView().(searchableListProvider); ok {
+		return sp.FetchMore()
 	}
 	return nil
 }
@@ -660,51 +578,22 @@ func (m Model) View() string {
 	if m.visualizer.active {
 		b.WriteString(m.visualizer.View(m.width, contentHeight))
 	} else {
-		// Breadcrumb (skip on home)
-		if m.currentView() != viewHome {
-			var crumbs string
-			switch m.currentView() {
-			case viewSearch:
-				crumbs = m.search.Breadcrumb()
-			case viewPlaylists:
-				crumbs = "Home > Playlists"
-			case viewTracks:
-				crumbs = fmt.Sprintf("Home > Playlists > %s", m.tracks.playlistName)
-			case viewPodcasts:
-				crumbs = "Home > Podcasts"
-			case viewEpisodes:
-				crumbs = fmt.Sprintf("Home > Podcasts > %s", m.episodes.showName)
-			}
+		if crumbs := m.currentView().Breadcrumb(); crumbs != "" {
 			b.WriteString(breadcrumbStyle.Render(crumbs))
 			b.WriteString("\n")
 		}
-
-		// Current view
-		switch m.currentView() {
-		case viewHome:
-			b.WriteString(m.home.View())
-		case viewSearch:
-			b.WriteString(m.search.View())
-		case viewPlaylists:
-			b.WriteString(m.playlists.View())
-		case viewTracks:
-			b.WriteString(m.tracks.View())
-		case viewPodcasts:
-			b.WriteString(m.podcasts.View())
-		case viewEpisodes:
-			b.WriteString(m.episodes.View())
-		}
+		b.WriteString(m.currentView().View())
 	}
 
 	// Now playing bar
 	b.WriteString("\n")
 	var searchEnabled, searchActive bool
 	var searchQuery string
-	if m.currentView() == viewSearch {
+	if sv, ok := m.currentView().(*searchView); ok {
 		searchEnabled = true
-		if m.search.searching {
+		if sv.searching {
 			searchActive = true
-			searchQuery = m.search.searchQuery
+			searchQuery = sv.searchQuery
 		}
 	} else if sl := m.searchableList(); sl != nil {
 		searchEnabled = true

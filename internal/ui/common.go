@@ -9,6 +9,30 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// view is the interface all navigable views must implement.
+type view interface {
+	Update(msg tea.Msg) tea.Cmd
+	View() string
+	SetSize(width, height int)
+	Breadcrumb() string
+}
+
+// listProvider is implemented by views that expose a bubbles list.
+type listProvider interface {
+	List() *list.Model
+}
+
+// searchableListProvider is implemented by views that support local search.
+type searchableListProvider interface {
+	SearchableList() *lazyList
+	FetchMore() tea.Cmd
+}
+
+// syncableView is implemented by views that sync selection to the playing track.
+type syncableView interface {
+	SyncURI(uri string) tea.Cmd
+}
+
 // uriItem is implemented by list items that have a Spotify URI.
 type uriItem interface {
 	URI() string
@@ -129,6 +153,16 @@ func (l *lazyList) updateList(msg tea.Msg, fetchMore func() tea.Cmd) tea.Cmd {
 // View renders the inner list.
 func (l lazyList) View() string {
 	return l.list.View()
+}
+
+// SetSize resizes the inner list.
+func (l *lazyList) SetSize(width, height int) {
+	l.list.SetSize(width, height)
+}
+
+// List returns a pointer to the inner list.
+func (l *lazyList) List() *list.Model {
+	return &l.list
 }
 
 // openSearch enters search mode. Returns true if the caller should trigger

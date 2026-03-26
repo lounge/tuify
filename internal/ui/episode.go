@@ -37,8 +37,8 @@ type episodeView struct {
 	showName string
 }
 
-func newEpisodeView(client *spotify.Client, showID, showName string, width, height int, vimMode bool) episodeView {
-	return episodeView{
+func newEpisodeView(client *spotify.Client, showID, showName string, width, height int, vimMode bool) *episodeView {
+	return &episodeView{
 		lazyList: newLazyList(width, height, vimMode),
 		client:   client,
 		showID:   showID,
@@ -60,13 +60,13 @@ func (v episodeView) fetchMore() tea.Cmd {
 	}
 }
 
-func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
+func (v *episodeView) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case episodesLoadedMsg:
 		v.onLoaded()
 		if msg.err != nil {
 			v.onError(msg.err)
-			return v, nil
+			return nil
 		}
 		var items []list.Item
 		for _, e := range msg.episodes {
@@ -76,18 +76,32 @@ func (v episodeView) Update(msg tea.Msg) (episodeView, tea.Cmd) {
 			})
 		}
 		if v.append(items, len(msg.episodes), msg.hasMore) {
-			return v, v.fetchMore()
+			return v.fetchMore()
 		}
 		if v.resolveSync() {
-			return v, v.fetchMore()
+			return v.fetchMore()
 		}
-		return v, nil
+		return nil
 	}
 
-	return v, v.updateList(msg, v.fetchMore)
+	return v.updateList(msg, v.fetchMore)
 }
 
 func (v *episodeView) retryLoad() tea.Cmd {
 	v.prepareRetry()
 	return v.fetchMore()
 }
+
+func (v *episodeView) Breadcrumb() string {
+	return fmt.Sprintf("Home > Podcasts > %s", v.showName)
+}
+
+func (v *episodeView) SyncURI(uri string) tea.Cmd {
+	if v.selectByURI(uri) {
+		return v.fetchMore()
+	}
+	return nil
+}
+
+func (v *episodeView) SearchableList() *lazyList { return &v.lazyList }
+func (v *episodeView) FetchMore() tea.Cmd         { return v.fetchMore() }

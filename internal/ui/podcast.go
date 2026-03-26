@@ -32,8 +32,8 @@ type podcastView struct {
 	client *spotify.Client
 }
 
-func newPodcastView(client *spotify.Client, width, height int, vimMode bool) podcastView {
-	return podcastView{
+func newPodcastView(client *spotify.Client, width, height int, vimMode bool) *podcastView {
+	return &podcastView{
 		lazyList: newLazyList(width, height, vimMode),
 		client:   client,
 	}
@@ -52,13 +52,13 @@ func (v podcastView) fetchMore() tea.Cmd {
 	}
 }
 
-func (v podcastView) Update(msg tea.Msg) (podcastView, tea.Cmd) {
+func (v *podcastView) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case podcastsLoadedMsg:
 		v.onLoaded()
 		if msg.err != nil {
 			v.onError(msg.err)
-			return v, nil
+			return nil
 		}
 		var items []list.Item
 		for _, s := range msg.shows {
@@ -67,13 +67,15 @@ func (v podcastView) Update(msg tea.Msg) (podcastView, tea.Cmd) {
 			})
 		}
 		v.append(items, len(msg.shows), msg.hasMore)
-		return v, nil
+		return nil
 	}
 
-	return v, v.updateList(msg, v.fetchMore)
+	return v.updateList(msg, v.fetchMore)
 }
 
 func (v *podcastView) retryLoad() tea.Cmd {
 	v.prepareRetry()
 	return v.fetchMore()
 }
+
+func (v *podcastView) Breadcrumb() string { return "Home > Podcasts" }

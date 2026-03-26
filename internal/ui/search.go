@@ -99,10 +99,10 @@ type searchView struct {
 	items []list.Item
 }
 
-func newSearchView(client *spotify.Client, width, height int, vimMode bool) searchView {
+func newSearchView(client *spotify.Client, width, height int, vimMode bool) *searchView {
 	l := newList(width, height, vimMode)
 	l.SetItems(nil)
-	return searchView{
+	return &searchView{
 		list:      l,
 		client:    client,
 		searching: true,
@@ -497,11 +497,11 @@ func (v *searchView) Breadcrumb() string {
 
 // ---------- Update ----------
 
-func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
+func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case searchDebounceMsg:
 		if msg.seq != v.debounceSeq {
-			return v, nil
+			return nil
 		}
 		prefix, term := parseSearch(msg.query)
 		v.prefix = prefix
@@ -517,11 +517,11 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 		v.selectedAlbum = selectedRef{}
 		v.selectedShow = selectedRef{}
 		v.list.SetItems([]list.Item{loadingStatusItem})
-		return v, v.fetchResults(term, 0, 10)
+		return v.fetchResults(term, 0, 10)
 
 	case searchResultMsg:
 		if msg.epoch != v.epoch {
-			return v, nil
+			return nil
 		}
 		v.pending--
 		if msg.err != nil {
@@ -535,9 +535,9 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 		v.rebuildList()
 		// resolve sync
 		if v.syncURI != "" && v.pending == 0 && v.hasMore {
-			return v, v.fetchMore()
+			return v.fetchMore()
 		}
-		return v, nil
+		return nil
 	}
 
 	var cmd tea.Cmd
@@ -551,7 +551,25 @@ func (v searchView) Update(msg tea.Msg) (searchView, tea.Cmd) {
 		}
 	}
 
-	return v, tea.Batch(cmds...)
+	return tea.Batch(cmds...)
+}
+
+func (v *searchView) SetSize(width, height int) {
+	v.list.SetSize(width, height)
+}
+
+func (v *searchView) List() *list.Model {
+	return &v.list
+}
+
+func (v *searchView) SyncURI(uri string) tea.Cmd {
+	if !v.isPlayable() {
+		return nil
+	}
+	if v.selectByURI(uri) {
+		return v.fetchMore()
+	}
+	return nil
 }
 
 func (v searchView) View() string {

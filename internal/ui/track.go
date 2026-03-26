@@ -38,8 +38,8 @@ type trackView struct {
 	playlistName string
 }
 
-func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int, vimMode bool) trackView {
-	return trackView{
+func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int, vimMode bool) *trackView {
+	return &trackView{
 		lazyList:     newLazyList(width, height, vimMode),
 		client:       client,
 		playlistID:   playlistID,
@@ -61,13 +61,13 @@ func (v trackView) fetchMore() tea.Cmd {
 	}
 }
 
-func (v trackView) Update(msg tea.Msg) (trackView, tea.Cmd) {
+func (v *trackView) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case tracksLoadedMsg:
 		v.onLoaded()
 		if msg.err != nil {
 			v.onError(msg.err)
-			return v, nil
+			return nil
 		}
 		var items []list.Item
 		for _, t := range msg.tracks {
@@ -77,18 +77,32 @@ func (v trackView) Update(msg tea.Msg) (trackView, tea.Cmd) {
 			})
 		}
 		if v.append(items, len(msg.tracks), msg.hasMore) {
-			return v, v.fetchMore()
+			return v.fetchMore()
 		}
 		if v.resolveSync() {
-			return v, v.fetchMore()
+			return v.fetchMore()
 		}
-		return v, nil
+		return nil
 	}
 
-	return v, v.updateList(msg, v.fetchMore)
+	return v.updateList(msg, v.fetchMore)
 }
 
 func (v *trackView) retryLoad() tea.Cmd {
 	v.prepareRetry()
 	return v.fetchMore()
 }
+
+func (v *trackView) Breadcrumb() string {
+	return fmt.Sprintf("Home > Playlists > %s", v.playlistName)
+}
+
+func (v *trackView) SyncURI(uri string) tea.Cmd {
+	if v.selectByURI(uri) {
+		return v.fetchMore()
+	}
+	return nil
+}
+
+func (v *trackView) SearchableList() *lazyList { return &v.lazyList }
+func (v *trackView) FetchMore() tea.Cmd         { return v.fetchMore() }

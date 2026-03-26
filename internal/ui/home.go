@@ -7,13 +7,12 @@ import (
 
 type homeItem struct {
 	name string
-	kind viewKind
 }
 
 var homeItems = []homeItem{
-	{name: "Search", kind: viewSearch},
-	{name: "Playlists", kind: viewPlaylists},
-	{name: "Podcasts", kind: viewPodcasts},
+	{name: "Search"},
+	{name: "Playlists"},
+	{name: "Podcasts"},
 }
 
 type homeView struct {
@@ -23,11 +22,11 @@ type homeView struct {
 	vimMode bool
 }
 
-func newHomeView(width, height int) homeView {
-	return homeView{width: width, height: height}
+func newHomeView(width, height int) *homeView {
+	return &homeView{width: width, height: height}
 }
 
-func (v homeView) Update(msg tea.Msg) (homeView, tea.Cmd) {
+func (v *homeView) Update(msg tea.Msg) tea.Cmd {
 	if msg, ok := msg.(tea.KeyMsg); ok {
 		switch msg.String() {
 		case "up", "k":
@@ -48,14 +47,21 @@ func (v homeView) Update(msg tea.Msg) (homeView, tea.Cmd) {
 			}
 		}
 	}
-	return v, nil
+	return nil
 }
 
-func (v homeView) selectedItem() homeItem {
+func (v *homeView) selectedItem() homeItem {
 	return homeItems[v.cursor]
 }
 
-func (v homeView) View() string {
+func (v *homeView) SetSize(width, height int) {
+	v.width = width
+	v.height = height
+}
+
+func (v *homeView) Breadcrumb() string { return "" }
+
+func (v *homeView) View() string {
 	var tabs []string
 	for i, item := range homeItems {
 		if i == v.cursor {
