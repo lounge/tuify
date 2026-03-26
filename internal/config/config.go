@@ -18,6 +18,7 @@ type Config struct {
 	Bitrate         int    `json:"bitrate,omitempty"`
 	SpotifyUsername string `json:"spotify_username,omitempty"`
 	RedirectURL     string `json:"redirect_url,omitempty"`
+	AudioBackend    string `json:"audio_backend,omitempty"`
 	VimMode         bool   `json:"vim_mode,omitempty"`
 }
 

@@ -13,12 +13,18 @@ import (
 	"time"
 )
 
+const (
+	DefaultBackend    = "subprocess"
+	DefaultDeviceName = "tuify"
+)
+
 // Config holds librespot launch parameters.
 type Config struct {
 	BinaryPath  string // path to librespot binary, default "librespot"
-	DeviceName  string // Spotify Connect device name, default "tuify"
+	DeviceName  string // Spotify Connect device name, default DefaultDeviceName
 	Bitrate     int    // 96, 160, or 320; default 320
-	AudioWorker string // full command for subprocess backend
+	Backend     string // audio backend: DefaultBackend, "pulseaudio", etc.
+	AudioWorker string // full command for subprocess backend (only used when Backend == DefaultBackend)
 	Username    string // Spotify username for direct auth (avoids zeroconf key issues)
 }
 
@@ -27,10 +33,13 @@ func (c *Config) setDefaults() {
 		c.BinaryPath = "librespot"
 	}
 	if c.DeviceName == "" {
-		c.DeviceName = "tuify"
+		c.DeviceName = DefaultDeviceName
 	}
 	if c.Bitrate == 0 {
 		c.Bitrate = 320
+	}
+	if c.Backend == "" {
+		c.Backend = DefaultBackend
 	}
 }
 
@@ -61,13 +70,17 @@ func NewProcess(cfg Config) *Process {
 func (p *Process) Args() []string {
 	args := []string{
 		"--name", p.config.DeviceName,
-		"--backend", "subprocess",
-		"--device", p.config.AudioWorker,
+		"--backend", p.config.Backend,
+	}
+	if p.config.Backend == DefaultBackend {
+		args = append(args, "--device", p.config.AudioWorker)
+	}
+	args = append(args,
 		"--bitrate", strconv.Itoa(p.config.Bitrate),
 		"--initial-volume", "60",
 		"--volume-ctrl", "fixed",
 		"--disable-audio-cache",
-	}
+	)
 	if p.config.Username != "" {
 		args = append(args, "--username", p.config.Username)
 	}

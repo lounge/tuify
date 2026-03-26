@@ -92,11 +92,39 @@ Librespot config options in `config.json`:
 | `librespot_path` | `"librespot"` | **Optional** Path to librespot binary |
 | `device_name` | `"tuify"` | **Optional** Spotify Connect device name |
 | `bitrate` | `320` | **Optional** Audio bitrate (96, 160, or 320 kbps) |
+| `audio_backend` | `"subprocess"` | **Optional** Librespot audio backend (see below) |
 | `spotify_username` | `""` | **Optional** Optional Spotify username for direct auth |
 
-When enabled, tuify launches librespot as a subprocess with `-60`, `--volume-ctrl fixed`, and `--disable-audio-cache`. Audio is piped through tuify for playback and real-time FFT analysis.
+When enabled, tuify launches librespot with `--initial-volume 60`, `--volume-ctrl fixed`, and `--disable-audio-cache`.
 
-Select "tuify" in "Connect to a device" in Spotify client.
+#### Audio Backends
+
+The `audio_backend` option controls how librespot outputs audio. Only `"subprocess"` enables audio-reactive visualizers.
+
+By default, librespot is compiled with only **rodio**, **pipe**, and **subprocess** backends. Other backends require enabling cargo features when building librespot, along with their system dependencies. See the [librespot Audio Backends wiki](https://github.com/librespot-org/librespot/wiki/Audio-Backends) for details.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `audio_backend` | `"subprocess"` | Any backend supported by your librespot build (see table below) |
+
+| Backend | Cargo feature | System dependency | Description |
+|---------|--------------|-------------------|-------------|
+| **subprocess** | *(always included)* | Audio dev libs (e.g. `libasound2-dev` on Linux) | Audio is piped through tuify for playback and real-time FFT analysis. Enables all audio-reactive visualizers. Select "tuify" in "Connect to a device" in Spotify client. |
+| **rodio** | *(default)* | None (uses ALSA on Linux, CoreAudio on macOS) | Cross-platform audio output. Librespot's default. |
+| **pipe** | *(always included)* | None | Outputs raw PCM to stdout. Useful for piping audio to other tools. |
+| **alsa** | `alsa-backend` | `libasound2-dev` (Debian) / `alsa-lib-devel` (Fedora) | Direct ALSA output, bypassing PulseAudio. Lower latency on Linux. |
+| **pulseaudio** | `pulseaudio-backend` | `libpulse-dev` (Debian) / `pulseaudio-libs-devel` (Fedora) | Audio output via PulseAudio. |
+| **jackaudio** | `jackaudio-backend` | JACK dev libraries | Output via JACK Audio Connection Kit. For pro audio / low-latency setups. |
+| **rodiojack** | `rodiojack-backend` | JACK dev libraries | Rodio audio output routed through JACK. |
+| **portaudio** | `portaudio-backend` | PortAudio dev libraries | Cross-platform audio via the PortAudio library. |
+| **gstreamer** | `gstreamer-backend` | GStreamer dev libraries | Audio output via the GStreamer multimedia framework. |
+| **sdl** | `sdl-backend` | SDL2 dev libraries | Audio output via SDL2. |
+
+Example: building librespot with PulseAudio support:
+
+```bash
+cargo build --release --features pulseaudio-backend
+```
 
 ### Keybindings
 

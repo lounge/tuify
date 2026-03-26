@@ -83,33 +83,46 @@ func main() {
 
 	// Start librespot + audio receiver if enabled.
 	if cfg.EnableLibrespot {
-		audioRecv := audio.NewReceiver()
-		if err := audioRecv.Start(); err != nil {
-			log.Printf("[startup] audio receiver failed: %v", err)
-		} else {
-			defer audioRecv.Stop()
-			opts = append(opts, ui.WithAudioReceiver(audioRecv))
+		deviceName := cfg.DeviceName
+		if deviceName == "" {
+			deviceName = librespot.DefaultDeviceName
+		}
+		client.PreferredDevice = deviceName
 
-			deviceName := cfg.DeviceName
-			if deviceName == "" {
-				deviceName = "tuify"
+		backend := cfg.AudioBackend
+		if backend == "" {
+			backend = librespot.DefaultBackend
+		}
+
+		lsCfg := librespot.Config{
+			BinaryPath: cfg.LibrespotPath,
+			DeviceName: deviceName,
+			Bitrate:    cfg.Bitrate,
+			Backend:    backend,
+			Username:   cfg.SpotifyUsername,
+		}
+
+		startOK := true
+		if backend == librespot.DefaultBackend {
+			audioRecv := audio.NewReceiver()
+			if err := audioRecv.Start(); err != nil {
+				log.Printf("[startup] audio receiver failed: %v", err)
+				startOK = false
+			} else {
+				defer audioRecv.Stop()
+				opts = append(opts, ui.WithAudioReceiver(audioRecv))
+
+				selfPath, err := os.Executable()
+				if err != nil {
+					selfPath = os.Args[0]
+				}
+				log.Printf("[librespot] audio worker command: %s --audio-worker --socket %s", selfPath, audioRecv.SocketPath())
+				lsCfg.AudioWorker = fmt.Sprintf("%s --audio-worker --socket %s", selfPath, audioRecv.SocketPath())
 			}
-			client.PreferredDevice = deviceName
+		}
 
-			// Use absolute path so librespot's subprocess can find the binary.
-			selfPath, err := os.Executable()
-			if err != nil {
-				selfPath = os.Args[0]
-			}
-			log.Printf("[librespot] audio worker command: %s --audio-worker --socket %s", selfPath, audioRecv.SocketPath())
-
-			librespotProc := librespot.NewProcess(librespot.Config{
-				BinaryPath:  cfg.LibrespotPath,
-				DeviceName:  deviceName,
-				Bitrate:     cfg.Bitrate,
-				AudioWorker: fmt.Sprintf("%s --audio-worker --socket %s", selfPath, audioRecv.SocketPath()),
-				Username:    cfg.SpotifyUsername,
-			})
+		if startOK {
+			librespotProc := librespot.NewProcess(lsCfg)
 			if err := librespotProc.Start(); err != nil {
 				log.Printf("[startup] librespot failed to start: %v", err)
 			} else {
