@@ -21,8 +21,8 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
   - `l:` Album → Track drill-down
   - `s:` Show → Episode drill-down
 - **Now Playing** — Live progress bar, track info, shuffle state
-- **Librespot Integration** — Optional embedded Spotify Connect player via [librespot](https://github.com/librespot-org/librespot), streaming audio directly through tuify
-- **Audio-Reactive Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and four Milkdrop-style presets — all driven by real-time FFT audio analysis when librespot is enabled
+- **Librespot Integration** — Optional embedded Spotify Connect player via [librespot](https://github.com/librespot-org/librespot), streaming audio directly through tuify.
+- **Audio-Reactive Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and four Milkdrop-style presets — all driven by real-time FFT audio analysis when librespot is enabled (only with **subprocess** backend)
 - **Lyrics** — Fetches and displays lyrics from Genius.com (best-effort match, not always exact)
 
 ## Prerequisites
@@ -95,7 +95,7 @@ Librespot config options in `config.json`:
 | `audio_backend` | `"subprocess"` | **Optional** Librespot audio backend (see below) |
 | `spotify_username` | `""` | **Optional** Optional Spotify username for direct auth |
 
-When enabled, tuify launches librespot with `--initial-volume 60`, `--volume-ctrl fixed`, and `--disable-audio-cache`.
+When enabled, tuify launches librespot with `--initial-volume 60`, `--volume-ctrl fixed`, `--disable-audio-cache`, and `--cache ~/.config/tuify/librespot` (for credential persistence across restarts).
 
 #### Audio Backends
 
@@ -145,7 +145,7 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `vim_mode` | `true` | Enable vim-style keybindings |
+| `vim_mode` | `false` | Enable vim-style keybindings |
 
 All standard keybindings continue to work. Vim mode adds:
 
@@ -178,7 +178,8 @@ All standard keybindings continue to work. Vim mode adds:
 tuify/
 ├── main.go                  # Entry point, librespot + audio pipeline setup
 ├── internal/
-│   ├── auth/                # OAuth2 PKCE authentication
+│   ├── auth/
+│   │   └── auth.go          # OAuth2 PKCE authentication and token persistence
 │   ├── audio/               # Real-time audio pipeline
 │   │   ├── receiver.go      # Unix socket/TCP receiver for frequency data
 │   │   ├── worker.go        # Audio playback + FFT analysis subprocess
@@ -190,7 +191,7 @@ tuify/
 │   ├── lyrics/
 │   │   └── genius.go        # Genius.com lyrics search and scraping
 │   ├── librespot/
-│   │   └── process.go       # Librespot subprocess lifecycle management
+│   │   └── process.go       # Librespot subprocess lifecycle, broken session detection, auto-restart
 │   ├── spotify/             # Spotify API client wrapper
 │   │   ├── client.go        # API methods and type converters
 │   │   ├── client_test.go   # Converter tests
@@ -207,7 +208,8 @@ tuify/
 │       ├── progressbar.go   # Gradient progress bar
 │       ├── visualizer.go    # Visualizer controller
 │       ├── styles.go        # Colors and styling
-│       ├── common.go        # Shared types and lazyList
+│       ├── common.go        # Shared view interface and types
+│       ├── lazylist.go      # Paginated list with lazy loading and local search
 │       └── visualizers/
 │           ├── common.go        # Shared visualizer utilities
 │           ├── albumart.go      # Album art display
