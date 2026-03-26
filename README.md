@@ -103,10 +103,6 @@ The `audio_backend` option controls how librespot outputs audio. Only `"subproce
 
 By default, librespot is compiled with only **rodio**, **pipe**, and **subprocess** backends. Other backends require enabling cargo features when building librespot, along with their system dependencies. See the [librespot Audio Backends wiki](https://github.com/librespot-org/librespot/wiki/Audio-Backends) for details.
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `audio_backend` | `"subprocess"` | Any backend supported by your librespot build (see table below) |
-
 | Backend | Cargo feature | System dependency | Description |
 |---------|--------------|-------------------|-------------|
 | **subprocess** | *(always included)* | Audio dev libs (e.g. `libasound2-dev` on Linux) | Audio is piped through tuify for playback and real-time FFT analysis. Enables all audio-reactive visualizers. Select "tuify" in "Connect to a device" in Spotify client. |
