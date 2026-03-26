@@ -62,7 +62,11 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 // and persists them to disk on each refresh.
 func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) *http.Client {
 	base := a.Client(context.Background(), token)
-	ts := &savingTokenSource{base: base.Transport.(*oauth2.Transport).Source, last: token}
+	t, ok := base.Transport.(*oauth2.Transport)
+	if !ok || t == nil {
+		log.Fatal("[auth] unexpected transport type from spotify authenticator")
+	}
+	ts := &savingTokenSource{base: t.Source, last: token}
 	return &http.Client{
 		Transport: &oauth2.Transport{
 			Source: ts,
