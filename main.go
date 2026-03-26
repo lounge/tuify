@@ -100,6 +100,7 @@ func main() {
 			Bitrate:    cfg.Bitrate,
 			Backend:    backend,
 			Username:   cfg.SpotifyUsername,
+			CacheDir:   filepath.Join(config.Dir(), "librespot"),
 		}
 
 		startOK := true

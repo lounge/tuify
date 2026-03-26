@@ -26,6 +26,7 @@ type Config struct {
 	Backend     string // audio backend: DefaultBackend, "pulseaudio", etc.
 	AudioWorker string // full command for subprocess backend (only used when Backend == DefaultBackend)
 	Username    string // Spotify username for direct auth (avoids zeroconf key issues)
+	CacheDir    string // directory for librespot credential/audio cache
 }
 
 func (c *Config) setDefaults() {
@@ -75,6 +76,9 @@ func (p *Process) Args() []string {
 	}
 	if p.config.Backend == DefaultBackend {
 		args = append(args, "--device", p.config.AudioWorker)
+	}
+	if p.config.CacheDir != "" {
+		args = append(args, "--cache", p.config.CacheDir)
 	}
 	args = append(args,
 		"--bitrate", strconv.Itoa(p.config.Bitrate),
