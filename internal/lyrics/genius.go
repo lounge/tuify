@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
-	"time"
 
 	"golang.org/x/net/html"
 )
@@ -19,18 +18,17 @@ import (
 var ErrInstrumental = errors.New("instrumental")
 
 var (
-	httpClient = &http.Client{Timeout: 10 * time.Second}
-	reRemix    = regexp.MustCompile(`(?i)\s*[-–—]\s*(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)\b.*$`)
-	reParens   = regexp.MustCompile(`(?i)\s*\([^)]*?(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)[^)]*?\)`)
+	reRemix  = regexp.MustCompile(`(?i)\s*[-–—]\s*(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)\b.*$`)
+	reParens = regexp.MustCompile(`(?i)\s*\([^)]*?(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)[^)]*?\)`)
 )
 
 // Search finds lyrics for a track on Genius.
 // Returns the lyrics text or an error. Returns empty string if no lyrics found.
 // Returns ErrInstrumental if Genius marks the song as instrumental.
 // The context can be used to cancel or set a deadline on the search.
-func Search(ctx context.Context, track, artist string) (string, error) {
+func Search(ctx context.Context, client *http.Client, track, artist string) (string, error) {
 	query := improveQuery(artist + " " + track)
-	result, err := searchSong(ctx, query, track, artist)
+	result, err := searchSong(ctx, client, query, track, artist)
 	if err != nil {
 		return "", err
 	}
@@ -40,7 +38,7 @@ func Search(ctx context.Context, track, artist string) (string, error) {
 	if result.instrumental {
 		return "", ErrInstrumental
 	}
-	return scrapeLyrics(ctx, result.url)
+	return scrapeLyrics(ctx, client, result.url)
 }
 
 func improveQuery(s string) string {
@@ -55,13 +53,13 @@ type songResult struct {
 	instrumental bool
 }
 
-func searchSong(ctx context.Context, query, track, artist string) (songResult, error) {
+func searchSong(ctx context.Context, client *http.Client, query, track, artist string) (songResult, error) {
 	endpoint := "https://genius.com/api/search?q=" + url.QueryEscape(query)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
@@ -120,12 +118,12 @@ func searchSong(ctx context.Context, query, track, artist string) (songResult, e
 	return songResult{}, nil
 }
 
-func scrapeLyrics(ctx context.Context, songURL string) (string, error) {
+func scrapeLyrics(ctx context.Context, client *http.Client, songURL string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, songURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("genius fetch: %w", err)
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("genius fetch: %w", err)
 	}

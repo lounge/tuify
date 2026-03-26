@@ -18,7 +18,7 @@ import (
 	"github.com/lounge/tuify/internal/ui/visualizers"
 )
 
-var imageHTTPClient = &http.Client{Timeout: 10 * time.Second}
+var httpClient = &http.Client{Timeout: 10 * time.Second}
 
 type vizTickMsg struct{}
 
@@ -161,7 +161,7 @@ func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
 	ch := m.lyricsCh
 	go func() {
 		defer cancel()
-		text, err := lyrics.Search(ctx, track, artist)
+		text, err := lyrics.Search(ctx, httpClient, track, artist)
 		res := lyricsFetchResult{trackID: trackID, err: err}
 		if errors.Is(err, lyrics.ErrInstrumental) {
 			res.instrumental = true
@@ -242,7 +242,7 @@ func (m *visualizerModel) loadImage(imageURL string) {
 	url := imageURL
 	ch := m.imageCh
 	go func() {
-		resp, err := imageHTTPClient.Get(url)
+		resp, err := httpClient.Get(url)
 		if err != nil {
 			select {
 			case ch <- fetchResult{err: err, url: url}:
