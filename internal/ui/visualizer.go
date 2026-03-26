@@ -115,21 +115,16 @@ func (m *visualizerModel) tick() tea.Cmd {
 func (m *visualizerModel) advance(progressMs int) {
 	m.drainImageCh()
 	m.drainLyricsCh()
-	var fd *audio.FrequencyData
+	v := m.viz()
 	if m.audioRecv != nil {
-		fd = m.audioRecv.Latest() // nil when paused or disconnected
-	}
-	for _, v := range m.vizList {
-		if m.audioRecv != nil {
-			if aa, ok := v.(visualizers.AudioAware); ok {
-				aa.SetAudioData(fd)
-			}
+		if aa, ok := v.(visualizers.AudioAware); ok {
+			aa.SetAudioData(m.audioRecv.Latest())
 		}
-		if pa, ok := v.(visualizers.ProgressAware); ok {
-			pa.SetProgress(progressMs)
-		}
-		v.Advance()
 	}
+	if pa, ok := v.(visualizers.ProgressAware); ok {
+		pa.SetProgress(progressMs)
+	}
+	v.Advance()
 }
 
 func (m *visualizerModel) cycle(delta int) {
