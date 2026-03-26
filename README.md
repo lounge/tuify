@@ -118,8 +118,6 @@ By default, librespot is compiled with only **rodio**, **pipe**, and **subproces
 | **gstreamer** | `gstreamer-backend` | GStreamer dev libraries | Audio output via the GStreamer multimedia framework. |
 | **sdl** | `sdl-backend` | SDL2 dev libraries | Audio output via SDL2. |
 
-Example: building librespot with PulseAudio support:
-
 ```bash
 cargo build --release --features pulseaudio-backend
 ```
