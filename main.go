@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/audio"
@@ -124,6 +125,21 @@ func main() {
 
 		if startOK {
 			librespotProc := librespot.NewProcess(lsCfg)
+			librespotProc.OnReconnect = func() {
+				time.Sleep(2 * time.Second)
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				devID, err := client.FindDevice(ctx)
+				if err != nil {
+					log.Printf("[librespot] reconnect: could not find device: %v", err)
+					return
+				}
+				if err := client.TransferPlayback(ctx, devID, true); err != nil {
+					log.Printf("[librespot] reconnect: transfer playback failed: %v", err)
+				} else {
+					log.Printf("[librespot] reconnect: playback transferred to %s", deviceName)
+				}
+			}
 			if err := librespotProc.Start(); err != nil {
 				log.Printf("[startup] librespot failed to start: %v", err)
 			} else {

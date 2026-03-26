@@ -15,8 +15,8 @@ import (
 )
 
 type Client struct {
-	sp         *sp.Client
-	httpClient *http.Client
+	sp              *sp.Client
+	httpClient      *http.Client
 	userID          string
 	PreferredDevice string // if set, FindDevice prefers this device name
 }
@@ -79,26 +79,33 @@ type PlayerState struct {
 	DurationMs int
 }
 
+type rawArtistRef struct {
+	Name string `json:"name"`
+}
+
+func firstArtist(artists []rawArtistRef) string {
+	if len(artists) > 0 {
+		return artists[0].Name
+	}
+	return ""
+}
+
 type rawAlbum struct {
-	ID          string `json:"id"`
-	URI         string `json:"uri"`
-	Name        string `json:"name"`
-	ReleaseDate string `json:"release_date"`
-	TotalTracks int    `json:"total_tracks"`
-	Artists     []struct {
-		Name string `json:"name"`
-	} `json:"artists"`
+	ID          string         `json:"id"`
+	URI         string         `json:"uri"`
+	Name        string         `json:"name"`
+	ReleaseDate string         `json:"release_date"`
+	TotalTracks int            `json:"total_tracks"`
+	Artists     []rawArtistRef `json:"artists"`
 }
 
 type rawTrack struct {
-	ID       string `json:"id"`
-	URI      string `json:"uri"`
-	Name     string `json:"name"`
-	Duration int    `json:"duration_ms"`
-	Artists  []struct {
-		Name string `json:"name"`
-	} `json:"artists"`
-	Album struct {
+	ID       string         `json:"id"`
+	URI      string         `json:"uri"`
+	Name     string         `json:"name"`
+	Duration int            `json:"duration_ms"`
+	Artists  []rawArtistRef `json:"artists"`
+	Album    struct {
 		Name string `json:"name"`
 	} `json:"album"`
 }
@@ -397,6 +404,10 @@ func (c *Client) Seek(ctx context.Context, positionMs int, deviceID string) erro
 	return c.sp.SeekOpt(ctx, positionMs, playOpts(deviceID))
 }
 
+func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play bool) error {
+	return c.sp.TransferPlayback(ctx, sp.ID(deviceID), play)
+}
+
 func (c *Client) FindDevice(ctx context.Context) (string, error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
@@ -494,15 +505,11 @@ func search[Raw, T any](ctx context.Context, c *Client, query, searchType, key s
 func convertAlbums(raw []rawAlbum) []Album {
 	var albums []Album
 	for _, a := range raw {
-		artist := ""
-		if len(a.Artists) > 0 {
-			artist = a.Artists[0].Name
-		}
 		albums = append(albums, Album{
 			ID:          a.ID,
 			URI:         a.URI,
 			Name:        a.Name,
-			Artist:      artist,
+			Artist:      firstArtist(a.Artists),
 			ReleaseDate: a.ReleaseDate,
 			TrackCount:  a.TotalTracks,
 		})
@@ -513,15 +520,11 @@ func convertAlbums(raw []rawAlbum) []Album {
 func convertTracks(raw []rawTrack) []Track {
 	var tracks []Track
 	for _, t := range raw {
-		artist := ""
-		if len(t.Artists) > 0 {
-			artist = t.Artists[0].Name
-		}
 		tracks = append(tracks, Track{
 			ID:       t.ID,
 			URI:      t.URI,
 			Name:     t.Name,
-			Artist:   artist,
+			Artist:   firstArtist(t.Artists),
 			Album:    t.Album.Name,
 			Duration: time.Duration(t.Duration) * time.Millisecond,
 		})

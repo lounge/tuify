@@ -12,9 +12,7 @@ func TestConvertTracks(t *testing.T) {
 			URI:      "spotify:track:t1",
 			Name:     "Song One",
 			Duration: 210000,
-			Artists: []struct {
-				Name string `json:"name"`
-			}{{Name: "Artist A"}},
+			Artists: []rawArtistRef{{Name: "Artist A"}},
 			Album: struct {
 				Name string `json:"name"`
 			}{Name: "Album X"},
@@ -71,9 +69,7 @@ func TestConvertAlbums(t *testing.T) {
 			Name:        "Album One",
 			ReleaseDate: "2023-05-15",
 			TotalTracks: 12,
-			Artists: []struct {
-				Name string `json:"name"`
-			}{{Name: "Artist B"}},
+			Artists: []rawArtistRef{{Name: "Artist B"}},
 		},
 		{
 			ID:          "a2",

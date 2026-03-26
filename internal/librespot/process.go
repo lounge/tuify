@@ -57,6 +57,8 @@ type Process struct {
 	// shutdown (in either order) means librespot is stuck.
 	sawAudioKeyErr bool
 	sawSpirc       bool
+
+	OnReconnect func() // called when librespot authenticates (initial or restart)
 }
 
 // NewProcess creates a new Process with the given configuration.
@@ -68,8 +70,8 @@ func NewProcess(cfg Config) *Process {
 	}
 }
 
-// Args returns the librespot command-line arguments.
-func (p *Process) Args() []string {
+// args returns the librespot command-line arguments.
+func (p *Process) args() []string {
 	args := []string{
 		"--name", p.config.DeviceName,
 		"--backend", p.config.Backend,
@@ -111,7 +113,7 @@ func (p *Process) launch() error {
 		return fmt.Errorf("librespot process has been stopped")
 	}
 
-	args := p.Args()
+	args := p.args()
 	p.cmd = exec.Command(p.config.BinaryPath, args...)
 	p.done = make(chan struct{})
 
@@ -244,6 +246,13 @@ func (p *Process) Stop() error {
 func (p *Process) monitorStderr(line string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if strings.Contains(line, "Authenticated as") {
+		if p.OnReconnect != nil {
+			go p.OnReconnect()
+		}
+		return
+	}
 
 	if strings.Contains(line, "Audio key response timeout") {
 		p.sawAudioKeyErr = true
