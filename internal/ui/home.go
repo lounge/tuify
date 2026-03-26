@@ -54,6 +54,23 @@ func (v *homeView) selectedItem() homeItem {
 	return homeItems[v.cursor]
 }
 
+func (v *homeView) OnEnter(m *Model) tea.Cmd {
+	switch v.selectedItem().name {
+	case "Search":
+		m.pushView(newSearchView(m.client, m.width, m.listHeight(), m.vimMode))
+		return nil
+	case "Playlists":
+		pv := newPlaylistView(m.client, m.width, m.listHeight(), m.vimMode)
+		m.pushView(pv)
+		return pv.Init()
+	case "Podcasts":
+		pv := newPodcastView(m.client, m.width, m.listHeight(), m.vimMode)
+		m.pushView(pv)
+		return pv.Init()
+	}
+	return nil
+}
+
 func (v *homeView) SetSize(width, height int) {
 	v.width = width
 	v.height = height

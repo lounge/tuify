@@ -463,6 +463,36 @@ func (v *searchView) goBackFetchCmd() tea.Cmd {
 	return nil
 }
 
+func (v *searchView) OnEnter(m *Model) tea.Cmd {
+	selected := v.list.SelectedItem()
+	if si, ok := selected.(statusItem); ok && si.isError {
+		return v.retry()
+	}
+	if v.isPlayable() {
+		return v.playSelected(m, selected)
+	}
+	return v.drillDown(selected)
+}
+
+func (v *searchView) playSelected(m *Model, item list.Item) tea.Cmd {
+	ctx := v.contextURI()
+	if ctx != "" {
+		if ti, ok := item.(trackItem); ok {
+			return m.playItem(ti.uri, ctx)
+		}
+		if ei, ok := item.(episodeItem); ok {
+			return m.playItem(ei.uri, ctx)
+		}
+	}
+	if ti, ok := item.(trackItem); ok {
+		return m.playQueue(v.queueFrom(ti.uri))
+	}
+	if ei, ok := item.(episodeItem); ok {
+		return m.playQueue(v.queueFrom(ei.uri))
+	}
+	return nil
+}
+
 // retry re-triggers the last search or detail fetch after an error.
 func (v *searchView) retry() tea.Cmd {
 	v.searchErr = nil

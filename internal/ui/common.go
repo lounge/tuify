@@ -33,6 +33,11 @@ type syncableView interface {
 	SyncURI(uri string) tea.Cmd
 }
 
+// enterable is implemented by views that handle the Enter key.
+type enterable interface {
+	OnEnter(m *Model) tea.Cmd
+}
+
 // uriItem is implemented by list items that have a Spotify URI.
 type uriItem interface {
 	URI() string

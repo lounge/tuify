@@ -88,6 +88,17 @@ func (v *trackView) Update(msg tea.Msg) tea.Cmd {
 	return v.updateList(msg, v.fetchMore)
 }
 
+func (v *trackView) OnEnter(m *Model) tea.Cmd {
+	selected := v.list.SelectedItem()
+	if ti, ok := selected.(trackItem); ok {
+		return m.playItem(ti.uri, "spotify:playlist:"+v.playlistID)
+	}
+	if si, ok := selected.(statusItem); ok && si.isError {
+		return v.retryLoad()
+	}
+	return nil
+}
+
 func (v *trackView) retryLoad() tea.Cmd {
 	v.prepareRetry()
 	return v.fetchMore()

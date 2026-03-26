@@ -138,7 +138,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					if !sv.isPlayable() {
 						return sv.drillDown(item)
 					}
-					return m.playCurrentItem(item)
+					return sv.playSelected(&m, item)
 				},
 				onChange: func() tea.Cmd {
 					sv.debounceSeq++
@@ -162,7 +162,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				query: &sl.searchQuery,
 				list:  &sl.list,
 				close: func() { sl.closeSearch() },
-				play:  m.playCurrentItem,
+				play: func(item list.Item) tea.Cmd {
+					if e, ok := m.currentView().(enterable); ok {
+						return e.OnEnter(&m)
+					}
+					return nil
+				},
 				onChange: func() tea.Cmd {
 					sl.applyFilter()
 					return nil
@@ -382,70 +387,8 @@ func (m Model) currentList() *list.Model {
 }
 
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
-	switch v := m.currentView().(type) {
-	case *homeView:
-		hi := v.selectedItem()
-		switch hi.name {
-		case "Search":
-			m.pushView(newSearchView(m.client, m.width, m.listHeight(), m.vimMode))
-			return m, nil
-		case "Playlists":
-			pv := newPlaylistView(m.client, m.width, m.listHeight(), m.vimMode)
-			m.pushView(pv)
-			return m, pv.Init()
-		case "Podcasts":
-			pv := newPodcastView(m.client, m.width, m.listHeight(), m.vimMode)
-			m.pushView(pv)
-			return m, pv.Init()
-		}
-	case *searchView:
-		selected := v.list.SelectedItem()
-		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, v.retry()
-		}
-		if v.isPlayable() {
-			if cmd := m.playCurrentItem(selected); cmd != nil {
-				return m, cmd
-			}
-		} else if cmd := v.drillDown(selected); cmd != nil {
-			return m, cmd
-		}
-	case *playlistView:
-		selected := v.list.SelectedItem()
-		if pi, ok := selected.(playlistItem); ok {
-			tv := newTrackView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
-			m.pushView(tv)
-			return m, tv.Init()
-		}
-		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, v.retryLoad()
-		}
-	case *trackView:
-		selected := v.list.SelectedItem()
-		if cmd := m.playCurrentItem(selected); cmd != nil {
-			return m, cmd
-		}
-		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, v.retryLoad()
-		}
-	case *podcastView:
-		selected := v.list.SelectedItem()
-		if pi, ok := selected.(podcastItem); ok {
-			ev := newEpisodeView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
-			m.pushView(ev)
-			return m, ev.Init()
-		}
-		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, v.retryLoad()
-		}
-	case *episodeView:
-		selected := v.list.SelectedItem()
-		if cmd := m.playCurrentItem(selected); cmd != nil {
-			return m, cmd
-		}
-		if si, ok := selected.(statusItem); ok && si.isError {
-			return m, v.retryLoad()
-		}
+	if e, ok := m.currentView().(enterable); ok {
+		return m, e.OnEnter(&m)
 	}
 	return m, nil
 }
@@ -531,38 +474,6 @@ func (m Model) stopPlayback() tea.Cmd {
 func (m *Model) searchableList() *lazyList {
 	if sp, ok := m.currentView().(searchableListProvider); ok {
 		return sp.SearchableList()
-	}
-	return nil
-}
-
-func (m Model) playCurrentItem(item list.Item) tea.Cmd {
-	switch v := m.currentView().(type) {
-	case *searchView:
-		ctx := v.contextURI()
-		if ctx != "" {
-			// Album or show context: use Spotify context URI for continuation
-			if ti, ok := item.(trackItem); ok {
-				return m.playItem(ti.uri, ctx)
-			}
-			if ei, ok := item.(episodeItem); ok {
-				return m.playItem(ei.uri, ctx)
-			}
-		}
-		// No context (direct track/episode search): queue remaining items
-		if ti, ok := item.(trackItem); ok {
-			return m.playQueue(v.queueFrom(ti.uri))
-		}
-		if ei, ok := item.(episodeItem); ok {
-			return m.playQueue(v.queueFrom(ei.uri))
-		}
-	case *trackView:
-		if ti, ok := item.(trackItem); ok {
-			return m.playItem(ti.uri, "spotify:playlist:"+v.playlistID)
-		}
-	case *episodeView:
-		if ei, ok := item.(episodeItem); ok {
-			return m.playItem(ei.uri, "spotify:show:"+v.showID)
-		}
 	}
 	return nil
 }

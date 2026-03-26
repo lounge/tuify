@@ -87,6 +87,19 @@ func (v *playlistView) Update(msg tea.Msg) tea.Cmd {
 	return v.updateList(msg, v.fetchMore)
 }
 
+func (v *playlistView) OnEnter(m *Model) tea.Cmd {
+	selected := v.list.SelectedItem()
+	if pi, ok := selected.(playlistItem); ok {
+		tv := newTrackView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
+		m.pushView(tv)
+		return tv.Init()
+	}
+	if si, ok := selected.(statusItem); ok && si.isError {
+		return v.retryLoad()
+	}
+	return nil
+}
+
 func (v *playlistView) retryLoad() tea.Cmd {
 	v.prepareRetry()
 	return v.fetchMore()
