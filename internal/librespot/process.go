@@ -232,9 +232,11 @@ func (p *Process) Stop() error {
 }
 
 // monitorStderr detects broken sessions where librespot reconnects internally
-// but can't play audio. The sequence is: audio key timeout → spirc unexpected
-// shutdown → reconnect → still broken. We kill on spirc shutdown if preceded
-// by an audio key error, so the auto-restart can start a clean session.
+// but can't play audio. Two known sequences trigger a kill for clean restart:
+//
+//  1. audio key timeout → spirc shutdown (librespot stuck before reconnect)
+//  2. spirc shutdown → reconnect → audio key timeout → playback failure
+//     ("end of stream" / "Unable to read audio file")
 func (p *Process) monitorStderr(line string) {
 	if strings.Contains(line, "Audio key response timeout") {
 		p.mu.Lock()
@@ -257,6 +259,26 @@ func (p *Process) monitorStderr(line string) {
 		}
 
 		log.Printf("[librespot] broken session detected (audio key timeout + spirc shutdown) — killing for clean restart")
+		_ = p.cmd.Process.Kill()
+		return
+	}
+
+	// Sequence 2: audio key timeout already happened, and now playback
+	// failed because the stream is unreadable without the decryption key.
+	if strings.Contains(line, "Unable to read audio file") {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		if !p.sawAudioKeyErr {
+			return
+		}
+		p.sawAudioKeyErr = false
+
+		if p.cmd == nil || p.cmd.Process == nil {
+			return
+		}
+
+		log.Printf("[librespot] broken session detected (audio key timeout + playback failure) — killing for clean restart")
 		_ = p.cmd.Process.Kill()
 	}
 }
