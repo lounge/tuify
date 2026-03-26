@@ -26,6 +26,7 @@ type nowPlayingModel struct {
 	track            string
 	artist           string
 	trackURI         string
+	contextURI       string
 	imageURL         string
 	playing          bool
 	shuffling        bool
@@ -104,6 +105,9 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 			m.track = msg.state.TrackName
 			m.artist = msg.state.ArtistName
 			m.trackURI = msg.state.TrackURI
+			if msg.state.ContextURI != "" {
+				m.contextURI = msg.state.ContextURI
+			}
 			m.imageURL = msg.state.ImageURL
 			// Track changed — pending play/pause is stale, accept fresh state
 			if m.playPausePending && msg.state.TrackURI != prevURI {

@@ -25,9 +25,8 @@ type seekFireMsg struct {
 
 // playbackResultMsg is used for all device-bound commands.
 type playbackResultMsg struct {
-	deviceID string
-	err      error
-	seek     bool // true for seek results (uses lighter post-action polling)
+	err  error
+	seek bool // true for seek results (uses lighter post-action polling)
 }
 
 // searchCtx captures the parts that differ between API search and local filter search.
@@ -44,7 +43,6 @@ type Model struct {
 	nowPlaying *nowPlayingModel
 	visualizer *visualizerModel
 	client     *spotify.Client
-	deviceID   string
 	width      int
 	height     int
 	seekSeq    int
@@ -266,9 +264,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.seek {
 			m.nowPlaying.seekPending = false
 		}
-		if msg.deviceID != "" {
-			m.deviceID = msg.deviceID
-		}
 		if msg.err != nil {
 			if m.nowPlaying.playPausePending {
 				m.nowPlaying.playPausePending = false
@@ -407,17 +402,23 @@ func (m Model) playItem(itemURI, contextURI string) tea.Cmd {
 
 func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
 	client := m.client
-	deviceID := m.deviceID
+	trackURI := m.nowPlaying.trackURI
+	contextURI := m.nowPlaying.contextURI
 	return func() tea.Msg {
 		ctx := context.Background()
-		if deviceID == "" {
-			var err error
-			deviceID, err = client.FindDevice(ctx)
-			if err != nil {
-				return playbackResultMsg{err: err, seek: seek}
+		deviceID, active, err := client.FindDevice(ctx)
+		if err != nil {
+			return playbackResultMsg{err: err, seek: seek}
+		}
+		// Re-establish playback context if the preferred device is inactive.
+		if !active && client.PreferredDevice != "" {
+			if contextURI != "" && trackURI != "" {
+				_ = client.Play(ctx, trackURI, contextURI, deviceID)
+			} else {
+				_ = client.TransferPlayback(ctx, deviceID, true)
 			}
 		}
-		return playbackResultMsg{deviceID: deviceID, err: fn(ctx, client, deviceID), seek: seek}
+		return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
 	}
 }
 

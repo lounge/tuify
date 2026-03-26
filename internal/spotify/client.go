@@ -74,6 +74,7 @@ type PlayerState struct {
 	TrackName  string
 	ArtistName string
 	TrackURI   string
+	ContextURI string
 	ImageURL   string
 	ProgressMs int
 	DurationMs int
@@ -300,7 +301,10 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		Playing    bool `json:"is_playing"`
 		Shuffling  bool `json:"shuffle_state"`
 		ProgressMs int  `json:"progress_ms"`
-		Item       *struct {
+		Context    *struct {
+			URI string `json:"uri"`
+		} `json:"context"`
+		Item *struct {
 			Name       string `json:"name"`
 			URI        string `json:"uri"`
 			DurationMs int    `json:"duration_ms"`
@@ -333,6 +337,9 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		TrackURI:   state.Item.URI,
 		ProgressMs: state.ProgressMs,
 		DurationMs: state.Item.DurationMs,
+	}
+	if state.Context != nil {
+		ps.ContextURI = state.Context.URI
 	}
 	if len(state.Item.Artists) > 0 {
 		ps.ArtistName = state.Item.Artists[0].Name
@@ -408,28 +415,29 @@ func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play boo
 	return c.sp.TransferPlayback(ctx, sp.ID(deviceID), play)
 }
 
-func (c *Client) FindDevice(ctx context.Context) (string, error) {
+// FindDevice returns the best device ID and whether it is currently active.
+func (c *Client) FindDevice(ctx context.Context) (id string, active bool, err error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if len(devices) == 0 {
-		return "", fmt.Errorf("no Spotify devices found — open Spotify on any device")
+		return "", false, fmt.Errorf("no Spotify devices found — open Spotify on any device")
 	}
 	// Prefer the configured device (e.g., librespot's "tuify").
 	if c.PreferredDevice != "" {
 		for _, d := range devices {
 			if d.Name == c.PreferredDevice {
-				return string(d.ID), nil
+				return string(d.ID), d.Active, nil
 			}
 		}
 	}
 	for _, d := range devices {
 		if d.Active {
-			return string(d.ID), nil
+			return string(d.ID), true, nil
 		}
 	}
-	return string(devices[0].ID), nil
+	return string(devices[0].ID), false, nil
 }
 
 // doWithRetry performs a GET request with 429 retry logic. Returns the

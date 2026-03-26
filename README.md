@@ -97,6 +97,8 @@ Librespot config options in `config.json`:
 
 When enabled, tuify launches librespot with `--initial-volume 60`, `--volume-ctrl fixed`, `--disable-audio-cache`, and `--cache ~/.config/tuify/librespot` (for credential persistence across restarts).
 
+Librespot automatically connects as the active Spotify device on startup. If the connection drops, tuify detects the failure, kills and restarts librespot, and transfers playback back automatically.
+
 #### Audio Backends
 
 The `audio_backend` option controls how librespot outputs audio. Only `"subprocess"` enables audio-reactive visualizers.

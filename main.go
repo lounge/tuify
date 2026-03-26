@@ -129,7 +129,7 @@ func main() {
 				time.Sleep(2 * time.Second)
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				devID, err := client.FindDevice(ctx)
+				devID, _, err := client.FindDevice(ctx)
 				if err != nil {
 					log.Printf("[librespot] reconnect: could not find device: %v", err)
 					return
