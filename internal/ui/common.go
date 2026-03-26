@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -64,6 +65,17 @@ func newList(width, height int, vimMode bool) list.Model {
 		l.KeyMap.NextPage.SetKeys("right", "pgdown", "f")
 	}
 	return l
+}
+
+func isPlayableURI(uri string) bool {
+	return strings.HasPrefix(uri, "spotify:track:") || strings.HasPrefix(uri, "spotify:episode:")
+}
+
+func idFromURI(uri string) string {
+	if i := strings.LastIndex(uri, ":"); i >= 0 {
+		return uri[i+1:]
+	}
+	return uri
 }
 
 func formatDuration(d time.Duration) string {

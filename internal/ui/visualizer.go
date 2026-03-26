@@ -307,13 +307,3 @@ func (m *visualizerModel) View(width, height int) string {
 	return m.viz().View(width, height)
 }
 
-func isPlayableURI(uri string) bool {
-	return strings.HasPrefix(uri, "spotify:track:") || strings.HasPrefix(uri, "spotify:episode:")
-}
-
-func idFromURI(uri string) string {
-	if i := strings.LastIndex(uri, ":"); i >= 0 {
-		return uri[i+1:]
-	}
-	return uri
-}
