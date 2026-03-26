@@ -20,6 +20,65 @@ import (
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
 
+// asyncLoader manages a buffered channel for a background fetch with optional
+// cancellation. Both the image and lyrics loaders share this lifecycle.
+type asyncLoader[R any] struct {
+	ch     chan R
+	cancel context.CancelFunc
+}
+
+func newAsyncLoader[R any]() asyncLoader[R] {
+	return asyncLoader[R]{ch: make(chan R, 1)}
+}
+
+// drain reads all available results and calls fn for each.
+func (l *asyncLoader[R]) drain(fn func(R)) {
+	for {
+		select {
+		case r := <-l.ch:
+			fn(r)
+		default:
+			return
+		}
+	}
+}
+
+// cancelPending cancels any in-flight operation and drains stale results.
+func (l *asyncLoader[R]) cancelPending() {
+	if l.cancel != nil {
+		l.cancel()
+		l.cancel = nil
+	}
+}
+
+// boundedCache is a map that evicts all entries except the current key when full.
+type boundedCache[K comparable, V any] struct {
+	m   map[K]V
+	cap int
+}
+
+func newBoundedCache[K comparable, V any](cap int) boundedCache[K, V] {
+	return boundedCache[K, V]{m: make(map[K]V), cap: cap}
+}
+
+func (c *boundedCache[K, V]) get(key K) (V, bool) {
+	v, ok := c.m[key]
+	return v, ok
+}
+
+// put stores val under key. If the cache is full, all entries except keepKey
+// are evicted first.
+func (c *boundedCache[K, V]) put(key K, val V, keepKey K) {
+	if len(c.m) >= c.cap {
+		keep, ok := c.m[keepKey]
+		c.m = make(map[K]V)
+		if ok {
+			c.m[keepKey] = keep
+		}
+	}
+	c.m[key] = val
+}
+
 type vizTickMsg struct{}
 
 type fetchResult struct {
@@ -41,17 +100,16 @@ type cachedLyrics struct {
 }
 
 type visualizerModel struct {
-	active         bool
-	trackID        string
-	vizList        []visualizers.Visualizer
-	vizIdx         int
-	imageURL       string
-	imageCache     map[string]image.Image
-	imageCh        chan fetchResult
-	lyricsCh       chan lyricsFetchResult
-	lyricsCache    map[string]cachedLyrics
-	lyricsCancel   context.CancelFunc // cancels the in-flight lyrics fetch
-	audioRecv      *audio.Receiver
+	active      bool
+	trackID     string
+	vizList     []visualizers.Visualizer
+	vizIdx      int
+	imageURL    string
+	images      asyncLoader[fetchResult]
+	imageCache  boundedCache[string, image.Image]
+	lyrics      asyncLoader[lyricsFetchResult]
+	lyricsCache boundedCache[string, cachedLyrics]
+	audioRecv   *audio.Receiver
 }
 
 func newVisualizerModel(hasAudio bool) *visualizerModel {
@@ -76,10 +134,10 @@ func newVisualizerModel(hasAudio bool) *visualizerModel {
 	}
 	return &visualizerModel{
 		vizList:     vizList,
-		imageCache:  make(map[string]image.Image),
-		imageCh:     make(chan fetchResult, 1),
-		lyricsCh:    make(chan lyricsFetchResult, 1),
-		lyricsCache: make(map[string]cachedLyrics),
+		images:      newAsyncLoader[fetchResult](),
+		imageCache:  newBoundedCache[string, image.Image](20),
+		lyrics:      newAsyncLoader[lyricsFetchResult](),
+		lyricsCache: newBoundedCache[string, cachedLyrics](20),
 	}
 }
 
@@ -93,8 +151,8 @@ func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track
 		return nil
 	}
 	m.active = true
-	m.drainImageCh()
-	m.drainLyricsCh()
+	m.drainImages()
+	m.drainLyrics()
 	if trackID != m.trackID {
 		m.trackID = trackID
 		for _, v := range m.vizList {
@@ -113,8 +171,8 @@ func (m *visualizerModel) tick() tea.Cmd {
 }
 
 func (m *visualizerModel) advance(progressMs int) {
-	m.drainImageCh()
-	m.drainLyricsCh()
+	m.drainImages()
+	m.drainLyrics()
 	v := m.viz()
 	if m.audioRecv != nil {
 		if aa, ok := v.(visualizers.AudioAware); ok {
@@ -139,94 +197,7 @@ func (m *visualizerModel) onTrackChange(trackID string, durationMs int, track, a
 	m.loadLyrics(trackID, track, artist)
 }
 
-func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
-	// Cancel any in-flight fetch so its result doesn't block the channel.
-	if m.lyricsCancel != nil {
-		m.lyricsCancel()
-		m.lyricsCancel = nil
-	}
-	m.drainLyricsCh()
-
-	if cached, ok := m.lyricsCache[trackID]; ok {
-		if cached.instrumental {
-			m.setInstrumentalOnAware()
-		} else {
-			m.setLyricsOnAware(cached.lines)
-		}
-		return
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	m.lyricsCancel = cancel
-	ch := m.lyricsCh
-	go func() {
-		defer cancel()
-		text, err := lyrics.Search(ctx, httpClient, track, artist)
-		res := lyricsFetchResult{trackID: trackID, err: err}
-		if errors.Is(err, lyrics.ErrInstrumental) {
-			res.instrumental = true
-			res.err = nil
-		} else if err == nil && text != "" {
-			res.lines = strings.Split(text, "\n")
-		}
-		select {
-		case ch <- res:
-		default:
-			log.Printf("[visualizer] lyrics result dropped for %s (channel full)", trackID)
-		}
-	}()
-}
-
-func (m *visualizerModel) drainLyricsCh() {
-	for {
-		select {
-		case result := <-m.lyricsCh:
-			if result.err != nil {
-				log.Printf("[visualizer] lyrics fetch error for %s: %v", result.trackID, result.err)
-				if result.trackID == m.trackID {
-					m.setLyricsOnAware(nil)
-				}
-				continue
-			}
-			if len(m.lyricsCache) >= 20 {
-				cur, hasCur := m.lyricsCache[m.trackID]
-				m.lyricsCache = make(map[string]cachedLyrics)
-				if hasCur {
-					m.lyricsCache[m.trackID] = cur
-				}
-			}
-			m.lyricsCache[result.trackID] = cachedLyrics{
-				lines:        result.lines,
-				instrumental: result.instrumental,
-			}
-			if result.trackID == m.trackID {
-				if result.instrumental {
-					m.setInstrumentalOnAware()
-				} else {
-					m.setLyricsOnAware(result.lines)
-				}
-			}
-		default:
-			return
-		}
-	}
-}
-
-func (m *visualizerModel) setLyricsOnAware(lines []string) {
-	for _, v := range m.vizList {
-		if la, ok := v.(visualizers.LyricsAware); ok {
-			la.SetLyrics(lines)
-		}
-	}
-}
-
-func (m *visualizerModel) setInstrumentalOnAware() {
-	for _, v := range m.vizList {
-		if la, ok := v.(visualizers.LyricsAware); ok {
-			la.SetInstrumental()
-		}
-	}
-}
+// --- Image loading ---
 
 func (m *visualizerModel) loadImage(imageURL string) {
 	if imageURL == "" {
@@ -235,12 +206,12 @@ func (m *visualizerModel) loadImage(imageURL string) {
 		return
 	}
 	m.imageURL = imageURL
-	if img, ok := m.imageCache[imageURL]; ok {
+	if img, ok := m.imageCache.get(imageURL); ok {
 		m.setImageOnAware(img)
 		return
 	}
 	url := imageURL
-	ch := m.imageCh
+	ch := m.images.ch
 	go func() {
 		resp, err := httpClient.Get(url)
 		if err != nil {
@@ -259,32 +230,20 @@ func (m *visualizerModel) loadImage(imageURL string) {
 	}()
 }
 
-func (m *visualizerModel) drainImageCh() {
-	for {
-		select {
-		case result := <-m.imageCh:
-			if result.err != nil {
-				log.Printf("[visualizer] image fetch error for %s: %v", result.url, result.err)
-				continue
-			}
-			if result.img == nil {
-				continue
-			}
-			if len(m.imageCache) >= 20 {
-				cur := m.imageCache[m.imageURL]
-				m.imageCache = make(map[string]image.Image)
-				if cur != nil {
-					m.imageCache[m.imageURL] = cur
-				}
-			}
-			m.imageCache[result.url] = result.img
-			if result.url == m.imageURL {
-				m.setImageOnAware(result.img)
-			}
-		default:
+func (m *visualizerModel) drainImages() {
+	m.images.drain(func(r fetchResult) {
+		if r.err != nil {
+			log.Printf("[visualizer] image fetch error for %s: %v", r.url, r.err)
 			return
 		}
-	}
+		if r.img == nil {
+			return
+		}
+		m.imageCache.put(r.url, r.img, m.imageURL)
+		if r.url == m.imageURL {
+			m.setImageOnAware(r.img)
+		}
+	})
 }
 
 func (m *visualizerModel) setImageOnAware(img image.Image) {
@@ -299,6 +258,81 @@ func (m *visualizerModel) setFallbackImage() {
 	m.setImageOnAware(visualizers.MusicNoteFallback())
 }
 
+// --- Lyrics loading ---
+
+func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
+	m.lyrics.cancelPending()
+	m.drainLyrics()
+
+	if cached, ok := m.lyricsCache.get(trackID); ok {
+		if cached.instrumental {
+			m.setInstrumentalOnAware()
+		} else {
+			m.setLyricsOnAware(cached.lines)
+		}
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	m.lyrics.cancel = cancel
+	ch := m.lyrics.ch
+	go func() {
+		defer cancel()
+		text, err := lyrics.Search(ctx, httpClient, track, artist)
+		res := lyricsFetchResult{trackID: trackID, err: err}
+		if errors.Is(err, lyrics.ErrInstrumental) {
+			res.instrumental = true
+			res.err = nil
+		} else if err == nil && text != "" {
+			res.lines = strings.Split(text, "\n")
+		}
+		select {
+		case ch <- res:
+		default:
+			log.Printf("[visualizer] lyrics result dropped for %s (channel full)", trackID)
+		}
+	}()
+}
+
+func (m *visualizerModel) drainLyrics() {
+	m.lyrics.drain(func(r lyricsFetchResult) {
+		if r.err != nil {
+			log.Printf("[visualizer] lyrics fetch error for %s: %v", r.trackID, r.err)
+			if r.trackID == m.trackID {
+				m.setLyricsOnAware(nil)
+			}
+			return
+		}
+		m.lyricsCache.put(r.trackID, cachedLyrics{
+			lines:        r.lines,
+			instrumental: r.instrumental,
+		}, m.trackID)
+		if r.trackID == m.trackID {
+			if r.instrumental {
+				m.setInstrumentalOnAware()
+			} else {
+				m.setLyricsOnAware(r.lines)
+			}
+		}
+	})
+}
+
+func (m *visualizerModel) setLyricsOnAware(lines []string) {
+	for _, v := range m.vizList {
+		if la, ok := v.(visualizers.LyricsAware); ok {
+			la.SetLyrics(lines)
+		}
+	}
+}
+
+func (m *visualizerModel) setInstrumentalOnAware() {
+	for _, v := range m.vizList {
+		if la, ok := v.(visualizers.LyricsAware); ok {
+			la.SetInstrumental()
+		}
+	}
+}
+
 func (m *visualizerModel) View(width, height int) string {
 	if m.trackID == "" {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
@@ -306,4 +340,3 @@ func (m *visualizerModel) View(width, height int) string {
 	}
 	return m.viz().View(width, height)
 }
-
