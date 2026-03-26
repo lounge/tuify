@@ -52,8 +52,8 @@ type Model struct {
 	tracks     trackView
 	podcasts   podcastView
 	episodes   episodeView
-	nowPlaying nowPlayingModel
-	visualizer visualizerModel
+	nowPlaying *nowPlayingModel
+	visualizer *visualizerModel
 	client     *spotify.Client
 	deviceID   string
 	width      int
@@ -295,8 +295,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.nowPlaying.shufflePending = false
 				m.nowPlaying.shuffling = !m.nowPlaying.shuffling
 			}
-			var errCmd tea.Cmd
-			m.nowPlaying, errCmd = m.nowPlaying.SetError(msg.err.Error())
+			errCmd := m.nowPlaying.SetError(msg.err.Error())
 			if msg.seek {
 				return m, tea.Batch(
 					errCmd,
@@ -333,8 +332,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Update now-playing
 	prevURI := m.nowPlaying.trackURI
-	var cmd tea.Cmd
-	m.nowPlaying, cmd = m.nowPlaying.Update(msg)
+	cmd := m.nowPlaying.Update(msg)
 	if cmd != nil {
 		cmds = append(cmds, cmd)
 	}

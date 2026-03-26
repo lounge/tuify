@@ -44,8 +44,8 @@ func (m *nowPlayingModel) recordUserAction() {
 	m.lastUserAction = time.Now()
 }
 
-func newNowPlaying(client *spotify.Client) nowPlayingModel {
-	return nowPlayingModel{client: client}
+func newNowPlaying(client *spotify.Client) *nowPlayingModel {
+	return &nowPlayingModel{client: client}
 }
 
 func (m nowPlayingModel) Init() tea.Cmd {
@@ -89,12 +89,12 @@ func (m nowPlayingModel) pollState() tea.Cmd {
 	}
 }
 
-func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
+func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 	switch msg := msg.(type) {
 	case playerStateMsg:
 		if msg.err != nil {
 			log.Printf("[poll] GetPlayerState error: %v", msg.err)
-			return m, nil
+			return nil
 		}
 		if msg.state != nil {
 			prevURI := m.trackURI
@@ -153,10 +153,10 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 		} else {
 			m.hasTrack = false
 		}
-		return m, nil
+		return nil
 
 	case nowPlayingTickMsg:
-		return m, tea.Batch(m.pollState(), m.tick())
+		return tea.Batch(m.pollState(), m.tick())
 
 	case progressTickMsg:
 		cmds := []tea.Cmd{m.progressTick()}
@@ -167,25 +167,25 @@ func (m nowPlayingModel) Update(msg tea.Msg) (nowPlayingModel, tea.Cmd) {
 				cmds = append(cmds, m.pollState())
 			}
 		}
-		return m, tea.Batch(cmds...)
+		return tea.Batch(cmds...)
 
 	case delayedPollMsg:
-		return m, m.pollState()
+		return m.pollState()
 
 	case clearErrorMsg:
 		m.errMsg = ""
-		return m, nil
+		return nil
 	}
-	return m, nil
+	return nil
 }
 
 func (m nowPlayingModel) progressBarView() string {
 	return renderProgressBar(m.width, m.progressMs, m.durationMs)
 }
 
-func (m nowPlayingModel) SetError(msg string) (nowPlayingModel, tea.Cmd) {
+func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
 	m.errMsg = msg
-	return m, tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
+	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return clearErrorMsg{}
 	})
 }

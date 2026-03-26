@@ -54,7 +54,7 @@ type visualizerModel struct {
 	audioRecv      *audio.Receiver
 }
 
-func newVisualizerModel(hasAudio bool) visualizerModel {
+func newVisualizerModel(hasAudio bool) *visualizerModel {
 	var vizList []visualizers.Visualizer
 	if hasAudio {
 		vizList = []visualizers.Visualizer{
@@ -74,7 +74,7 @@ func newVisualizerModel(hasAudio bool) visualizerModel {
 			visualizers.NewLyrics(),
 		}
 	}
-	return visualizerModel{
+	return &visualizerModel{
 		vizList:     vizList,
 		imageCache:  make(map[string]image.Image),
 		imageCh:     make(chan fetchResult, 1),
@@ -106,7 +106,7 @@ func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track
 	return m.tick()
 }
 
-func (m visualizerModel) tick() tea.Cmd {
+func (m *visualizerModel) tick() tea.Cmd {
 	return tea.Tick(33*time.Millisecond, func(t time.Time) tea.Msg {
 		return vizTickMsg{}
 	})
@@ -304,7 +304,7 @@ func (m *visualizerModel) setFallbackImage() {
 	m.setImageOnAware(visualizers.MusicNoteFallback())
 }
 
-func (m visualizerModel) View(width, height int) string {
+func (m *visualizerModel) View(width, height int) string {
 	if m.trackID == "" {
 		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
 			loadingStyle.Render("No track"))
