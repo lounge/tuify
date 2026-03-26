@@ -52,9 +52,10 @@ type Process struct {
 	stopCh   chan struct{} // closed when Stop() is called to suppress restart
 	stopped  bool
 
-	// Broken session detection: an audio key timeout followed by spirc
-	// shutdown means librespot is stuck in a non-functional state.
+	// Broken session detection: an audio key timeout combined with spirc
+	// shutdown (in either order) means librespot is stuck.
 	sawAudioKeyErr bool
+	sawSpirc       bool
 }
 
 // NewProcess creates a new Process with the given configuration.
@@ -129,6 +130,7 @@ func (p *Process) launch() error {
 	}
 
 	p.sawAudioKeyErr = false
+	p.sawSpirc = false
 
 	go pipeLog("[librespot:out]", stdout, nil)
 	go pipeLog("[librespot:err]", stderr, p.monitorStderr)
@@ -232,46 +234,37 @@ func (p *Process) Stop() error {
 }
 
 // monitorStderr detects broken sessions where librespot reconnects internally
-// but can't play audio. Two known sequences trigger a kill for clean restart:
-//
-//  1. audio key timeout → spirc shutdown (librespot stuck before reconnect)
-//  2. spirc shutdown → reconnect → audio key timeout → playback failure
-//     ("end of stream" / "Unable to read audio file")
+// but can't play audio. A kill is triggered when both an audio key timeout and
+// a spirc shutdown are seen (in either order), or when "Unable to read audio
+// file" follows an audio key timeout.
 func (p *Process) monitorStderr(line string) {
-	if strings.Contains(line, "Audio key response timeout") {
-		p.mu.Lock()
-		p.sawAudioKeyErr = true
-		p.mu.Unlock()
-		return
-	}
-
-	if strings.Contains(line, "Spirc shut down unexpectedly") {
-		p.killIfAudioKeyErr("audio key timeout + spirc shutdown")
-		return
-	}
-
-	if strings.Contains(line, "Unable to read audio file") {
-		p.killIfAudioKeyErr("audio key timeout + playback failure")
-	}
-}
-
-// killIfAudioKeyErr kills the process if a preceding audio key error was seen,
-// triggering a clean restart via scheduleRestart.
-func (p *Process) killIfAudioKeyErr(reason string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if !p.sawAudioKeyErr {
+	if strings.Contains(line, "Audio key response timeout") {
+		p.sawAudioKeyErr = true
+	}
+	if strings.Contains(line, "Spirc shut down unexpectedly") {
+		p.sawSpirc = true
+	}
+
+	var reason string
+	switch {
+	case p.sawAudioKeyErr && p.sawSpirc:
+		reason = "audio key timeout + spirc shutdown"
+	case p.sawAudioKeyErr && strings.Contains(line, "Unable to read audio file"):
+		reason = "audio key timeout + playback failure"
+	default:
 		return
 	}
+
 	p.sawAudioKeyErr = false
+	p.sawSpirc = false
 
-	if p.cmd == nil || p.cmd.Process == nil {
-		return
+	if p.cmd != nil && p.cmd.Process != nil {
+		log.Printf("[librespot] broken session detected (%s) — killing for clean restart", reason)
+		_ = p.cmd.Process.Kill()
 	}
-
-	log.Printf("[librespot] broken session detected (%s) — killing for clean restart", reason)
-	_ = p.cmd.Process.Kill()
 }
 
 // pipeLog reads lines from r and writes them to the log with the given prefix.
