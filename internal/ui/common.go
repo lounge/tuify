@@ -279,13 +279,13 @@ func newList(width, height int, vimMode bool) list.Model {
 }
 
 func removeStatusItems(items []list.Item) []list.Item {
-	filtered := items[:0]
+	out := make([]list.Item, 0, len(items))
 	for _, item := range items {
 		if _, ok := item.(statusItem); !ok {
-			filtered = append(filtered, item)
+			out = append(out, item)
 		}
 	}
-	return filtered
+	return out
 }
 
 func formatDuration(d time.Duration) string {
