@@ -126,7 +126,10 @@ func (c *Client) FetchUserID(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) ([]Playlist, int, bool, error) {
+// GetPlaylists returns the user's own playlists. The second return value (rawCount)
+// is the unfiltered API page size, which callers must use to advance the offset
+// (since it includes items filtered out by owner matching).
+func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) (playlists []Playlist, rawCount int, hasMore bool, err error) {
 	url := fmt.Sprintf("https://api.spotify.com/v1/me/playlists?limit=%d&offset=%d", limit, offset)
 	var page struct {
 		Offset int `json:"offset"`
@@ -146,20 +149,19 @@ func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) ([]Playlis
 	if err := c.apiGet(ctx, url, &page); err != nil {
 		return nil, 0, false, err
 	}
-	var playlists []Playlist
+	var result []Playlist
 	for _, p := range page.Items {
 		if c.userID != "" && p.Owner.ID != c.userID {
 			continue
 		}
-		playlists = append(playlists, Playlist{
+		result = append(result, Playlist{
 			ID:         p.ID,
 			Name:       p.Name,
 			OwnerName:  p.Owner.DisplayName,
 			TrackCount: p.Items.Total,
 		})
 	}
-	hasMore := page.Offset+len(page.Items) < page.Total
-	return playlists, len(page.Items), hasMore, nil
+	return result, len(page.Items), page.Offset+len(page.Items) < page.Total, nil
 }
 
 func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit int) ([]Track, bool, error) {
