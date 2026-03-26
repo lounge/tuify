@@ -15,8 +15,8 @@ import (
 )
 
 type Client struct {
-	sp              *sp.Client
-	http            *http.Client
+	sp         *sp.Client
+	httpClient *http.Client
 	userID          string
 	PreferredDevice string // if set, FindDevice prefers this device name
 }
@@ -112,7 +112,7 @@ type rawEpisode struct {
 }
 
 func New(spClient *sp.Client, httpClient *http.Client) *Client {
-	return &Client{sp: spClient, http: httpClient}
+	return &Client{sp: spClient, httpClient: httpClient}
 }
 
 func (c *Client) FetchUserID(ctx context.Context) error {
@@ -498,7 +498,7 @@ func (c *Client) FindDevice(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if len(devices) == 0 {
-		return "", fmt.Errorf("No Spotify devices found — open Spotify on any device")
+		return "", fmt.Errorf("no Spotify devices found — open Spotify on any device")
 	}
 	// Prefer the configured device (e.g., librespot's "tuify").
 	if c.PreferredDevice != "" {
@@ -524,7 +524,7 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		if err != nil {
 			return nil, 0, err
 		}
-		resp, err := c.http.Do(req)
+		resp, err := c.httpClient.Do(req)
 		if err != nil {
 			return nil, 0, err
 		}

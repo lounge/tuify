@@ -13,11 +13,11 @@ import (
 // The handler receives all requests. The returned cleanup function must be deferred.
 func newTestClient(handler http.HandlerFunc) (*Client, func()) {
 	srv := httptest.NewServer(handler)
-	c := &Client{http: srv.Client()}
+	c := &Client{httpClient: srv.Client()}
 	// Rewrite base URL: apiGet uses full URLs, so we patch doWithRetry via a custom http client
 	// that redirects all requests to the test server.
 	transport := &rewriteTransport{base: srv.Client().Transport, target: srv.URL}
-	c.http = &http.Client{Transport: transport}
+	c.httpClient = &http.Client{Transport: transport}
 	return c, srv.Close
 }
 

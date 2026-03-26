@@ -159,7 +159,6 @@ const (
 	restartMaxDelay  = 30 * time.Second
 	stableThreshold  = 60 * time.Second
 	stopTimeout      = 5 * time.Second
-
 )
 
 // scheduleRestart handles automatic restart with linear backoff.

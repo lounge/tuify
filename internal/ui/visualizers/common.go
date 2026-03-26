@@ -82,7 +82,7 @@ func hslToRGB(h, s, l float64) (int, int, int) {
 		clamp(int((b+m)*255), 0, 255)
 }
 
-// ansiColorStr returns a direct ANSI 24-bit foreground escape for the given color.
+// ansiFg returns a direct ANSI 24-bit foreground escape for the given color.
 func ansiFg(r, g, b int) string {
 	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
 }
