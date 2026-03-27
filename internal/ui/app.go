@@ -18,6 +18,8 @@ const (
 	breadcrumbHeight = 2
 )
 
+// Messages
+
 type seekFireMsg struct {
 	seq   int
 	posMs int
@@ -37,6 +39,8 @@ type searchCtx struct {
 	play     func(list.Item) tea.Cmd
 	onChange func() tea.Cmd
 }
+
+// Model
 
 type Model struct {
 	viewStack  []view
@@ -85,234 +89,247 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 	return m
 }
 
-func (m Model) currentView() view {
-	return m.viewStack[len(m.viewStack)-1]
-}
-
-func (m *Model) pushView(v view) {
-	m.viewStack = append(m.viewStack, v)
-}
-
-func (m *Model) popView() {
-	if len(m.viewStack) > 1 {
-		m.viewStack = m.viewStack[:len(m.viewStack)-1]
-	}
-}
+// Lifecycle
 
 func (m Model) Init() tea.Cmd {
 	return m.nowPlaying.Init()
 }
 
-func (m Model) listHeight() int {
-	return m.height - nowPlayingHeight - breadcrumbHeight
-}
-
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmds []tea.Cmd
-
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
-		m.nowPlaying.width = msg.Width
-		for _, v := range m.viewStack {
-			h := m.height - nowPlayingHeight
-			if v.Breadcrumb() != "" {
-				h -= breadcrumbHeight
-			}
-			v.SetSize(msg.Width, h)
-		}
-		return m, nil
-
+		return m.handleResize(msg)
 	case tea.KeyMsg:
-		// Search input: API search with debounce
-		if sv, ok := m.currentView().(*searchView); ok && sv.searching {
-			sc := searchCtx{
-				query: &sv.searchQuery,
-				list:  &sv.list,
-				close: func() { sv.closeSearch() },
-				play: func(item list.Item) tea.Cmd {
-					// For container items, drill down instead of playing.
-					if !sv.isPlayable() {
-						return sv.drillDown(item)
-					}
-					return sv.playSelected(&m, item)
-				},
-				onChange: func() tea.Cmd {
-					sv.debounceSeq++
-					_, term := parseSearch(sv.searchQuery)
-					if len([]rune(term)) >= 2 {
-						return sv.debounce()
-					}
-					return nil
-				},
-			}
-			if cmd, handled := handleSearchKey(sc, msg); handled {
-				return m, cmd
-			}
-			break
-		}
+		return m.handleKeyMsg(msg)
+	case playbackResultMsg:
+		return m.handlePlaybackResult(msg)
+	case vizTickMsg:
+		return m.handleVizTick()
+	case episodeResumeMsg:
+		return m.handleEpisodeResume(msg)
+	case seekFireMsg:
+		return m.handleSeekFire(msg)
+	}
 
-		// Search input: local filter
-		sl := m.searchableList()
-		if sl != nil && sl.searching {
-			sc := searchCtx{
-				query: &sl.searchQuery,
-				list:  &sl.list,
-				close: func() { sl.closeSearch() },
-				play: func(item list.Item) tea.Cmd {
-					if e, ok := m.currentView().(enterable); ok {
-						return e.OnEnter(&m)
-					}
-					return nil
-				},
-				onChange: func() tea.Cmd {
-					sl.applyFilter()
-					return nil
-				},
-			}
-			if cmd, handled := handleSearchKey(sc, msg); handled {
-				return m, cmd
-			}
-			break
-		}
+	return m.handleStateUpdate(msg)
+}
 
-		// Vim-only bindings (before standard dispatch).
-		if m.vimMode {
-			switch msg.String() {
-			case "h":
-				return m.handleBack()
-			case "l":
-				return m.handleEnter()
-			case ",":
-				m.nowPlaying.recordUserAction()
-				return m, m.seekRelative(-5000)
-			case ".":
-				m.nowPlaying.recordUserAction()
-				return m, m.seekRelative(5000)
-			case "ctrl+d":
-				return m.halfPage(1)
-			case "ctrl+u":
-				return m.halfPage(-1)
-			}
-		}
+// Message handlers
 
+func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
+	m.width = msg.Width
+	m.height = msg.Height
+	m.nowPlaying.width = msg.Width
+	for _, v := range m.viewStack {
+		h := m.height - nowPlayingHeight
+		if v.Breadcrumb() != "" {
+			h -= breadcrumbHeight
+		}
+		v.SetSize(msg.Width, h)
+	}
+	return m, nil
+}
+
+func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Search input: API search with debounce
+	if sv, ok := m.currentView().(*searchView); ok && sv.searching {
+		sc := searchCtx{
+			query: &sv.searchQuery,
+			list:  &sv.list,
+			close: func() { sv.closeSearch() },
+			play: func(item list.Item) tea.Cmd {
+				// For container items, drill down instead of playing.
+				if !sv.isPlayable() {
+					return sv.drillDown(item)
+				}
+				return sv.playSelected(&m, item)
+			},
+			onChange: func() tea.Cmd {
+				sv.debounceSeq++
+				_, term := parseSearch(sv.searchQuery)
+				if len([]rune(term)) >= 2 {
+					return sv.debounce()
+				}
+				return nil
+			},
+		}
+		if cmd, handled := handleSearchKey(sc, msg); handled {
+			return m, cmd
+		}
+		return m.handleStateUpdate(msg)
+	}
+
+	// Search input: local filter
+	sl := m.searchableList()
+	if sl != nil && sl.searching {
+		sc := searchCtx{
+			query: &sl.searchQuery,
+			list:  &sl.list,
+			close: func() { sl.closeSearch() },
+			play: func(item list.Item) tea.Cmd {
+				if e, ok := m.currentView().(enterable); ok {
+					return e.OnEnter(&m)
+				}
+				return nil
+			},
+			onChange: func() tea.Cmd {
+				sl.applyFilter()
+				return nil
+			},
+		}
+		if cmd, handled := handleSearchKey(sc, msg); handled {
+			return m, cmd
+		}
+		return m.handleStateUpdate(msg)
+	}
+
+	// Vim-only bindings (before standard dispatch).
+	if m.vimMode {
 		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case " ":
-			m.nowPlaying.recordUserAction()
-			wasPlaying := m.nowPlaying.playing
-			m.nowPlaying.playing = !wasPlaying
-			m.nowPlaying.playPausePending = true
-			return m, m.togglePlayPause(wasPlaying)
-		case "n":
-			m.nowPlaying.recordUserAction()
-			return m, m.nextTrack()
-		case "p":
-			m.nowPlaying.recordUserAction()
-			return m, m.previousTrack()
-		case "r":
-			m.nowPlaying.recordUserAction()
-			newShuffle := !m.nowPlaying.shuffling
-			m.nowPlaying.shuffling = newShuffle
-			m.nowPlaying.shufflePending = true
-			return m, m.toggleShuffle(newShuffle)
-		case "s":
-			m.nowPlaying.recordUserAction()
-			return m, m.stopPlayback()
-		case "a":
+		case "h":
+			return m.handleBack()
+		case "l":
+			return m.handleEnter()
+		case ",":
 			m.nowPlaying.recordUserAction()
 			return m, m.seekRelative(-5000)
-		case "d":
+		case ".":
 			m.nowPlaying.recordUserAction()
 			return m, m.seekRelative(5000)
-		case "v":
-			if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
-				cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
-				return m, cmd
-			}
-			return m, nil
-		case "left":
-			if m.visualizer.active {
-				m.visualizer.cycle(-1)
-				return m, nil
-			}
-		case "right":
-			if m.visualizer.active {
-				m.visualizer.cycle(1)
-				return m, nil
-			}
-		case "esc":
-			return m.handleBack()
-		case "enter":
-			return m.handleEnter()
-		case "/":
-			if sv, ok := m.currentView().(*searchView); ok {
-				sv.openSearch()
-				return m, nil
-			}
-			if sl != nil {
-				if sl.openSearch() {
-					return m, m.fetchSearchableView()
-				}
-				return m, nil
-			}
+		case "ctrl+d":
+			return m.halfPage(1)
+		case "ctrl+u":
+			return m.halfPage(-1)
 		}
+	}
 
-	case playbackResultMsg:
-		if msg.seek {
-			m.nowPlaying.seekPending = false
-		}
-		if msg.err != nil {
-			if m.nowPlaying.playPausePending {
-				m.nowPlaying.playPausePending = false
-				m.nowPlaying.playing = !m.nowPlaying.playing
-			}
-			if m.nowPlaying.shufflePending {
-				m.nowPlaying.shufflePending = false
-				m.nowPlaying.shuffling = !m.nowPlaying.shuffling
-			}
-			errCmd := m.nowPlaying.SetError(msg.err.Error())
-			if msg.seek {
-				return m, tea.Batch(
-					errCmd,
-					tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
-				)
-			}
-			return m, errCmd
-		}
-		if msg.seek {
-			return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
-		}
-		// Staggered polls to catch the update once the API reflects the change.
-		return m, tea.Batch(
-			tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
-			tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
-		)
-
-	case vizTickMsg:
-		if m.visualizer.active {
-			m.visualizer.advance(m.nowPlaying.progressMs)
-			return m, m.visualizer.tick()
+	switch msg.String() {
+	case "ctrl+c", "q":
+		return m, tea.Quit
+	case " ":
+		m.nowPlaying.recordUserAction()
+		wasPlaying := m.nowPlaying.playing
+		m.nowPlaying.playing = !wasPlaying
+		m.nowPlaying.playPausePending = true
+		return m, m.togglePlayPause(wasPlaying)
+	case "n":
+		m.nowPlaying.recordUserAction()
+		return m, m.nextTrack()
+	case "p":
+		m.nowPlaying.recordUserAction()
+		return m, m.previousTrack()
+	case "r":
+		m.nowPlaying.recordUserAction()
+		newShuffle := !m.nowPlaying.shuffling
+		m.nowPlaying.shuffling = newShuffle
+		m.nowPlaying.shufflePending = true
+		return m, m.toggleShuffle(newShuffle)
+	case "s":
+		m.nowPlaying.recordUserAction()
+		return m, m.stopPlayback()
+	case "a":
+		m.nowPlaying.recordUserAction()
+		return m, m.seekRelative(-5000)
+	case "d":
+		m.nowPlaying.recordUserAction()
+		return m, m.seekRelative(5000)
+	case "v":
+		if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
+			cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
+			return m, cmd
 		}
 		return m, nil
-
-	case episodeResumeMsg:
-		posMs := msg.posMs
-		return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
-			return c.Seek(ctx, posMs, id)
-		}, true)
-
-	case seekFireMsg:
-		if msg.seq != m.seekSeq {
-			return m, nil // outdated, a newer seek superseded this one
+	case "left":
+		if m.visualizer.active {
+			m.visualizer.cycle(-1)
+			return m, nil
 		}
-		posMs := msg.posMs
-		return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
-			return c.Seek(ctx, posMs, id)
-		}, true)
+	case "right":
+		if m.visualizer.active {
+			m.visualizer.cycle(1)
+			return m, nil
+		}
+	case "esc":
+		return m.handleBack()
+	case "enter":
+		return m.handleEnter()
+	case "/":
+		if sv, ok := m.currentView().(*searchView); ok {
+			sv.openSearch()
+			return m, nil
+		}
+		if sl != nil {
+			if sl.openSearch() {
+				return m, m.fetchSearchableView()
+			}
+			return m, nil
+		}
 	}
+
+	return m.handleStateUpdate(msg)
+}
+
+func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) {
+	if msg.seek {
+		m.nowPlaying.seekPending = false
+	}
+	if msg.err != nil {
+		if m.nowPlaying.playPausePending {
+			m.nowPlaying.playPausePending = false
+			m.nowPlaying.playing = !m.nowPlaying.playing
+		}
+		if m.nowPlaying.shufflePending {
+			m.nowPlaying.shufflePending = false
+			m.nowPlaying.shuffling = !m.nowPlaying.shuffling
+		}
+		errCmd := m.nowPlaying.SetError(msg.err.Error())
+		if msg.seek {
+			return m, tea.Batch(
+				errCmd,
+				tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
+			)
+		}
+		return m, errCmd
+	}
+	if msg.seek {
+		return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
+	}
+	// Staggered polls to catch the update once the API reflects the change.
+	return m, tea.Batch(
+		tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
+		tea.Tick(2*time.Second, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
+	)
+}
+
+func (m Model) handleVizTick() (tea.Model, tea.Cmd) {
+	if m.visualizer.active {
+		m.visualizer.advance(m.nowPlaying.progressMs)
+		return m, m.visualizer.tick()
+	}
+	return m, nil
+}
+
+func (m Model) handleEpisodeResume(msg episodeResumeMsg) (tea.Model, tea.Cmd) {
+	posMs := msg.posMs
+	return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
+		return c.Seek(ctx, posMs, id)
+	}, true)
+}
+
+func (m Model) handleSeekFire(msg seekFireMsg) (tea.Model, tea.Cmd) {
+	if msg.seq != m.seekSeq {
+		return m, nil // outdated, a newer seek superseded this one
+	}
+	posMs := msg.posMs
+	return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
+		return c.Seek(ctx, posMs, id)
+	}, true)
+}
+
+// handleStateUpdate processes now-playing, visualizer, and view updates.
+// Called for messages not fully consumed by other handlers.
+func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var cmds []tea.Cmd
 
 	// Update now-playing
 	prevURI := m.nowPlaying.trackURI
@@ -346,6 +363,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// Navigation
+
 func (m Model) handleBack() (tea.Model, tea.Cmd) {
 	if m.visualizer.active {
 		m.visualizer.active = false
@@ -357,6 +376,13 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 		}
 	}
 	m.popView()
+	return m, nil
+}
+
+func (m Model) handleEnter() (tea.Model, tea.Cmd) {
+	if e, ok := m.currentView().(enterable); ok {
+		return m, e.OnEnter(&m)
+	}
 	return m, nil
 }
 
@@ -380,6 +406,26 @@ func (m Model) halfPage(dir int) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// View helpers
+
+func (m Model) currentView() view {
+	return m.viewStack[len(m.viewStack)-1]
+}
+
+func (m *Model) pushView(v view) {
+	m.viewStack = append(m.viewStack, v)
+}
+
+func (m *Model) popView() {
+	if len(m.viewStack) > 1 {
+		m.viewStack = m.viewStack[:len(m.viewStack)-1]
+	}
+}
+
+func (m Model) listHeight() int {
+	return m.height - nowPlayingHeight - breadcrumbHeight
+}
+
 func (m Model) currentList() *list.Model {
 	if lp, ok := m.currentView().(listProvider); ok {
 		return lp.List()
@@ -387,12 +433,21 @@ func (m Model) currentList() *list.Model {
 	return nil
 }
 
-func (m Model) handleEnter() (tea.Model, tea.Cmd) {
-	if e, ok := m.currentView().(enterable); ok {
-		return m, e.OnEnter(&m)
+func (m *Model) searchableList() *lazyList {
+	if sp, ok := m.currentView().(searchableListProvider); ok {
+		return sp.SearchableList()
 	}
-	return m, nil
+	return nil
 }
+
+func (m Model) fetchSearchableView() tea.Cmd {
+	if sp, ok := m.currentView().(searchableListProvider); ok {
+		return sp.FetchMore()
+	}
+	return nil
+}
+
+// Playback commands
 
 func (m Model) playQueue(uris []string) tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
@@ -404,28 +459,6 @@ func (m Model) playItem(itemURI, contextURI string) tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Play(ctx, itemURI, contextURI, id)
 	}, false)
-}
-
-func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
-	client := m.client
-	trackURI := m.nowPlaying.trackURI
-	contextURI := m.nowPlaying.contextURI
-	return func() tea.Msg {
-		ctx := context.Background()
-		deviceID, active, err := client.FindDevice(ctx)
-		if err != nil {
-			return playbackResultMsg{err: err, seek: seek}
-		}
-		// Re-establish playback context if the preferred device is inactive.
-		if !active && client.PreferredDevice != "" {
-			if contextURI != "" && trackURI != "" {
-				_ = client.Play(ctx, trackURI, contextURI, deviceID)
-			} else {
-				_ = client.TransferPlayback(ctx, deviceID, true)
-			}
-		}
-		return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
-	}
 }
 
 func (m Model) togglePlayPause(wasPlaying bool) tea.Cmd {
@@ -478,19 +511,29 @@ func (m Model) stopPlayback() tea.Cmd {
 	}, false)
 }
 
-func (m *Model) searchableList() *lazyList {
-	if sp, ok := m.currentView().(searchableListProvider); ok {
-		return sp.SearchableList()
+func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
+	client := m.client
+	trackURI := m.nowPlaying.trackURI
+	contextURI := m.nowPlaying.contextURI
+	return func() tea.Msg {
+		ctx := context.Background()
+		deviceID, active, err := client.FindDevice(ctx)
+		if err != nil {
+			return playbackResultMsg{err: err, seek: seek}
+		}
+		// Re-establish playback context if the preferred device is inactive.
+		if !active && client.PreferredDevice != "" {
+			if contextURI != "" && trackURI != "" {
+				_ = client.Play(ctx, trackURI, contextURI, deviceID)
+			} else {
+				_ = client.TransferPlayback(ctx, deviceID, true)
+			}
+		}
+		return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
 	}
-	return nil
 }
 
-func (m Model) fetchSearchableView() tea.Cmd {
-	if sp, ok := m.currentView().(searchableListProvider); ok {
-		return sp.FetchMore()
-	}
-	return nil
-}
+// View
 
 func (m Model) View() string {
 	if m.width == 0 {
