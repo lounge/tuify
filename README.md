@@ -21,9 +21,11 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
   - `l:` Album → Track drill-down
   - `s:` Show → Episode drill-down
 - **Now Playing** — Live progress bar, track info, shuffle state
+- **Episode Resume** — Remembers playback position when switching away from episodes and resumes where you left off
 - **Librespot Integration** — Optional embedded Spotify Connect player via [librespot](https://github.com/librespot-org/librespot), streaming audio directly through tuify.
 - **Audio-Reactive Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and four Milkdrop-style presets — all driven by real-time FFT audio analysis when librespot is enabled (only with **subprocess** backend)
-- **Lyrics** — Fetches and displays lyrics from Genius.com (best-effort match, not always exact)
+- **Lyrics** — Fetches and displays lyrics from Genius.com (best-effort match, not always exact; disabled for podcasts)
+- **Help Overlay** — Press `h` (or `?` in vim mode) to view all keybindings
 
 ## Prerequisites
 
@@ -133,6 +135,7 @@ By default, librespot is compiled with only **rodio**, **pipe**, and **subproces
 | `/` | Search |
 | `v` | Toggle visualizer |
 | `←` / `→` | Cycle visualizers (all 9 with librespot; album art + lyrics without) |
+| `h` | Show help overlay |
 | `q` | Quit |
 
 ### Vim Mode
@@ -153,6 +156,7 @@ All standard keybindings continue to work. Vim mode adds:
 | `g` / `G` | Jump to first / last item |
 | `Ctrl+d` / `Ctrl+u` | Half-page down / up |
 | `,` / `.` | Seek backward / forward |
+| `?` | Show help overlay |
 
 ### Visualizers
 
@@ -222,6 +226,9 @@ tuify/
 ```
 
 ## TODO
+
+- Test on Win
+- Copy track link?
 
 - Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
 
