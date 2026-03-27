@@ -298,6 +298,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case episodeResumeMsg:
+		posMs := msg.posMs
+		return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
+			return c.Seek(ctx, posMs, id)
+		}, true)
+
 	case seekFireMsg:
 		if msg.seq != m.seekSeq {
 			return m, nil // outdated, a newer seek superseded this one

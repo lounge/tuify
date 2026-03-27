@@ -11,52 +11,192 @@ import (
 	"github.com/lounge/tuify/internal/spotify"
 )
 
+// Messages
+
 type playerStateMsg struct {
 	state *spotify.PlayerState
 	err   error
 }
 
-type nowPlayingTickMsg time.Time
-type progressTickMsg time.Time
-type clearErrorMsg struct{}
-type delayedPollMsg struct{}
+type (
+	nowPlayingTickMsg time.Time
+	progressTickMsg   time.Time
+	clearErrorMsg     struct{}
+	delayedPollMsg    struct{}
+	episodeResumeMsg  struct{ posMs int }
+)
+
+// Model
 
 type nowPlayingModel struct {
-	client           *spotify.Client
-	track            string
-	artist           string
-	trackURI         string
-	contextURI       string
-	imageURL         string
-	playing          bool
-	shuffling        bool
-	hasTrack         bool
-	errMsg           string
-	width            int
-	progressMs       int
-	durationMs       int
+	client *spotify.Client
+	width  int
+
+	// Track metadata
+	track      string
+	artist     string
+	trackURI   string
+	contextURI string
+	imageURL   string
+
+	// Playback state
+	playing    bool
+	shuffling  bool
+	hasTrack   bool
+	progressMs int
+	durationMs int
+
+	// Pending optimistic updates awaiting API confirmation
 	seekPending      bool
 	playPausePending bool
 	shufflePending   bool
-	lastUserAction   time.Time // zero value means no action yet; pollInterval treats this as idle
-}
 
-func (m *nowPlayingModel) recordUserAction() {
-	m.lastUserAction = time.Now()
+	// Polling
+	lastUserAction time.Time // zero value means no action yet; pollInterval treats this as idle
+
+	// Episode progress resume
+	progressCache map[string]int // trackURI → last known progressMs
+	resumeUntilMs int            // ignore API progressMs below this until Spotify catches up
+
+	// Error display
+	errMsg string
 }
 
 func newNowPlaying(client *spotify.Client) *nowPlayingModel {
-	return &nowPlayingModel{client: client}
+	return &nowPlayingModel{client: client, progressCache: make(map[string]int)}
 }
+
+// Lifecycle
 
 func (m nowPlayingModel) Init() tea.Cmd {
 	return tea.Batch(m.pollState(), m.tick(), m.progressTick())
 }
 
+func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
+	switch msg := msg.(type) {
+	case playerStateMsg:
+		return m.handlePlayerState(msg)
+	case nowPlayingTickMsg:
+		return tea.Batch(m.pollState(), m.tick())
+	case progressTickMsg:
+		return m.handleProgressTick()
+	case delayedPollMsg:
+		return m.pollState()
+	case clearErrorMsg:
+		m.errMsg = ""
+		return nil
+	}
+	return nil
+}
+
+func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
+	if msg.err != nil {
+		log.Printf("[poll] GetPlayerState error: %v", msg.err)
+		return nil
+	}
+	if msg.state == nil {
+		m.hasTrack = false
+		return nil
+	}
+
+	prevURI := m.trackURI
+	prevPlaying := m.playing
+	prevShuffling := m.shuffling
+
+	// Cache episode progress before the URI changes.
+	if msg.state.TrackURI != prevURI && prevURI != "" && isEpisodeURI(prevURI) {
+		m.progressCache[prevURI] = m.progressMs
+	}
+
+	m.track = msg.state.TrackName
+	m.artist = msg.state.ArtistName
+	m.trackURI = msg.state.TrackURI
+	if msg.state.ContextURI != "" {
+		m.contextURI = msg.state.ContextURI
+	}
+	m.imageURL = msg.state.ImageURL
+	m.durationMs = msg.state.DurationMs
+	m.hasTrack = true
+
+	// Track changed — pending play/pause is stale, accept fresh state.
+	if m.playPausePending && msg.state.TrackURI != prevURI {
+		m.playPausePending = false
+	}
+	if m.playPausePending {
+		if msg.state.Playing == m.playing {
+			m.playPausePending = false
+			m.progressMs = msg.state.ProgressMs
+		}
+	} else {
+		m.playing = msg.state.Playing
+		if !m.seekPending {
+			if m.resumeUntilMs > 0 && msg.state.ProgressMs < m.resumeUntilMs {
+				// API hasn't caught up to the cached resume position yet.
+			} else {
+				m.resumeUntilMs = 0
+				m.progressMs = msg.state.ProgressMs
+			}
+		}
+	}
+	if m.shufflePending {
+		if msg.state.Shuffling == m.shuffling {
+			m.shufflePending = false
+		}
+	} else {
+		m.shuffling = msg.state.Shuffling
+	}
+
+	// Restore cached episode progress and request a seek to sync Spotify.
+	var resumeCmd tea.Cmd
+	if m.trackURI != prevURI {
+		m.resumeUntilMs = 0
+		if cached, ok := m.progressCache[m.trackURI]; ok && m.progressMs < 5000 && cached > m.progressMs {
+			m.progressMs = cached
+			m.resumeUntilMs = cached
+			posMs := cached
+			resumeCmd = func() tea.Msg { return episodeResumeMsg{posMs: posMs} }
+		}
+	}
+
+	// Detect external state changes (from Spotify client, not tuify)
+	// and boost polling so follow-up changes are caught quickly.
+	externalChange := (!m.playPausePending && m.playing != prevPlaying) ||
+		(prevURI != "" && m.trackURI != prevURI) ||
+		(!m.shufflePending && m.shuffling != prevShuffling)
+	if externalChange {
+		log.Printf("[poll] external change detected, boosting poll rate")
+		m.recordUserAction()
+	}
+	if m.trackURI != prevURI {
+		log.Printf("[poll] track changed → %s — %s", m.track, m.artist)
+	}
+
+	return resumeCmd
+}
+
+func (m *nowPlayingModel) handleProgressTick() tea.Cmd {
+	cmds := []tea.Cmd{m.progressTick()}
+	if m.playing && m.hasTrack {
+		m.progressMs += 1000
+		if m.progressMs >= m.durationMs {
+			m.progressMs = m.durationMs
+			cmds = append(cmds, m.pollState())
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+// Polling
+
 func (m nowPlayingModel) tick() tea.Cmd {
-	interval := m.pollInterval()
-	return tea.Tick(interval, func(t time.Time) tea.Msg {
+	return tea.Tick(m.pollInterval(), func(t time.Time) tea.Msg {
 		return nowPlayingTickMsg(t)
+	})
+}
+
+func (m nowPlayingModel) progressTick() tea.Cmd {
+	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
+		return progressTickMsg(t)
 	})
 }
 
@@ -76,12 +216,6 @@ func (m nowPlayingModel) pollInterval() time.Duration {
 	return 10 * time.Second
 }
 
-func (m nowPlayingModel) progressTick() tea.Cmd {
-	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
-		return progressTickMsg(t)
-	})
-}
-
 func (m nowPlayingModel) pollState() tea.Cmd {
 	client := m.client
 	return func() tea.Msg {
@@ -90,101 +224,10 @@ func (m nowPlayingModel) pollState() tea.Cmd {
 	}
 }
 
-func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case playerStateMsg:
-		if msg.err != nil {
-			log.Printf("[poll] GetPlayerState error: %v", msg.err)
-			return nil
-		}
-		if msg.state != nil {
-			prevURI := m.trackURI
-			prevPlaying := m.playing
-			prevShuffling := m.shuffling
+// Helpers
 
-			m.track = msg.state.TrackName
-			m.artist = msg.state.ArtistName
-			m.trackURI = msg.state.TrackURI
-			if msg.state.ContextURI != "" {
-				m.contextURI = msg.state.ContextURI
-			}
-			m.imageURL = msg.state.ImageURL
-			// Track changed — pending play/pause is stale, accept fresh state
-			if m.playPausePending && msg.state.TrackURI != prevURI {
-				m.playPausePending = false
-			}
-			if m.playPausePending {
-				if msg.state.Playing == m.playing {
-					m.playPausePending = false
-					m.progressMs = msg.state.ProgressMs
-				}
-			} else {
-				m.playing = msg.state.Playing
-				if !m.seekPending {
-					m.progressMs = msg.state.ProgressMs
-				}
-			}
-			if m.shufflePending {
-				if msg.state.Shuffling == m.shuffling {
-					m.shufflePending = false
-				}
-			} else {
-				m.shuffling = msg.state.Shuffling
-			}
-			m.durationMs = msg.state.DurationMs
-			m.hasTrack = true
-
-			// Detect external state changes (from Spotify client, not tuify)
-			// and boost polling so follow-up changes are caught quickly.
-			externalChange := false
-			if !m.playPausePending && m.playing != prevPlaying {
-				externalChange = true
-			}
-			if prevURI != "" && m.trackURI != prevURI {
-				externalChange = true
-			}
-			if !m.shufflePending && m.shuffling != prevShuffling {
-				externalChange = true
-			}
-			if externalChange {
-				log.Printf("[poll] external change detected, boosting poll rate")
-				m.recordUserAction()
-			}
-
-			if m.trackURI != prevURI {
-				log.Printf("[poll] track changed → %s — %s", m.track, m.artist)
-			}
-		} else {
-			m.hasTrack = false
-		}
-		return nil
-
-	case nowPlayingTickMsg:
-		return tea.Batch(m.pollState(), m.tick())
-
-	case progressTickMsg:
-		cmds := []tea.Cmd{m.progressTick()}
-		if m.playing && m.hasTrack {
-			m.progressMs += 1000
-			if m.progressMs >= m.durationMs {
-				m.progressMs = m.durationMs
-				cmds = append(cmds, m.pollState())
-			}
-		}
-		return tea.Batch(cmds...)
-
-	case delayedPollMsg:
-		return m.pollState()
-
-	case clearErrorMsg:
-		m.errMsg = ""
-		return nil
-	}
-	return nil
-}
-
-func (m nowPlayingModel) progressBarView() string {
-	return renderProgressBar(m.width, m.progressMs, m.durationMs)
+func (m *nowPlayingModel) recordUserAction() {
+	m.lastUserAction = time.Now()
 }
 
 func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
@@ -193,6 +236,12 @@ func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
 		return clearErrorMsg{}
 	})
 }
+
+func (m nowPlayingModel) progressBarView() string {
+	return renderProgressBar(m.width, m.progressMs, m.durationMs)
+}
+
+// View
 
 func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery string, vizAvailable, vimMode bool) string {
 	if m.errMsg != "" {
