@@ -102,6 +102,7 @@ type cachedLyrics struct {
 type visualizerModel struct {
 	active      bool
 	trackID     string
+	isEpisode   bool
 	vizList     []visualizers.Visualizer
 	vizIdx      int
 	imageURL    string
@@ -145,7 +146,7 @@ func (m *visualizerModel) viz() visualizers.Visualizer {
 	return m.vizList[m.vizIdx]
 }
 
-func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track, artist string) tea.Cmd {
+func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track, artist string, isEpisode bool) tea.Cmd {
 	if m.active {
 		m.active = false
 		return nil
@@ -154,11 +155,7 @@ func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track
 	m.drainImages()
 	m.drainLyrics()
 	if trackID != m.trackID {
-		m.trackID = trackID
-		for _, v := range m.vizList {
-			v.Init(trackID, durationMs)
-		}
-		m.loadLyrics(trackID, track, artist)
+		m.initTrack(trackID, durationMs, track, artist, isEpisode)
 	}
 	m.loadImage(imageURL)
 	return m.tick()
@@ -185,16 +182,35 @@ func (m *visualizerModel) advance(progressMs int) {
 	v.Advance()
 }
 
-func (m *visualizerModel) cycle(delta int) {
-	m.vizIdx = (m.vizIdx + delta + len(m.vizList)) % len(m.vizList)
+func (m *visualizerModel) isLyricsViz(idx int) bool {
+	_, ok := m.vizList[idx].(*visualizers.Lyrics)
+	return ok
 }
 
-func (m *visualizerModel) onTrackChange(trackID string, durationMs int, track, artist string) {
+func (m *visualizerModel) cycle(delta int) {
+	n := len(m.vizList)
+	m.vizIdx = (m.vizIdx + delta + n) % n
+	if m.isEpisode && m.isLyricsViz(m.vizIdx) {
+		m.vizIdx = (m.vizIdx + delta + n) % n
+	}
+}
+
+func (m *visualizerModel) onTrackChange(trackID string, durationMs int, track, artist string, isEpisode bool) {
+	m.initTrack(trackID, durationMs, track, artist, isEpisode)
+}
+
+func (m *visualizerModel) initTrack(trackID string, durationMs int, track, artist string, isEpisode bool) {
 	m.trackID = trackID
+	m.isEpisode = isEpisode
 	for _, v := range m.vizList {
 		v.Init(trackID, durationMs)
 	}
-	m.loadLyrics(trackID, track, artist)
+	if !isEpisode {
+		m.loadLyrics(trackID, track, artist)
+	}
+	if isEpisode && m.isLyricsViz(m.vizIdx) {
+		m.cycle(1)
+	}
 }
 
 // --- Image loading ---

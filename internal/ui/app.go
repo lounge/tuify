@@ -229,7 +229,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.seekRelative(5000)
 		case "v":
 			if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
-				cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist)
+				cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
 				return m, cmd
 			}
 			return m, nil
@@ -317,7 +317,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Re-init visualizer on track change and reload album art + lyrics
 	if m.nowPlaying.trackURI != prevURI && isPlayableURI(m.nowPlaying.trackURI) {
-		m.visualizer.onTrackChange(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.track, m.nowPlaying.artist)
+		m.visualizer.onTrackChange(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
 		m.visualizer.loadImage(m.nowPlaying.imageURL)
 	} else if m.nowPlaying.imageURL != m.visualizer.imageURL {
 		m.visualizer.loadImage(m.nowPlaying.imageURL)
