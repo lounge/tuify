@@ -4,12 +4,32 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
+	"github.com/lucasb-eyer/go-colorful"
 )
+
+const (
+	// episodeResumeThresholdMs is the maximum API-reported progress (in ms)
+	// below which we restore cached episode progress instead.
+	episodeResumeThresholdMs = 5000
+
+	// nearEndThresholdMs is how close to the end of a track (in ms) before
+	// the poll rate increases to catch the track change quickly.
+	nearEndThresholdMs = 15000
+
+	// nowPlayingPadding is the total horizontal padding (left + right) used
+	// in the now-playing area. Kept in sync with Padding(0, 1) in renderGradient.
+	nowPlayingPadding = 2
+)
+
+// ansiSGR matches any ANSI SGR (Select Graphic Rendition) escape sequence.
+var ansiSGR = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 // Messages
 
@@ -150,7 +170,7 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	var resumeCmd tea.Cmd
 	if m.trackURI != prevURI {
 		m.resumeUntilMs = 0
-		if cached, ok := m.progressCache[m.trackURI]; ok && m.progressMs < 5000 && cached > m.progressMs {
+		if cached, ok := m.progressCache[m.trackURI]; ok && m.progressMs < episodeResumeThresholdMs && cached > m.progressMs {
 			m.progressMs = cached
 			m.resumeUntilMs = cached
 			posMs := cached
@@ -210,7 +230,7 @@ func (m nowPlayingModel) pollInterval() time.Duration {
 	if !m.playing {
 		return 15 * time.Second
 	}
-	if m.durationMs-m.progressMs < 15000 {
+	if m.durationMs-m.progressMs < nearEndThresholdMs {
 		return 3 * time.Second
 	}
 	return 10 * time.Second
@@ -245,9 +265,7 @@ func (m nowPlayingModel) progressBarView() string {
 
 func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery string, vizAvailable, vimMode bool) string {
 	if m.errMsg != "" {
-		return nowPlayingStyle.Width(m.width).Render(
-			fmt.Sprintf("%s\n\n\n\n", errorStyle.Render(m.errMsg)),
-		)
+		return m.renderGradient([]string{"", errorStyle.Render(m.errMsg), "", "", "", ""})
 	}
 
 	var status string
@@ -299,7 +317,35 @@ func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery stri
 			help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop" + searchHint + vizHint + "  q:quit")
 		}
 	}
-	return nowPlayingStyle.Width(m.width).Render(
-		fmt.Sprintf("%s\n\n%s\n\n%s", status, progress, help),
-	)
+	return m.renderGradient([]string{"", status, "", progress, "", help})
+}
+
+// renderGradient renders the now-playing area with a purple background that
+// fades from top to bottom.
+func (m nowPlayingModel) renderGradient(lines []string) string {
+	startC, _ := colorful.Hex(resolveHex(colorGradientStart))
+	endC, _ := colorful.Hex(resolveHex(colorGradientEnd))
+
+	// Render the entire block through lipgloss for correct width/wrapping,
+	// then apply per-line gradient to the visual output.
+	content := strings.Join(lines, "\n")
+	rendered := lipgloss.NewStyle().Width(m.width).Padding(0, 1).Render(content)
+	visualLines := strings.Split(rendered, "\n")
+
+	var b strings.Builder
+	total := len(visualLines)
+
+	for i, vl := range visualLines {
+		t := float64(i) / float64(total-1)
+		c := startC.BlendLab(endC, t).Clamped()
+		r, g, bl := c.RGB255()
+		bgEsc := fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, bl)
+		vl = ansiSGR.ReplaceAllString(vl, "${0}"+bgEsc)
+		b.WriteString(bgEsc + vl + "\x1b[0m")
+		if i < total-1 {
+			b.WriteString("\n")
+		}
+	}
+
+	return b.String()
 }

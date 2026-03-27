@@ -26,8 +26,7 @@ func renderProgressBar(width, progressMs, durationMs int) string {
 	}
 	total := "-" + formatDuration(time.Duration(remainMs)*time.Millisecond)
 
-	// content width inside nowPlayingStyle (padding 0,1 = 2 chars horizontal)
-	contentWidth := width - 2
+	contentWidth := width - nowPlayingPadding
 	// bar width = content width minus timestamps and spacing: "0:00 ··· 0:00"
 	barWidth := contentWidth - len(cur) - len(total) - 2
 	if barWidth < 4 {
@@ -56,6 +55,8 @@ func renderProgressBar(width, progressMs, durationMs int) string {
 	return progressTimeStyle.Render(cur) + " " + bar + " " + progressTimeStyle.Render(total)
 }
 
+const progressSolidPct = 70 // percentage of the filled bar that uses the solid color
+
 func renderGradientFill(filled int, solidHex, tipHex string) string {
 	if filled <= 0 {
 		return ""
@@ -64,7 +65,7 @@ func renderGradientFill(filled int, solidHex, tipHex string) string {
 	solidStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(solidHex))
 	tipStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(tipHex))
 
-	solidLen := filled * 70 / 100
+	solidLen := filled * progressSolidPct / 100
 	gradLen := filled - solidLen
 
 	if gradLen <= 1 {

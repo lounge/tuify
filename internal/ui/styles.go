@@ -9,7 +9,7 @@ const homeTabWidth = 20
 
 // Color palette — adaptive for light and dark terminals.
 var (
-	colorPrimary   = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#7ee068"}
+	colorPrimary   = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#58f796"}
 	colorSecondary = lipgloss.AdaptiveColor{Light: "#6232CC", Dark: "#b48eff"}
 	colorMuted     = lipgloss.AdaptiveColor{Light: "#9B9B9B", Dark: "#626262"}
 	colorSubtle    = lipgloss.AdaptiveColor{Light: "#6C6C6C", Dark: "#8a8a8a"}
@@ -40,11 +40,6 @@ var breadcrumbStyle = lipgloss.NewStyle().
 
 // Now-playing bar
 var (
-	nowPlayingStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), true, false, false, false).
-			BorderForeground(colorSecondary).
-			Padding(0, 1)
-
 	nowPlayingTrackStyle = lipgloss.NewStyle().
 				Foreground(colorPrimary).
 				Bold(true)
@@ -57,6 +52,12 @@ var (
 
 	progressEmptyStyle = lipgloss.NewStyle().Foreground(colorDim)
 	progressTimeStyle  = lipgloss.NewStyle().Foreground(colorSubtle)
+)
+
+// Now-playing gradient background — adaptive for light and dark terminals.
+var (
+	colorGradientStart = lipgloss.AdaptiveColor{Light: "#e4d4f7", Dark: "#180d30"}
+	colorGradientEnd   = lipgloss.AdaptiveColor{Light: "#f8f5fc", Dark: "#06030d"}
 )
 
 // Home tabs

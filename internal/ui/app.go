@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	// now-playing: border-top + status + blank + progress + blank + help
+	// now-playing: gradient-top + status + blank + progress + blank + help
 	nowPlayingHeight = 6
 	// breadcrumb text + margin-bottom: 2 lines
 	breadcrumbHeight = 2
