@@ -7,13 +7,14 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/spotify"
 )
 
 const (
-	// now-playing: gradient-top + status + blank + progress + blank + help
-	nowPlayingHeight = 6
+	// now-playing: blank + status + blank + progress + blank (+ search when active)
+	nowPlayingHeight = 5
 	// breadcrumb text + margin-bottom: 2 lines
 	breadcrumbHeight = 2
 )
@@ -51,6 +52,7 @@ type Model struct {
 	height     int
 	seekSeq    int
 	vimMode    bool
+	showHelp   bool
 }
 
 // ModelOption configures optional Model features.
@@ -131,6 +133,17 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Help overlay: close on h, ? or esc
+	if m.showHelp {
+		switch msg.String() {
+		case "h", "?", "esc":
+			m.showHelp = false
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
 	// Search input: API search with debounce
 	if sv, ok := m.currentView().(*searchView); ok && sv.searching {
 		sc := searchCtx{
@@ -249,6 +262,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.visualizer.cycle(1)
 			return m, nil
 		}
+	case "h", "?":
+		m.showHelp = true
+		return m, nil
 	case "esc":
 		return m.handleBack()
 	case "enter":
@@ -535,6 +551,43 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 
 // View
 
+func (m Model) helpView(height int) string {
+	var lines []string
+	if m.vimMode {
+		lines = []string{
+			"h / l        navigate",
+			"ctrl+d / u   half page",
+			", / .        seek 5s",
+			"space        play / pause",
+			"n / p        next / prev",
+			"r            shuffle",
+			"s            stop",
+			"v            visualizer",
+			"left / right cycle viz",
+			"/            search",
+			"?            close help",
+			"q            quit",
+		}
+	} else {
+		lines = []string{
+			"enter        select",
+			"esc          back",
+			"a / d        seek 5s",
+			"space        play / pause",
+			"n / p        next / prev",
+			"r            shuffle",
+			"s            stop",
+			"v            visualizer",
+			"left / right cycle viz",
+			"/            search",
+			"h            close help",
+			"q            quit",
+		}
+	}
+	box := helpOverlayStyle.Render(strings.Join(lines, "\n"))
+	return lipgloss.Place(m.width, height, lipgloss.Center, lipgloss.Center, box)
+}
+
 func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
@@ -543,7 +596,9 @@ func (m Model) View() string {
 	var b strings.Builder
 	contentHeight := m.height - nowPlayingHeight
 
-	if m.visualizer.active {
+	if m.showHelp {
+		b.WriteString(m.helpView(contentHeight))
+	} else if m.visualizer.active {
 		b.WriteString(m.visualizer.View(m.width, contentHeight))
 	} else {
 		if crumbs := m.currentView().Breadcrumb(); crumbs != "" {
@@ -555,23 +610,16 @@ func (m Model) View() string {
 
 	// Now playing bar
 	b.WriteString("\n")
-	var searchEnabled, searchActive bool
+	var searchActive bool
 	var searchQuery string
-	if sv, ok := m.currentView().(*searchView); ok {
-		searchEnabled = true
-		if sv.searching {
-			searchActive = true
-			searchQuery = sv.searchQuery
-		}
-	} else if sl := m.searchableList(); sl != nil {
-		searchEnabled = true
-		if sl.searching {
-			searchActive = true
-			searchQuery = sl.searchQuery
-		}
+	if sv, ok := m.currentView().(*searchView); ok && sv.searching {
+		searchActive = true
+		searchQuery = sv.searchQuery
+	} else if sl := m.searchableList(); sl != nil && sl.searching {
+		searchActive = true
+		searchQuery = sl.searchQuery
 	}
-	vizAvailable := m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI)
-	b.WriteString(m.nowPlaying.View(searchEnabled, searchActive, searchQuery, vizAvailable, m.vimMode))
+	b.WriteString(m.nowPlaying.View(searchActive, searchQuery))
 
 	return b.String()
 }

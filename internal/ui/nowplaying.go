@@ -263,7 +263,7 @@ func (m nowPlayingModel) progressBarView() string {
 
 // View
 
-func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery string, vizAvailable, vimMode bool) string {
+func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
 	if m.errMsg != "" {
 		return m.renderGradient([]string{"", errorStyle.Render(m.errMsg), "", "", "", ""})
 	}
@@ -293,31 +293,19 @@ func (m nowPlayingModel) View(searchEnabled, searchActive bool, searchQuery stri
 		progress = m.progressBarView()
 	}
 
-	var help string
+	lines := []string{"", status, "", progress, ""}
 	if searchActive {
+		var search string
 		if idx := strings.Index(searchQuery, ":"); idx > 0 {
 			pre := searchQuery[:idx+1]
 			rest := searchQuery[idx+1:]
-			help = searchPrefixStyle.Render("/"+pre) + searchInputStyle.Render(rest+"█")
+			search = searchPrefixStyle.Render("/"+pre) + searchInputStyle.Render(rest+"█")
 		} else {
-			help = searchInputStyle.Render("/" + searchQuery + "█")
+			search = searchInputStyle.Render("/" + searchQuery + "█")
 		}
-	} else {
-		vizHint := ""
-		if vizAvailable {
-			vizHint = "  v:viz"
-		}
-		searchHint := ""
-		if searchEnabled {
-			searchHint = "  /:search"
-		}
-		if vimMode {
-			help = helpStyle.Render("hjkl:navigate  space:play  n:next  p:prev  ,/.:seek  r:shuffle  s:stop" + searchHint + vizHint + "  q:quit")
-		} else {
-			help = helpStyle.Render("space:play/pause  n:next  p:prev  a/d:seek  r:shuffle  s:stop" + searchHint + vizHint + "  q:quit")
-		}
+		lines = append(lines, search)
 	}
-	return m.renderGradient([]string{"", status, "", progress, "", help})
+	return m.renderGradient(lines)
 }
 
 // renderGradient renders the now-playing area with a purple background that

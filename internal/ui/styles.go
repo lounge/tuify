@@ -56,8 +56,8 @@ var (
 
 // Now-playing gradient background — adaptive for light and dark terminals.
 var (
-	colorGradientStart = lipgloss.AdaptiveColor{Light: "#e4d4f7", Dark: "#180d30"}
-	colorGradientEnd   = lipgloss.AdaptiveColor{Light: "#f8f5fc", Dark: "#06030d"}
+	colorGradientStart = lipgloss.AdaptiveColor{Light: "#e4d4f7", Dark: "#110a24"}
+	colorGradientEnd   = lipgloss.AdaptiveColor{Light: "#f8f5fc", Dark: "#040208"}
 )
 
 // Home tabs
@@ -94,11 +94,13 @@ var (
 				Foreground(colorPrimary).
 				Bold(true)
 
-	searchHintBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(colorMuted).
-				Foreground(colorSubtle).
-				Padding(1, 2)
+	overlayBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(colorSecondary).
+			Foreground(colorSubtle)
+
+	searchHintBoxStyle = overlayBoxStyle.Padding(1, 2)
+	helpOverlayStyle   = overlayBoxStyle.Padding(1, 3)
 )
 
 func newListDelegate() list.DefaultDelegate {
