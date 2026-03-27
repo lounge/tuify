@@ -156,7 +156,7 @@ All standard keybindings continue to work. Vim mode adds:
 
 ### Visualizers
 
-| Visualizer | Description | Requires Librespot |
+| Visualizer | Description | Requires Librespot (subprocess) |
 |------------|-------------|--------------------|
 | Album Art | Displays track artwork as ASCII art | No |
 | Lyrics | Displays lyrics fetched from Genius.com | No |
