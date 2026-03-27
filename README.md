@@ -28,6 +28,7 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 - **Librespot Integration** — Optional embedded Spotify Connect player via [librespot](https://github.com/librespot-org/librespot), streaming audio directly through tuify.
 - **Audio-Reactive Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and four Milkdrop-style presets — all driven by real-time FFT audio analysis when librespot is enabled (only with **subprocess** backend)
 - **Lyrics** — Fetches and displays lyrics from Genius.com (best-effort match, not always exact; disabled for podcasts)
+- **Dark & Light Terminals** — Adaptive color palette that adjusts automatically for dark and light terminal backgrounds
 - **Help Overlay** — Press `h` (or `?` in vim mode) to view all keybindings
 
 ## Prerequisites
