@@ -332,6 +332,7 @@ func (v *searchView) rebuildList() {
 		} else if v.searchErr != nil {
 			items = []list.Item{statusItem{
 				text:    fmt.Sprintf("Search failed: %v", v.searchErr),
+				desc:    "press Enter to retry",
 				isError: true,
 			}}
 		} else if v.query == "" && v.depth == 0 {

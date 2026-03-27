@@ -45,6 +45,7 @@ type uriItem interface {
 
 type statusItem struct {
 	text    string
+	desc    string
 	isError bool
 }
 
@@ -56,7 +57,12 @@ func (i statusItem) Title() string {
 	}
 	return loadingStyle.Render(i.text)
 }
-func (i statusItem) Description() string { return "" }
+func (i statusItem) Description() string {
+	if i.isError {
+		return errorStyle.Render(i.desc)
+	}
+	return i.desc
+}
 func (i statusItem) FilterValue() string { return "" }
 
 func newList(width, height int, vimMode bool) list.Model {

@@ -42,7 +42,8 @@ func (l *lazyList) onLoaded() {
 func (l *lazyList) onError(err error) {
 	l.hasMore = false
 	l.items = append(l.items, statusItem{
-		text:    fmt.Sprintf("Failed to load: %v — press Enter to retry", err),
+		text:    fmt.Sprintf("Failed to load: %v", err),
+		desc:    "press Enter to retry",
 		isError: true,
 	})
 	l.list.SetItems(l.items)
