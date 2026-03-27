@@ -118,6 +118,9 @@ func main() {
 				if err != nil {
 					selfPath = os.Args[0]
 				}
+				// librespot subprocess backend uses shell_words::split (POSIX rules)
+				// which treats backslashes as escape chars — use forward slashes on Windows.
+				selfPath = filepath.ToSlash(selfPath)
 				log.Printf("[librespot] audio worker command: %s --audio-worker --socket %s", selfPath, audioRecv.SocketPath())
 				lsCfg.AudioWorker = fmt.Sprintf("%s --audio-worker --socket %s", selfPath, audioRecv.SocketPath())
 			}

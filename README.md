@@ -5,6 +5,9 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
  Optional [librespot](https://github.com/librespot-org/librespot) integration for direct audio streaming and real-time audio-reactive visualizers.
 
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)
+![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
+![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
 
 ![Tuify screenshot](img/recording.gif)
 ![Tuify visualizers](img/visualizers.gif)
@@ -225,9 +228,14 @@ tuify/
 └── go.mod
 ```
 
+## Tested On
+
+- Windows 11
+- macOS
+- Linux (Ubuntu)
+
 ## TODO
 
-- Test on Win
 - Copy track link?
 - Check light mode colors
 - Maybe themes? Probably not :)
