@@ -41,6 +41,9 @@ func renderProgressBar(width, progressMs, durationMs int) string {
 	if filled > barWidth {
 		filled = barWidth
 	}
+	if filled == 0 && progressMs > 0 {
+		filled = 1
+	}
 	empty := barWidth - filled
 
 	filledStr := renderGradientFill(
