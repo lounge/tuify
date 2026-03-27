@@ -9,8 +9,8 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
 
-![Tuify screenshot](img/recording.gif)
-![Tuify visualizers](img/visualizers.gif)
+![Tuify screenshot](img/recording_2.gif)
+![Tuify visualizers](img/visualizers_2.gif)
 
 ## Features
 
