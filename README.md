@@ -229,6 +229,8 @@ tuify/
 
 - Test on Win
 - Copy track link?
+- Check light mode colors
+- Maybe themes? Probably not :)
 
 - Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
 
