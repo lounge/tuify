@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/atotto/clipboard"
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,6 +26,8 @@ type seekFireMsg struct {
 	seq   int
 	posMs int
 }
+
+type clipboardResultMsg struct{ err error }
 
 // playbackResultMsg is used for all device-bound commands.
 type playbackResultMsg struct {
@@ -109,6 +112,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleVizTick()
 	case episodeResumeMsg:
 		return m.handleEpisodeResume(msg)
+	case clipboardResultMsg:
+		if msg.err != nil {
+			return m, m.nowPlaying.SetError("Failed to copy: " + msg.err.Error())
+		}
+		return m, m.nowPlaying.SetInfo("Copied link to clipboard")
 	case seekFireMsg:
 		return m.handleSeekFire(msg)
 	}
@@ -246,6 +254,8 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "d":
 		m.nowPlaying.recordUserAction()
 		return m, m.seekRelative(5000)
+	case "c":
+		return m, m.copyTrackLink()
 	case "v":
 		if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
 			cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
@@ -521,6 +531,19 @@ func (m *Model) seekRelative(deltaMs int) tea.Cmd {
 	})
 }
 
+func (m *Model) copyTrackLink() tea.Cmd {
+	if !m.nowPlaying.hasTrack {
+		return nil
+	}
+	url := spotifyURL(m.nowPlaying.trackURI)
+	if url == "" {
+		return nil
+	}
+	return func() tea.Msg {
+		return clipboardResultMsg{err: clipboard.WriteAll(url)}
+	}
+}
+
 func (m Model) stopPlayback() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Stop(ctx, id)
@@ -562,6 +585,7 @@ func (m Model) helpView(height int) string {
 			"n / p        next / prev",
 			"r            shuffle",
 			"s            stop",
+			"c            copy link",
 			"v            visualizer",
 			"left / right cycle viz",
 			"/            search",
@@ -577,6 +601,7 @@ func (m Model) helpView(height int) string {
 			"n / p        next / prev",
 			"r            shuffle",
 			"s            stop",
+			"c            copy link",
 			"v            visualizer",
 			"left / right cycle viz",
 			"/            search",

@@ -135,6 +135,7 @@ By default, librespot is compiled with only **rodio**, **pipe**, and **subproces
 | `a` / `d` | Seek backward / forward |
 | `r` | Toggle shuffle |
 | `s` | Stop |
+| `c` | Copy track link |
 | `/` | Search |
 | `v` | Toggle visualizer |
 | `←` / `→` | Cycle visualizers (all 9 with librespot; album art + lyrics without) |
@@ -236,7 +237,6 @@ tuify/
 
 ## TODO
 
-- Copy track link?
 - Check light mode colors
 - Maybe themes? Probably not :)
 

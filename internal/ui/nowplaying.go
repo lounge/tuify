@@ -41,7 +41,7 @@ type playerStateMsg struct {
 type (
 	nowPlayingTickMsg time.Time
 	progressTickMsg   time.Time
-	clearErrorMsg     struct{}
+	clearStatusMsg    struct{}
 	delayedPollMsg    struct{}
 	episodeResumeMsg  struct{ posMs int }
 )
@@ -78,8 +78,9 @@ type nowPlayingModel struct {
 	progressCache map[string]int // trackURI → last known progressMs
 	resumeUntilMs int            // ignore API progressMs below this until Spotify catches up
 
-	// Error display
-	errMsg string
+	// Status display (errors and info messages)
+	statusMsg     string
+	statusIsError bool
 }
 
 func newNowPlaying(client *spotify.Client) *nowPlayingModel {
@@ -102,8 +103,8 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 		return m.handleProgressTick()
 	case delayedPollMsg:
 		return m.pollState()
-	case clearErrorMsg:
-		m.errMsg = ""
+	case clearStatusMsg:
+		m.statusMsg = ""
 		return nil
 	}
 	return nil
@@ -251,9 +252,18 @@ func (m *nowPlayingModel) recordUserAction() {
 }
 
 func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
-	m.errMsg = msg
+	m.statusMsg = msg
+	m.statusIsError = true
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
-		return clearErrorMsg{}
+		return clearStatusMsg{}
+	})
+}
+
+func (m *nowPlayingModel) SetInfo(msg string) tea.Cmd {
+	m.statusMsg = msg
+	m.statusIsError = false
+	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+		return clearStatusMsg{}
 	})
 }
 
@@ -264,8 +274,16 @@ func (m nowPlayingModel) progressBarView() string {
 // View
 
 func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
-	if m.errMsg != "" {
-		return m.renderGradient([]string{"", errorStyle.Render(m.errMsg), "", "", "", ""})
+	if m.statusMsg != "" {
+		style := lipgloss.NewStyle().Foreground(colorText)
+		if m.statusIsError {
+			style = errorStyle
+		}
+		lines := []string{"", style.Render(m.statusMsg), "", "", ""}
+		if searchActive {
+			lines = append(lines, "")
+		}
+		return m.renderGradient(lines)
 	}
 
 	var status string

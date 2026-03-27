@@ -93,6 +93,14 @@ func idFromURI(uri string) string {
 	return uri
 }
 
+func spotifyURL(uri string) string {
+	parts := strings.SplitN(uri, ":", 3)
+	if len(parts) == 3 {
+		return "https://open.spotify.com/" + parts[1] + "/" + parts[2]
+	}
+	return ""
+}
+
 func formatDuration(d time.Duration) string {
 	m := int(d.Minutes())
 	s := int(d.Seconds()) % 60
