@@ -24,7 +24,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 ## Requirements
 
 - A **Spotify Premium** account
-- A [Spotify Developer App](https://developer.spotify.com/dashboard) (free, takes 2 minutes)
+- A [Spotify Developer App](https://developer.spotify.com/dashboard)
 
 ## Install
 
@@ -55,8 +55,6 @@ Pre-built binaries for all platforms are available on the [Releases](https://git
 4. Copy your **Client ID**
 5. Run `tuify` — it will ask for your Client ID on first launch
 6. A browser window will open to authorize with Spotify
-
-That's it — you're ready to go.
 
 ## Keybindings
 
@@ -104,7 +102,7 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config file.
 
 ## Visualizers
 
-| Visualizer | Requires Librespot |
+| Visualizer | Requires Librespot (subprocess) |
 |------------|--------------------|
 | Album Art | No |
 | Lyrics | No |
@@ -166,6 +164,10 @@ All configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`)
 | `client_id` | `""` | Spotify Developer App Client ID |
 | `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
 | `vim_mode` | `false` | Enable vim-style keybindings |
+
+## Logs
+
+Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. The log is overwritten every time you start tuify. Check this file if something isn't working as expected.
 
 ---
 
