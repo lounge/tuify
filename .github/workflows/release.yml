@@ -17,7 +17,7 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
-          - os: ubuntu-latest
+          - os: ubuntu-24.04-arm
             goos: linux
             goarch: arm64
           - os: macos-latest
@@ -39,42 +39,15 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Install Linux audio deps (amd64)
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
+      - name: Install Linux audio deps
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-
-      - name: Install Linux ARM64 cross-deps
-        if: matrix.goos == 'linux' && matrix.goarch == 'arm64'
-        run: |
-          sudo dpkg --add-architecture arm64
-
-          # Pin existing sources to amd64 — handle both DEB822 .sources and legacy .list formats
-          if ls /etc/apt/sources.list.d/*.sources 1>/dev/null 2>&1; then
-            if grep -q '^Architectures:' /etc/apt/sources.list.d/*.sources; then
-              sudo sed -i 's/^Architectures:.*/Architectures: amd64/' /etc/apt/sources.list.d/*.sources
-            else
-              sudo sed -i '/^Types:/a Architectures: amd64' /etc/apt/sources.list.d/*.sources
-            fi
-          fi
-          if ls /etc/apt/sources.list.d/*.list 1>/dev/null 2>&1; then
-            sudo sed -i 's/^deb \([^[]\)/deb [arch=amd64] \1/' /etc/apt/sources.list.d/*.list
-          fi
-          if [ -f /etc/apt/sources.list ]; then
-            sudo sed -i 's/^deb \([^[]\)/deb [arch=amd64] \1/' /etc/apt/sources.list
-          fi
-
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ $(lsb_release -cs) main restricted universe" | sudo tee /etc/apt/sources.list.d/arm64.list
-          echo "deb [arch=arm64] http://ports.ubuntu.com/ $(lsb_release -cs)-updates main restricted universe" | sudo tee -a /etc/apt/sources.list.d/arm64.list
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu libasound2-dev:arm64
 
       - name: Build
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
-          CC: ${{ matrix.goos == 'linux' && matrix.goarch == 'arm64' && 'aarch64-linux-gnu-gcc' || '' }}
-          CGO_ENABLED: ${{ matrix.goos == 'linux' && '1' || '0' }}
-          PKG_CONFIG_PATH: ${{ matrix.goos == 'linux' && matrix.goarch == 'arm64' && '/usr/lib/aarch64-linux-gnu/pkgconfig' || '' }}
+          CGO_ENABLED: ${{ runner.os == 'Linux' && '1' || '0' }}
         run: |
           ext=""
           if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
