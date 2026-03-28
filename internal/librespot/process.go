@@ -256,6 +256,8 @@ func (p *Process) monitorStderr(line string) {
 	defer p.mu.Unlock()
 
 	if strings.Contains(line, "Authenticated as") {
+		p.sawAudioKeyErr = false
+		p.sawSpirc = false
 		if p.OnReconnect != nil {
 			go p.OnReconnect()
 		}
