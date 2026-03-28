@@ -97,3 +97,105 @@ jobs:
         with:
           generate_release_notes: true
           files: dist/*
+
+      - name: Generate Homebrew formula
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sha_darwin_amd64=$(grep "tuify_darwin_amd64.tar.gz" dist/checksums.txt | awk '{print $1}')
+          sha_darwin_arm64=$(grep "tuify_darwin_arm64.tar.gz" dist/checksums.txt | awk '{print $1}')
+          sha_linux_amd64=$(grep "tuify_linux_amd64.tar.gz" dist/checksums.txt | awk '{print $1}')
+          sha_linux_arm64=$(grep "tuify_linux_arm64.tar.gz" dist/checksums.txt | awk '{print $1}')
+
+          cat > tuify.rb <<FORMULA
+          class Tuify < Formula
+            desc "A Spotify TUI with visualizers and lyrics"
+            homepage "https://github.com/lounge/tuify"
+            version "${version}"
+            license "MIT"
+
+            on_macos do
+              if Hardware::CPU.arm?
+                url "https://github.com/lounge/tuify/releases/download/${GITHUB_REF_NAME}/tuify_darwin_arm64.tar.gz"
+                sha256 "${sha_darwin_arm64}"
+              else
+                url "https://github.com/lounge/tuify/releases/download/${GITHUB_REF_NAME}/tuify_darwin_amd64.tar.gz"
+                sha256 "${sha_darwin_amd64}"
+              end
+            end
+
+            on_linux do
+              if Hardware::CPU.arm?
+                url "https://github.com/lounge/tuify/releases/download/${GITHUB_REF_NAME}/tuify_linux_arm64.tar.gz"
+                sha256 "${sha_linux_arm64}"
+              else
+                url "https://github.com/lounge/tuify/releases/download/${GITHUB_REF_NAME}/tuify_linux_amd64.tar.gz"
+                sha256 "${sha_linux_amd64}"
+              end
+            end
+
+            def install
+              bin.install "tuify"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/tuify --version", 2)
+            end
+          end
+          FORMULA
+
+      - name: Generate Scoop manifest
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          sha_windows=$(grep "tuify_windows_amd64.zip" dist/checksums.txt | awk '{print $1}')
+
+          cat > tuify.json <<EOF
+          {
+            "version": "${version}",
+            "description": "A Spotify TUI with visualizers and lyrics",
+            "homepage": "https://github.com/lounge/tuify",
+            "license": "MIT",
+            "architecture": {
+              "64bit": {
+                "url": "https://github.com/lounge/tuify/releases/download/${GITHUB_REF_NAME}/tuify_windows_amd64.zip",
+                "hash": "${sha_windows}"
+              }
+            },
+            "bin": "tuify.exe",
+            "checkver": {
+              "github": "https://github.com/lounge/tuify"
+            },
+            "autoupdate": {
+              "architecture": {
+                "64bit": {
+                  "url": "https://github.com/lounge/tuify/releases/download/v\$version/tuify_windows_amd64.zip"
+                }
+              }
+            }
+          }
+          EOF
+
+      - name: Publish Homebrew formula
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          git clone https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/lounge/homebrew-tap.git
+          cp tuify.rb homebrew-tap/Formula/tuify.rb
+          cd homebrew-tap
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/tuify.rb
+          git commit -m "Update tuify to ${GITHUB_REF_NAME}"
+          git push
+
+      - name: Publish Scoop manifest
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          git clone https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/lounge/scoop-bucket.git
+          cp tuify.json scoop-bucket/bucket/tuify.json
+          cd scoop-bucket
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add bucket/tuify.json
+          git commit -m "Update tuify to ${GITHUB_REF_NAME}"
+          git push
