@@ -1,10 +1,7 @@
 # Tuify
 
-A terminal-based Spotify client written in Go. Browse playlists, search for music and podcasts, control playback — **Spotify without all the noise.**
+A terminal-based Spotify client. Browse playlists, search for music and podcasts, control playback — **Spotify without all the noise.**
 
- Optional [librespot](https://github.com/librespot-org/librespot) integration for direct audio streaming and real-time audio-reactive visualizers.
-
-![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
@@ -17,135 +14,50 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 - **Playback Control** — Play, pause, skip, previous, shuffle, seek
 - **Playlists** — Browse and play your Spotify playlists
 - **Podcasts** — Browse saved shows and episodes
-- **Search** — Multi-type search with prefix shortcuts:
-  - `t:` Track search (default)
-  - `e:` Episode search
-  - `a:` Artist → Album → Track drill-down
-  - `l:` Album → Track drill-down
-  - `s:` Show → Episode drill-down
+- **Search** — Find tracks, episodes, artists, albums, and shows
 - **Now Playing** — Live progress bar, track info, shuffle state
-- **Episode Resume** — Remembers playback position when switching away from episodes and resumes where you left off
-- **Librespot Integration** — Optional embedded Spotify Connect player via [librespot](https://github.com/librespot-org/librespot), streaming audio directly through tuify.
-- **Audio-Reactive Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and four Milkdrop-style presets — all driven by real-time FFT audio analysis when librespot is enabled (only with **subprocess** backend)
-- **Lyrics** — Fetches and displays lyrics from Genius.com (best-effort match, not always exact; disabled for podcasts)
-- **Dark & Light Terminals** — Adaptive color palette that adjusts automatically for dark and light terminal backgrounds
-- **Help Overlay** — Press `h` (or `?` in vim mode) to view all keybindings
+- **Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and Milkdrop-style presets
+- **Lyrics** — Fetches and displays lyrics from Genius.com
+- **Dark & Light Terminals** — Adaptive color palette that adjusts automatically
 
-## Prerequisites
+## Requirements
 
-- Go 1.26+
-- A Premium Spotify account
-- A [Spotify Developer App](https://developer.spotify.com/dashboard)
-- (Optional) [librespot](https://github.com/librespot-org/librespot) — for direct audio streaming and audio-reactive visualizers
+- A **Spotify Premium** account
+- A [Spotify Developer App](https://developer.spotify.com/dashboard) (free, takes 2 minutes)
 
 ## Install
 
-### Homebrew (macOS / Linux)
+### macOS / Linux
 
 ```bash
 brew install lounge/tap/tuify
 ```
 
-### Scoop (Windows)
+### Windows
 
-[Scoop](https://github.com/ScoopInstaller/scoop?tab=readme-ov-file#installation)
+Install [Scoop](https://github.com/ScoopInstaller/scoop?tab=readme-ov-file#installation), then:
 
 ```powershell
 scoop bucket add lounge https://github.com/lounge/scoop-bucket
 scoop install tuify
 ```
 
-### Download
+### Direct download
 
-Pre-built binaries for macOS, Linux, and Windows are available on the [Releases](https://github.com/lounge/tuify/releases) page.
+Pre-built binaries for all platforms are available on the [Releases](https://github.com/lounge/tuify/releases) page.
 
-### Build from source
-
-```bash
-go install github.com/lounge/tuify@latest
-```
-
-Or build from source:
-
-```bash
-git clone https://github.com/lounge/tuify.git
-cd tuify
-go build
-```
-
-## Usage
-
-```bash
-./tuify
-```
-
-## Testing
-
-```bash
-go test ./...
-```
-
-## Setup
-
-On first run, Tuify will prompt you for your Spotify Client ID:
+## Getting Started
 
 1. Go to https://developer.spotify.com/dashboard and create an app
-2. Set the redirect URI to `http://127.0.0.1:4444/callback` (or a custom URL — see config below)
-3. Check Web API checkbox
-3. Copy your Client ID and paste it when prompted
-4. A browser window will open to authorize with Spotify
+2. Set the redirect URI to `http://127.0.0.1:4444/callback`
+3. Check the **Web API** checkbox
+4. Copy your **Client ID**
+5. Run `tuify` — it will ask for your Client ID on first launch
+6. A browser window will open to authorize with Spotify
 
-Configuration, auth tokens, and debug logs are stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`).
+That's it — you're ready to go.
 
-### General Config Options
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `client_id` | `""` | Spotify Developer App Client ID |
-| `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
-
-### Librespot Setup
-
-To enable librespot integration:
-
-1. Install [librespot](https://github.com/librespot-org/librespot) and ensure it's available in your `PATH` (or set `librespot_path` in the config)
-2. Set `enable_librespot` to `true` in `~/.config/tuify/config.json`
-
-Librespot config options in `config.json`:
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `enable_librespot` | `true` | Enable librespot integration |
-| `librespot_path` | `"librespot"` | **Optional** Path to librespot binary |
-| `device_name` | `"tuify"` | **Optional** Spotify Connect device name |
-| `bitrate` | `320` | **Optional** Audio bitrate (96, 160, or 320 kbps) |
-| `audio_backend` | `"subprocess"` | **Optional** Librespot audio backend (see below) |
-| `spotify_username` | `""` | **Optional** Optional Spotify username for direct auth |
-
-When enabled, tuify launches librespot with `--initial-volume 60`, `--volume-ctrl fixed`, `--disable-audio-cache`, and `--cache ~/.config/tuify/librespot` (for credential persistence across restarts).
-
-Librespot automatically connects as the active Spotify device on startup. If the connection drops, tuify detects the failure, kills and restarts librespot, and transfers playback back automatically.
-
-#### Audio Backends
-
-The `audio_backend` option controls how librespot outputs audio. Only `"subprocess"` enables audio-reactive visualizers.
-
-By default, librespot is compiled with only **rodio**, **pipe**, and **subprocess** backends. Other backends require enabling cargo features when building librespot, along with their system dependencies. See the [librespot Audio Backends wiki](https://github.com/librespot-org/librespot/wiki/Audio-Backends) for details.
-
-| Backend | Cargo feature | System dependency | Description |
-|---------|--------------|-------------------|-------------|
-| **subprocess** | *(always included)* | Audio dev libs (e.g. `libasound2-dev` on Linux) | Audio is piped through tuify for playback and real-time FFT analysis. Enables all audio-reactive visualizers. Select "tuify" in "Connect to a device" in Spotify client. |
-| **rodio** | *(default)* | None (uses ALSA on Linux, CoreAudio on macOS) | Cross-platform audio output. Librespot's default. |
-| **pipe** | *(always included)* | None | Outputs raw PCM to stdout. Useful for piping audio to other tools. |
-| **alsa** | `alsa-backend` | `libasound2-dev` (Debian) / `alsa-lib-devel` (Fedora) | Direct ALSA output, bypassing PulseAudio. Lower latency on Linux. |
-| **pulseaudio** | `pulseaudio-backend` | `libpulse-dev` (Debian) / `pulseaudio-libs-devel` (Fedora) | Audio output via PulseAudio. |
-| **jackaudio** | `jackaudio-backend` | JACK dev libraries | Output via JACK Audio Connection Kit. For pro audio / low-latency setups. |
-| **rodiojack** | `rodiojack-backend` | JACK dev libraries | Rodio audio output routed through JACK. |
-| **portaudio** | `portaudio-backend` | PortAudio dev libraries | Cross-platform audio via the PortAudio library. |
-| **gstreamer** | `gstreamer-backend` | GStreamer dev libraries | Audio output via the GStreamer multimedia framework. |
-| **sdl** | `sdl-backend` | SDL2 dev libraries | Audio output via SDL2. |
-
-### Keybindings
+## Keybindings
 
 | Key | Action |
 |-----|--------|
@@ -160,111 +72,132 @@ By default, librespot is compiled with only **rodio**, **pipe**, and **subproces
 | `c` | Copy track link |
 | `/` | Search |
 | `v` | Toggle visualizer |
-| `←` / `→` | Cycle visualizers (all 9 with librespot; album art + lyrics without) |
+| `←` / `→` | Cycle visualizers |
 | `h` | Show help overlay |
 | `q` | Quit |
 
+### Search Shortcuts
+
+Type a prefix in the search bar to filter by type:
+
+| Prefix | Searches |
+|--------|----------|
+| `t:` | Tracks (default) |
+| `e:` | Episodes |
+| `a:` | Artists |
+| `l:` | Albums |
+| `s:` | Shows |
+
 ### Vim Mode
 
-Enable vim-style keybindings by setting `"vim_mode": true` in your config:
-
-| Option | Default | Description |
-|--------|---------|-------------|
-| `vim_mode` | `false` | Enable vim-style keybindings |
-
-All standard keybindings continue to work. Vim mode adds:
+Enable vim-style keybindings by setting `"vim_mode": true` in your config file.
 
 | Key | Action |
 |-----|--------|
-| `h` | Go back (same as `Esc`) |
-| `l` | Select / drill down (same as `Enter`) |
+| `h` / `l` | Go back / select |
 | `j` / `k` | Cursor down / up |
 | `g` / `G` | Jump to first / last item |
 | `Ctrl+d` / `Ctrl+u` | Half-page down / up |
 | `,` / `.` | Seek backward / forward |
 | `?` | Show help overlay |
 
-### Visualizers
+## Visualizers
 
-| Visualizer | Description | Requires Librespot (subprocess) |
-|------------|-------------|--------------------|
-| Album Art | Displays track artwork as ASCII art | No |
-| Lyrics | Displays lyrics fetched from Genius.com | No |
-| Spectrum | Frequency spectrum analyzer with colored bars and peak indicators | Yes |
-| Starfield | 3D starfield reacting to bass and intensity | Yes |
-| Oscillogram | Mirrored waveform display with smooth attack/decay | Yes |
-| Milkdrop Spiral | Feedback warp visualizer — rotating spiral driven by bass | Yes |
-| Milkdrop Tunnel | Feedback warp visualizer — infinite rushing tunnel | Yes |
-| Milkdrop Kaleidoscope | Feedback warp visualizer — mirror-symmetric sectors that morph with bass | Yes |
-| Milkdrop Ripple | Feedback warp visualizer — expanding concentric ripples | Yes |
+| Visualizer | Requires Librespot |
+|------------|--------------------|
+| Album Art | No |
+| Lyrics | No |
+| Spectrum | Yes |
+| Starfield | Yes |
+| Oscillogram | Yes |
+| Milkdrop Spiral | Yes |
+| Milkdrop Tunnel | Yes |
+| Milkdrop Kaleidoscope | Yes |
+| Milkdrop Ripple | Yes |
 
-## Project Structure
+Album Art and Lyrics work out of the box. The audio-reactive visualizers require [librespot](https://github.com/librespot-org/librespot) — see the section below.
+
+## Librespot (Optional)
+
+[Librespot](https://github.com/librespot-org/librespot) is an open-source Spotify Connect client. Installing it unlocks direct audio streaming and all audio-reactive visualizers.
+
+### Setup
+
+1. Install [librespot](https://github.com/librespot-org/librespot) and make sure it's in your `PATH`
+2. Set `"enable_librespot": true` in `~/.config/tuify/config.json`
+3. Restart tuify — it will connect as a Spotify device automatically
+
+If the connection drops, tuify detects the failure, restarts librespot, and transfers playback back automatically.
+
+### Librespot Config
+
+Add these to `~/.config/tuify/config.json`:
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `enable_librespot` | `true` | Enable librespot integration |
+| `librespot_path` | `"librespot"` | Path to librespot binary |
+| `device_name` | `"tuify"` | Spotify Connect device name |
+| `bitrate` | `320` | Audio bitrate (96, 160, or 320 kbps) |
+| `audio_backend` | `"subprocess"` | Audio backend (see below) |
+| `spotify_username` | `""` | Spotify username for direct auth |
+
+### Audio Backends
+
+Only `"subprocess"` enables audio-reactive visualizers.
+
+| Backend | Description |
+|---------|-------------|
+| **subprocess** | Audio piped through tuify for playback and visualizers. **Recommended.** |
+| **rodio** | Cross-platform audio output. Librespot's default. |
+| **pipe** | Outputs raw PCM to stdout. |
+| **alsa** | Direct ALSA output (Linux). |
+| **pulseaudio** | Audio via PulseAudio (Linux). |
+
+Other backends (jackaudio, portaudio, gstreamer, sdl) require enabling cargo features when building librespot. See the [librespot Audio Backends wiki](https://github.com/librespot-org/librespot/wiki/Audio-Backends).
+
+## Configuration
+
+All configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`).
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `client_id` | `""` | Spotify Developer App Client ID |
+| `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
+| `vim_mode` | `false` | Enable vim-style keybindings |
+
+---
+
+## Contributing
+
+### Build from source
+
+```bash
+git clone https://github.com/lounge/tuify.git
+cd tuify
+go build
+go test ./...
+```
+
+Requires Go 1.26+. On Linux, also install `libasound2-dev`.
+
+### Project Structure
 
 ```
 tuify/
 ├── main.go                  # Entry point, librespot + audio pipeline setup
 ├── internal/
-│   ├── auth/
-│   │   └── auth.go          # OAuth2 PKCE authentication and token persistence
-│   ├── audio/               # Real-time audio pipeline
-│   │   ├── receiver.go      # Unix socket/TCP receiver for frequency data
-│   │   ├── worker.go        # Audio playback + FFT analysis subprocess
-│   │   ├── fft.go           # FFT → 64 logarithmic frequency bands
-│   │   ├── protocol.go      # Binary frame encoding/decoding
-│   │   └── types.go         # AudioFrame, frequency band definitions
-│   ├── config/
-│   │   └── config.go        # Configuration management
-│   ├── lyrics/
-│   │   └── genius.go        # Genius.com lyrics search and scraping
-│   ├── librespot/
-│   │   └── process.go       # Librespot subprocess lifecycle, broken session detection, auto-restart
+│   ├── auth/                # OAuth2 PKCE authentication
+│   ├── audio/               # Real-time audio pipeline (FFT, protocol, receiver)
+│   ├── config/              # Configuration management
+│   ├── lyrics/              # Genius.com lyrics search and scraping
+│   ├── librespot/           # Librespot subprocess lifecycle
 │   ├── spotify/             # Spotify API client wrapper
-│   │   ├── client.go        # API methods and type converters
-│   │   ├── client_test.go   # Converter tests
-│   │   └── api_test.go      # API tests with HTTP mocking
-│   └── ui/
-│       ├── app.go           # Main app model and routing
-│       ├── search.go        # Search view with drill-down
-│       ├── home.go          # Home screen tabs
-│       ├── nowplaying.go    # Now-playing bar
-│       ├── playlist.go      # Playlist browsing
-│       ├── track.go         # Track view
-│       ├── podcast.go       # Podcast browsing
-│       ├── episode.go       # Episode view
-│       ├── progressbar.go   # Gradient progress bar
-│       ├── visualizer.go    # Visualizer controller
-│       ├── styles.go        # Colors and styling
-│       ├── common.go        # Shared view interface and types
-│       ├── lazylist.go      # Paginated list with lazy loading and local search
-│       └── visualizers/
-│           ├── common.go        # Shared visualizer utilities
-│           ├── albumart.go      # Album art display
-│           ├── lyrics.go        # Lyrics display
-│           ├── spectrum.go      # Spectrum analyzer (audio-reactive)
-│           ├── oscillogram.go   # Waveform display (audio-reactive)
-│           ├── starfield.go     # 3D starfield (audio-reactive)
-│           ├── milkdrop_base.go # Milkdrop feedback warp engine
-│           ├── milkdrop_spiral.go       # Spiral warp preset
-│           ├── milkdrop_tunnel.go       # Tunnel warp preset
-│           ├── milkdrop_kaleidoscope.go # Kaleidoscope warp preset
-│           └── milkdrop_ripple.go       # Ripple warp preset
+│   └── ui/                  # TUI views, components, and visualizers
 └── go.mod
 ```
 
-## Tested On
-
-- Windows 11
-- macOS
-- Linux (Ubuntu)
-
-## TODO
-
-- Check light mode colors
-- Maybe themes? Probably not :)
-
-- Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
-
-## Built With
+### Built With
 
 - [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUI framework
 - [Bubbles](https://github.com/charmbracelet/bubbles) — TUI components
@@ -272,6 +205,13 @@ tuify/
 - [zmb3/spotify](https://github.com/zmb3/spotify) — Spotify Web API client
 - [librespot](https://github.com/librespot-org/librespot) — Open-source Spotify Connect client
 - [oto](https://github.com/ebitengine/oto) — Cross-platform audio playback
+
+## TODO
+
+- Check light mode colors
+- Maybe themes? Probably not :)
+
+- Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
 
 ## License
 
