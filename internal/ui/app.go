@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"log"
 	"strings"
 	"time"
 
@@ -562,10 +563,14 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 		}
 		// Re-establish playback context if the preferred device is inactive.
 		if !active && client.PreferredDevice != "" {
+			var transferErr error
 			if contextURI != "" && trackURI != "" {
-				_ = client.Play(ctx, trackURI, contextURI, deviceID)
+				transferErr = client.Play(ctx, trackURI, contextURI, deviceID)
 			} else {
-				_ = client.TransferPlayback(ctx, deviceID, true)
+				transferErr = client.TransferPlayback(ctx, deviceID, true)
+			}
+			if transferErr != nil {
+				log.Printf("[playback] device re-establishment failed: %v", transferErr)
 			}
 		}
 		return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}

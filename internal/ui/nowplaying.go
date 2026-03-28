@@ -342,7 +342,10 @@ func (m nowPlayingModel) renderGradient(lines []string) string {
 	total := len(visualLines)
 
 	for i, vl := range visualLines {
-		t := float64(i) / float64(total-1)
+		var t float64
+		if total > 1 {
+			t = float64(i) / float64(total-1)
+		}
 		c := startC.BlendLab(endC, t).Clamped()
 		r, g, bl := c.RGB255()
 		bgEsc := fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, bl)

@@ -503,8 +503,12 @@ func search[Raw, T any](ctx context.Context, c *Client, query, searchType, key s
 	if err := c.apiGet(ctx, endpoint, &wrapper); err != nil {
 		return nil, false, err
 	}
+	raw, ok := wrapper[key]
+	if !ok {
+		return nil, false, fmt.Errorf("search response missing %q key", key)
+	}
 	var p page[Raw]
-	if err := json.Unmarshal(wrapper[key], &p); err != nil {
+	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, false, err
 	}
 	return convert(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil

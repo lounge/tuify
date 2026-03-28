@@ -146,7 +146,7 @@ func (l *Lyrics) View(width, height int) string {
 		}
 
 		lineIdx := row - topPad + startLine
-		if lineIdx < startLine || lineIdx >= endLine {
+		if lineIdx < 0 || lineIdx < startLine || lineIdx >= endLine {
 			buf.WriteString(emptyRow)
 			continue
 		}

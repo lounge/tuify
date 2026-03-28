@@ -124,6 +124,7 @@ func (p *Process) launch() error {
 	}
 	stderr, err := p.cmd.StderrPipe()
 	if err != nil {
+		stdout.Close()
 		p.cmd = nil
 		return fmt.Errorf("failed to get librespot stderr: %w", err)
 	}
@@ -214,6 +215,13 @@ func (p *Process) Stop() error {
 	}
 	p.stopped = true
 	close(p.stopCh)
+	p.mu.Unlock()
+
+	// Re-read cmd/done under the lock. Setting stopped=true above prevents
+	// any new launch(), and closing stopCh aborts pending restarts. Any
+	// in-flight launch() that already passed the stopped check will complete
+	// and update p.cmd/p.done before we can re-acquire the lock.
+	p.mu.Lock()
 	cmd := p.cmd
 	done := p.done
 	p.mu.Unlock()
