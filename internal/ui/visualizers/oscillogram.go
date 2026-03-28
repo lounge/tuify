@@ -79,7 +79,7 @@ func (o *Oscillogram) View(width, height int) string {
 		if amp < oscMinAmp {
 			amp = oscMinAmp
 		}
-		hue := float64(bandIdx) / float64(audio.NumBands) * 300.0
+		hue := bandHue(bandIdx)
 		sat := 0.7 + amp*0.3
 		lum := 0.25 + amp*0.35
 		r, g, b := hslToRGB(hue, sat, lum)

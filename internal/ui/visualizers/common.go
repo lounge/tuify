@@ -94,6 +94,92 @@ func ansiFgBg(fgR, fgG, fgB, bgR, bgG, bgB int) string {
 
 const ansiReset = "\x1b[0m"
 
+// Theme hue range — green (primary) to purple (secondary).
+const (
+	themeHueStart = 130.0
+	themeHueRange = 150.0 // themeHueStart + themeHueRange = 280
+)
+
+// bandHue returns a hue for frequency band index, sweeping green → purple.
+func bandHue(bandIdx int) float64 {
+	return themeHueStart + float64(bandIdx)/float64(audio.NumBands)*themeHueRange
+}
+
+// BeatDetector tracks beat timing from bass amplitude and estimates tempo.
+// Embed in any visualizer that needs tempo-aware behavior.
+type BeatDetector struct {
+	lastBeatMs    int32
+	above         bool
+	intervals     []int32
+	TempoMul      float64 // 0.4–1.6, maps BPM to speed multiplier
+	Pulse         float64 // 1.0 on beat, decays toward 0
+}
+
+const (
+	beatThreshold  = 0.3  // bass must cross this to register a beat
+	beatCooldownMs = 200  // min ms between beats to avoid double-triggers
+	beatMaxHistory = 8    // number of recent beat intervals to average
+	beatPulseDecay = 0.85 // per-frame decay for Pulse
+)
+
+// Reset clears all beat state. Call on track change or Init.
+func (bd *BeatDetector) Reset() {
+	bd.lastBeatMs = 0
+	bd.above = false
+	bd.intervals = bd.intervals[:0]
+	bd.TempoMul = 1.0
+	bd.Pulse = 0
+}
+
+// Tick decays the pulse and processes a new bass sample.
+// Call once per frame with the current bass amplitude and playback progress.
+func (bd *BeatDetector) Tick(bass float64, progressMs int32) {
+	bd.Pulse *= beatPulseDecay
+
+	// Detect seek or track change.
+	if bd.lastBeatMs > 0 && (progressMs < bd.lastBeatMs || progressMs-bd.lastBeatMs > 5000) {
+		bd.Reset()
+	}
+
+	wasAbove := bd.above
+	bd.above = bass > beatThreshold
+
+	if bd.above && !wasAbove {
+		bd.Pulse = 1.0
+		if bd.lastBeatMs > 0 {
+			interval := progressMs - bd.lastBeatMs
+			if interval >= beatCooldownMs && interval < 3000 {
+				bd.intervals = append(bd.intervals, interval)
+				if len(bd.intervals) > beatMaxHistory {
+					bd.intervals = bd.intervals[1:]
+				}
+				bd.updateTempo()
+			}
+		}
+		bd.lastBeatMs = progressMs
+	}
+}
+
+func (bd *BeatDetector) updateTempo() {
+	if len(bd.intervals) < 3 {
+		return
+	}
+	var sum int64
+	for _, iv := range bd.intervals {
+		sum += int64(iv)
+	}
+	avgMs := float64(sum) / float64(len(bd.intervals))
+	bpm := 60000.0 / avgMs
+
+	bd.TempoMul = bpm / 120.0
+	if bd.TempoMul < 0.4 {
+		bd.TempoMul = 0.4
+	}
+	if bd.TempoMul > 1.6 {
+		bd.TempoMul = 1.6
+	}
+}
+
 // upperBlocks are ascending block-fill characters used by spectrum and oscillogram.
 var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
 

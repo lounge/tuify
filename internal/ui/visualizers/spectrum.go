@@ -88,8 +88,7 @@ func (s *Spectrum) View(width, height int) string {
 			cellFromBottom := height - 1 - row
 			cellLevel := barHeight - float64(cellFromBottom)
 
-			// Hue: low freq = red, high freq = blue/purple.
-			hue := float64(bandIdx) / float64(audio.NumBands) * 270.0
+			hue := bandHue(bandIdx)
 			sat := 0.8
 			lum := 0.35 + amp*0.25
 

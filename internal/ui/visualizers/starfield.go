@@ -2,22 +2,22 @@ package visualizers
 
 import (
 	"hash/fnv"
-	"math"
 	"strings"
 
 	"github.com/lounge/tuify/internal/audio"
 )
 
 const (
-	baseStars = 200
-	maxStars  = 600
+	baseStars = 350
+	maxStars  = 900
 )
 
-var starChars = [5]rune{'·', '∙', '•', '⦁', '★'}
+var starChars = [5]rune{'∙', '•', '⦁', '★', '✦'}
 
 type star struct {
 	x, y, z float64
 	speed   float64
+	hue     float64
 }
 
 type Starfield struct {
@@ -30,6 +30,7 @@ type Starfield struct {
 	gridH     int
 	audioData *audio.FrequencyData
 	intensity float64 // audio intensity, computed in Advance()
+	beat      BeatDetector
 }
 
 func NewStarfield() *Starfield {
@@ -44,6 +45,7 @@ func (sf *Starfield) Init(seed string, durationMs int) {
 	for i := range sf.stars {
 		sf.stars[i] = sf.newStar(true)
 	}
+	sf.beat.Reset()
 	sf.inited = true
 }
 
@@ -57,7 +59,7 @@ func (sf *Starfield) Advance() {
 	}
 
 	// Audio-reactive parameters.
-	speedMul := 0.15 // slow drift when idle/paused
+	speedMul := 0.08 // slow drift when idle/paused
 	sf.intensity = 0
 	if sf.audioData != nil {
 		bass := float64(sf.audioData.Bass)
@@ -65,8 +67,12 @@ func (sf *Starfield) Advance() {
 		peak := float64(sf.audioData.Peak)
 		sf.intensity = bass*0.5 + mid*0.3 + peak*0.2
 
-		// Speed: 0.5× quiet, up to 8× on heavy bass hits.
-		speedMul = 0.5 + bass*7.5
+		sf.beat.Tick(bass, sf.audioData.ProgressMs)
+
+		// Speed: continuous bass drive + beat pulse burst, scaled by tempo.
+		bassDrive := bass * 3.0
+		beatBurst := sf.beat.Pulse * 4.0
+		speedMul = (0.3 + bassDrive + beatBurst) * sf.beat.TempoMul
 
 		// Spawn extra stars based on overall intensity.
 		targetCount := baseStars + int(sf.intensity*float64(maxStars-baseStars))
@@ -146,15 +152,12 @@ func (sf *Starfield) View(width, height int) string {
 			charIdx = len(starChars) - 1
 		}
 
-		lum := 0.3 + closeness*0.7 + sf.intensity*0.2
+		lum := 0.45 + closeness*0.4 + sf.intensity*0.15
 		if lum > 1.0 {
 			lum = 1.0
 		}
-		hue := math.Mod(s.x*180+s.y*180+200, 360)
-		if hue < 0 {
-			hue += 360
-		}
-		sat := 0.1 + closeness*0.3 + sf.intensity*0.5
+		hue := s.hue
+		sat := 0.4 + closeness*0.3 + sf.intensity*0.3
 		if sat > 1.0 {
 			sat = 1.0
 		}
@@ -198,10 +201,14 @@ func (sf *Starfield) newStar(randomDepth bool) star {
 	sf.rng = xorshift(sf.rng)
 	speed := 0.3 + float64(sf.rng%700)/1000.0
 
+	// Extra scramble to decouple hue from x/y position.
+	sf.rng = xorshift(xorshift(xorshift(sf.rng)))
+	hue := themeHueStart + float64(sf.rng%1500)/10.0 // 130–280
+
 	z := 1.0
 	if randomDepth {
 		sf.rng = xorshift(sf.rng)
 		z = float64(sf.rng%999+1) / 1000.0
 	}
-	return star{x: x, y: y, z: z, speed: speed}
+	return star{x: x, y: y, z: z, speed: speed, hue: hue}
 }
