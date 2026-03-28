@@ -74,8 +74,7 @@ jobs:
 
       - name: Create archives
         run: |
-          mkdir -p dist
-          version="${GITHUB_REF_NAME}"
+          mkdir -p dist staging
 
           for f in artifacts/tuify_*; do
             base=$(basename "$f")
@@ -83,10 +82,14 @@ jobs:
             ext="${base##*.}"
 
             if [ "$ext" = "exe" ]; then
-              zip "dist/${name}.zip" -j "$f"
+              cp "$f" staging/tuify.exe
+              (cd staging && zip "../dist/${name}.zip" tuify.exe)
+              rm staging/tuify.exe
             else
-              chmod +x "$f"
-              tar czf "dist/${name}.tar.gz" -C artifacts "$base"
+              cp "$f" staging/tuify
+              chmod +x staging/tuify
+              tar czf "dist/${name}.tar.gz" -C staging tuify
+              rm staging/tuify
             fi
           done
 
