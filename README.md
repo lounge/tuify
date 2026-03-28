@@ -171,9 +171,11 @@ Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. The log is 
 
 ---
 
-## Contributing
+## Development
 
 ### Build from source
+
+Requires Go 1.26+. On Linux, also install `libasound2-dev`.
 
 ```bash
 git clone https://github.com/lounge/tuify.git
@@ -182,38 +184,23 @@ go build
 go test ./...
 ```
 
-Requires Go 1.26+. On Linux, also install `libasound2-dev`.
+### Architecture
 
-### Project Structure
-
-```
-tuify/
-├── main.go                  # Entry point, librespot + audio pipeline setup
-├── internal/
-│   ├── auth/                # OAuth2 PKCE authentication
-│   ├── audio/               # Real-time audio pipeline (FFT, protocol, receiver)
-│   ├── config/              # Configuration management
-│   ├── lyrics/              # Genius.com lyrics search and scraping
-│   ├── librespot/           # Librespot subprocess lifecycle
-│   ├── spotify/             # Spotify API client wrapper
-│   └── ui/                  # TUI views, components, and visualizers
-└── go.mod
-```
-
-### Built With
-
-- [Bubble Tea](https://github.com/charmbracelet/bubbletea) — TUI framework
-- [Bubbles](https://github.com/charmbracelet/bubbles) — TUI components
-- [Lip Gloss](https://github.com/charmbracelet/lipgloss) — Terminal styling
-- [zmb3/spotify](https://github.com/zmb3/spotify) — Spotify Web API client
-- [librespot](https://github.com/librespot-org/librespot) — Open-source Spotify Connect client
-- [oto](https://github.com/ebitengine/oto) — Cross-platform audio playback
+| Package | Description |
+|---------|-------------|
+| `internal/ui` | TUI views, components, and visualizers ([Bubble Tea](https://github.com/charmbracelet/bubbletea) + [Lip Gloss](https://github.com/charmbracelet/lipgloss)) |
+| `internal/spotify` | Spotify Web API client ([zmb3/spotify](https://github.com/zmb3/spotify)) |
+| `internal/audio` | Real-time audio pipeline — FFT, binary protocol, receiver ([oto](https://github.com/ebitengine/oto)) |
+| `internal/librespot` | [Librespot](https://github.com/librespot-org/librespot) subprocess lifecycle |
+| `internal/lyrics` | Genius.com lyrics scraping |
+| `internal/auth` | OAuth2 PKCE authentication |
+| `internal/config` | Configuration management |
 
 ## TODO
 
-- Check light mode colors
+- make the milkdrop vizs match the ui colors more
+- Check light mode colors. they are good enough...
 - Maybe themes? Probably not :)
-
 - Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
 
 ## License
