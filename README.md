@@ -40,6 +40,27 @@ A terminal-based Spotify client written in Go. Browse playlists, search for musi
 
 ## Install
 
+### Homebrew (macOS / Linux)
+
+```bash
+brew install lounge/tap/tuify
+```
+
+### Scoop (Windows)
+
+[Scoop](https://github.com/ScoopInstaller/scoop?tab=readme-ov-file#installation)
+
+```powershell
+scoop bucket add lounge https://github.com/lounge/scoop-bucket
+scoop install tuify
+```
+
+### Download
+
+Pre-built binaries for macOS, Linux, and Windows are available on the [Releases](https://github.com/lounge/tuify/releases) page.
+
+### Build from source
+
 ```bash
 go install github.com/lounge/tuify@latest
 ```
