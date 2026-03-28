@@ -78,6 +78,7 @@ type PlayerState struct {
 	ImageURL   string
 	ProgressMs int
 	DurationMs int
+	DeviceName string
 }
 
 type rawArtistRef struct {
@@ -301,7 +302,10 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		Playing    bool `json:"is_playing"`
 		Shuffling  bool `json:"shuffle_state"`
 		ProgressMs int  `json:"progress_ms"`
-		Context    *struct {
+		Device     *struct {
+			Name string `json:"name"`
+		} `json:"device"`
+		Context *struct {
 			URI string `json:"uri"`
 		} `json:"context"`
 		Item *struct {
@@ -337,6 +341,9 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		TrackURI:   state.Item.URI,
 		ProgressMs: state.ProgressMs,
 		DurationMs: state.Item.DurationMs,
+	}
+	if state.Device != nil {
+		ps.DeviceName = state.Device.Name
 	}
 	if state.Context != nil {
 		ps.ContextURI = state.Context.URI

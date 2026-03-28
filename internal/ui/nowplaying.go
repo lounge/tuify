@@ -65,6 +65,7 @@ type nowPlayingModel struct {
 	hasTrack   bool
 	progressMs int
 	durationMs int
+	deviceName string
 
 	// Pending optimistic updates awaiting API confirmation
 	seekPending      bool
@@ -137,6 +138,7 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	}
 	m.imageURL = msg.state.ImageURL
 	m.durationMs = msg.state.DurationMs
+	m.deviceName = msg.state.DeviceName
 	m.hasTrack = true
 
 	// Track changed — pending play/pause is stale, accept fresh state.
@@ -296,12 +298,29 @@ func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
 		if m.shuffling {
 			shuffle = "[shuffle] "
 		}
-		status = fmt.Sprintf("%s %s%s — %s",
+		left := fmt.Sprintf("%s %s%s — %s",
 			nowPlayingIconStyle.Render(icon),
 			nowPlayingIconStyle.Render(shuffle),
 			nowPlayingTrackStyle.Render(m.track),
 			nowPlayingArtistStyle.Render(m.artist),
 		)
+		device := ""
+		if m.deviceName != "" {
+			device = nowPlayingTrackStyle.Render("◉ ") + nowPlayingArtistStyle.Render(m.deviceName)
+		}
+		if device != "" {
+			leftLen := lipgloss.Width(left)
+			deviceLen := lipgloss.Width(device)
+			innerWidth := m.width - nowPlayingPadding
+			gap := innerWidth - leftLen - deviceLen
+			if gap >= 2 {
+				status = left + strings.Repeat(" ", gap) + device
+			} else {
+				status = left
+			}
+		} else {
+			status = left
+		}
 	} else {
 		status = nowPlayingArtistStyle.Render("No track playing")
 	}

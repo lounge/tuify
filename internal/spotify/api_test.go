@@ -165,6 +165,7 @@ func TestGetPlayerState_Playing(t *testing.T) {
 		"is_playing":    true,
 		"shuffle_state": true,
 		"progress_ms":   60000,
+		"device":        map[string]interface{}{"name": "MacBook Pro"},
 		"item": map[string]interface{}{
 			"name":        "Test Song",
 			"uri":         "spotify:track:abc",
@@ -202,6 +203,39 @@ func TestGetPlayerState_Playing(t *testing.T) {
 	}
 	if state.DurationMs != 200000 {
 		t.Errorf("DurationMs: got %d", state.DurationMs)
+	}
+	if state.DeviceName != "MacBook Pro" {
+		t.Errorf("DeviceName: got %q, want %q", state.DeviceName, "MacBook Pro")
+	}
+}
+
+func TestGetPlayerState_NoDevice(t *testing.T) {
+	response := map[string]interface{}{
+		"is_playing":    true,
+		"shuffle_state": false,
+		"progress_ms":   0,
+		"item": map[string]interface{}{
+			"name":        "Test Song",
+			"uri":         "spotify:track:abc",
+			"duration_ms": 200000,
+			"artists":     []map[string]interface{}{{"name": "Artist"}},
+		},
+	}
+
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(response)
+	})
+	defer cleanup()
+
+	state, err := c.GetPlayerState(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if state == nil {
+		t.Fatal("expected non-nil state")
+	}
+	if state.DeviceName != "" {
+		t.Errorf("DeviceName: got %q, want empty", state.DeviceName)
 	}
 }
 
