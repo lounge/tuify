@@ -8,9 +8,10 @@ import (
 )
 
 func TestDir_XDGOverride(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/tmp/xdg-test")
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
 	got := Dir()
-	want := "/tmp/xdg-test/tuify"
+	want := filepath.Join(tmp, "tuify")
 	if got != want {
 		t.Errorf("Dir() = %q, want %q", got, want)
 	}

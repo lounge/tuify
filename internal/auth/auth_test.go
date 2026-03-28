@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 	"time"
 
@@ -31,8 +32,10 @@ func TestSaveAndLoadToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("token file not found: %v", err)
 	}
-	if perm := info.Mode().Perm(); perm != 0o600 {
-		t.Errorf("token file permissions: got %o, want 600", perm)
+	if runtime.GOOS != "windows" {
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("token file permissions: got %o, want 600", perm)
+		}
 	}
 
 	loaded, err := LoadToken()

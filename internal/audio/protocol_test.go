@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"math"
 	"net"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -175,6 +176,9 @@ func TestReceiverReceivesData(t *testing.T) {
 
 	// Connect and send a frame
 	network := "unix"
+	if runtime.GOOS == "windows" {
+		network = "tcp"
+	}
 	conn, err := net.Dial(network, r.SocketPath())
 	if err != nil {
 		t.Fatalf("Dial: %v", err)
