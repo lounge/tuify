@@ -105,18 +105,22 @@ func bandHue(bandIdx int) float64 {
 	return themeHueStart + float64(bandIdx)/float64(audio.NumBands)*themeHueRange
 }
 
-// BeatDetector tracks beat timing from bass amplitude and estimates tempo.
-// Embed in any visualizer that needs tempo-aware behavior.
+// BeatDetector uses spectral flux with an adaptive threshold to detect beats
+// and estimate tempo. Embed in any visualizer that needs tempo-aware behavior.
 type BeatDetector struct {
-	lastBeatMs    int32
-	above         bool
-	intervals     []int32
-	TempoMul      float64 // 0.4–1.6, maps BPM to speed multiplier
-	Pulse         float64 // 1.0 on beat, decays toward 0
+	prevBands  [audio.NumBands]float32 // previous frame's bands for flux calculation
+	fluxAvg    float64                 // running average of spectral flux
+	hasPrev    bool                    // whether prevBands is populated
+	lastBeatMs int32
+	cooldown   bool // true while flux is still above threshold after a beat
+	intervals  []int32
+	TempoMul   float64 // 0.4–1.6, maps BPM to speed multiplier
+	Pulse      float64 // 1.0 on beat, decays toward 0
 }
 
 const (
-	beatThreshold  = 0.3  // bass must cross this to register a beat
+	beatFluxMul    = 2.0  // flux must exceed average by this multiplier to trigger
+	beatFluxAlpha  = 0.05 // EMA smoothing for running flux average
 	beatCooldownMs = 200  // min ms between beats to avoid double-triggers
 	beatMaxHistory = 8    // number of recent beat intervals to average
 	beatPulseDecay = 0.85 // per-frame decay for Pulse
@@ -124,16 +128,19 @@ const (
 
 // Reset clears all beat state. Call on track change or Init.
 func (bd *BeatDetector) Reset() {
+	bd.prevBands = [audio.NumBands]float32{}
+	bd.fluxAvg = 0
+	bd.hasPrev = false
 	bd.lastBeatMs = 0
-	bd.above = false
+	bd.cooldown = false
 	bd.intervals = bd.intervals[:0]
 	bd.TempoMul = 1.0
 	bd.Pulse = 0
 }
 
-// Tick decays the pulse and processes a new bass sample.
-// Call once per frame with the current bass amplitude and playback progress.
-func (bd *BeatDetector) Tick(bass float64, progressMs int32) {
+// Tick decays the pulse and processes a new frame of frequency bands.
+// Call once per frame with the full band data and playback progress.
+func (bd *BeatDetector) Tick(bands *[audio.NumBands]float32, progressMs int32) {
 	bd.Pulse *= beatPulseDecay
 
 	// Detect seek or track change.
@@ -141,11 +148,35 @@ func (bd *BeatDetector) Tick(bass float64, progressMs int32) {
 		bd.Reset()
 	}
 
-	wasAbove := bd.above
-	bd.above = bass > beatThreshold
+	if !bd.hasPrev {
+		bd.prevBands = *bands
+		bd.hasPrev = true
+		return
+	}
 
-	if bd.above && !wasAbove {
+	// Spectral flux: sum of half-wave rectified energy increases across bands.
+	var flux float64
+	for i := range audio.NumBands {
+		diff := float64(bands[i]) - float64(bd.prevBands[i])
+		if diff > 0 {
+			flux += diff * diff
+		}
+	}
+	bd.prevBands = *bands
+
+	// Update running average with EMA.
+	bd.fluxAvg = bd.fluxAvg*(1-beatFluxAlpha) + flux*beatFluxAlpha
+
+	// Adaptive threshold: beat when flux exceeds running average by multiplier.
+	threshold := bd.fluxAvg * beatFluxMul
+	if threshold < 0.01 {
+		threshold = 0.01 // minimum threshold for very quiet passages
+	}
+
+	above := flux > threshold
+	if above && !bd.cooldown {
 		bd.Pulse = 1.0
+		bd.cooldown = true
 		if bd.lastBeatMs > 0 {
 			interval := progressMs - bd.lastBeatMs
 			if interval >= beatCooldownMs && interval < 3000 {
@@ -157,6 +188,8 @@ func (bd *BeatDetector) Tick(bass float64, progressMs int32) {
 			}
 		}
 		bd.lastBeatMs = progressMs
+	} else if !above {
+		bd.cooldown = false
 	}
 }
 

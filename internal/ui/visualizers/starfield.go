@@ -28,9 +28,10 @@ type Starfield struct {
 	colors    []int32 // packed RGB (-1 = no star)
 	gridW     int
 	gridH     int
-	audioData *audio.FrequencyData
-	intensity float64 // audio intensity, computed in Advance()
-	beat      BeatDetector
+	audioData    *audio.FrequencyData
+	intensity    float64 // audio intensity, computed in Advance()
+	beat         BeatDetector
+	smoothSpeed  float64 // smoothed speed multiplier
 }
 
 func NewStarfield() *Starfield {
@@ -46,6 +47,7 @@ func (sf *Starfield) Init(seed string, durationMs int) {
 		sf.stars[i] = sf.newStar(true)
 	}
 	sf.beat.Reset()
+	sf.smoothSpeed = 0
 	sf.inited = true
 }
 
@@ -59,7 +61,7 @@ func (sf *Starfield) Advance() {
 	}
 
 	// Audio-reactive parameters.
-	speedMul := 0.08 // slow drift when idle/paused
+	speedMul := 0.05 // slow drift when idle/paused
 	sf.intensity = 0
 	if sf.audioData != nil {
 		bass := float64(sf.audioData.Bass)
@@ -67,12 +69,20 @@ func (sf *Starfield) Advance() {
 		peak := float64(sf.audioData.Peak)
 		sf.intensity = bass*0.5 + mid*0.3 + peak*0.2
 
-		sf.beat.Tick(bass, sf.audioData.ProgressMs)
+		sf.beat.Tick(&sf.audioData.Bands, sf.audioData.ProgressMs)
 
 		// Speed: continuous bass drive + beat pulse burst, scaled by tempo.
-		bassDrive := bass * 3.0
-		beatBurst := sf.beat.Pulse * 4.0
-		speedMul = (0.3 + bassDrive + beatBurst) * sf.beat.TempoMul
+		bassDrive := bass * 1.2
+		beatBurst := sf.beat.Pulse * 2.0
+		target := (0.2 + bassDrive + beatBurst) * sf.beat.TempoMul
+
+		// Smooth speed changes: fast attack, slow release.
+		if target > sf.smoothSpeed {
+			sf.smoothSpeed += (target - sf.smoothSpeed) * 0.3
+		} else {
+			sf.smoothSpeed += (target - sf.smoothSpeed) * 0.08
+		}
+		speedMul = sf.smoothSpeed
 
 		// Spawn extra stars based on overall intensity.
 		targetCount := baseStars + int(sf.intensity*float64(maxStars-baseStars))
@@ -144,7 +154,12 @@ func (sf *Starfield) View(width, height int) string {
 		}
 
 		closeness := 1.0 - s.z
-		charIdx := int(closeness * float64(len(starChars)-1))
+		// Pulsate star size: base from closeness, boosted by intensity.
+		sizeVal := closeness + sf.intensity*0.4
+		if sizeVal > 1.0 {
+			sizeVal = 1.0
+		}
+		charIdx := int(sizeVal * float64(len(starChars)-1))
 		if charIdx < 0 {
 			charIdx = 0
 		}
