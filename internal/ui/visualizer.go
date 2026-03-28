@@ -216,6 +216,9 @@ func (m *visualizerModel) initTrack(trackID string, durationMs int, track, artis
 // --- Image loading ---
 
 func (m *visualizerModel) loadImage(imageURL string) {
+	m.images.cancelPending()
+	m.drainImages()
+
 	if imageURL == "" {
 		m.imageURL = ""
 		m.setFallbackImage()
@@ -226,10 +229,22 @@ func (m *visualizerModel) loadImage(imageURL string) {
 		m.setImageOnAware(img)
 		return
 	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	m.images.cancel = cancel
 	url := imageURL
 	ch := m.images.ch
 	go func() {
-		resp, err := httpClient.Get(url)
+		defer cancel()
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			select {
+			case ch <- fetchResult{err: err, url: url}:
+			default:
+			}
+			return
+		}
+		resp, err := httpClient.Do(req)
 		if err != nil {
 			select {
 			case ch <- fetchResult{err: err, url: url}:

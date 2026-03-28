@@ -7,24 +7,13 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/lounge/tuify/internal/testutil"
 )
-
-// rewriteTransport redirects all requests to the test server,
-// so hardcoded genius.com URLs resolve locally.
-type rewriteTransport struct {
-	base   http.RoundTripper
-	target string
-}
-
-func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.URL.Scheme = "http"
-	req.URL.Host = t.target[len("http://"):]
-	return t.base.RoundTrip(req)
-}
 
 func newTestClient(handler http.HandlerFunc) (*http.Client, func()) {
 	srv := httptest.NewServer(handler)
-	transport := &rewriteTransport{base: srv.Client().Transport, target: srv.URL}
+	transport := &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}
 	return &http.Client{Transport: transport}, srv.Close
 }
 

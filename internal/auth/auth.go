@@ -60,11 +60,11 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 
 // NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
 // and persists them to disk on each refresh.
-func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) *http.Client {
+func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, error) {
 	base := a.Client(context.Background(), token)
 	t, ok := base.Transport.(*oauth2.Transport)
 	if !ok || t == nil {
-		log.Fatal("[auth] unexpected transport type from spotify authenticator")
+		return nil, fmt.Errorf("unexpected transport type from spotify authenticator")
 	}
 	ts := &savingTokenSource{base: t.Source, last: token}
 	return &http.Client{
@@ -72,7 +72,7 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) *http.Cl
 			Source: ts,
 			Base:   http.DefaultTransport,
 		},
-	}
+	}, nil
 }
 
 func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, error) {

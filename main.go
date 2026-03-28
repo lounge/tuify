@@ -69,7 +69,11 @@ func main() {
 		}
 	}
 
-	httpClient := auth.NewSavingClient(authenticator, token)
+	httpClient, err := auth.NewSavingClient(authenticator, token)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
 	spClient := sp.New(httpClient)
 	client := spotify.New(spClient, httpClient)
 	if err := client.FetchUserID(context.Background()); err != nil {

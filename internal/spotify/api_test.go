@@ -7,30 +7,17 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+
+	"github.com/lounge/tuify/internal/testutil"
 )
 
 // newTestClient creates a Client backed by a test HTTP server.
 // The handler receives all requests. The returned cleanup function must be deferred.
 func newTestClient(handler http.HandlerFunc) (*Client, func()) {
 	srv := httptest.NewServer(handler)
-	c := &Client{httpClient: srv.Client()}
-	// Rewrite base URL: apiGet uses full URLs, so we patch doWithRetry via a custom http client
-	// that redirects all requests to the test server.
-	transport := &rewriteTransport{base: srv.Client().Transport, target: srv.URL}
-	c.httpClient = &http.Client{Transport: transport}
+	transport := &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}
+	c := &Client{httpClient: &http.Client{Transport: transport}}
 	return c, srv.Close
-}
-
-// rewriteTransport rewrites request URLs to point at the test server.
-type rewriteTransport struct {
-	base   http.RoundTripper
-	target string
-}
-
-func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	req.URL.Scheme = "http"
-	req.URL.Host = t.target[len("http://"):]
-	return t.base.RoundTrip(req)
 }
 
 func TestGetPlaylists_OwnerFiltering(t *testing.T) {
