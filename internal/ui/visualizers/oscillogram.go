@@ -6,9 +6,6 @@ import (
 	"github.com/lounge/tuify/internal/audio"
 )
 
-// lowerMasks are descending block fills used for the mirrored bottom half.
-var lowerMasks = [7]string{"▇", "▆", "▅", "▄", "▃", "▂", "▁"}
-
 const (
 	oscMinAmp      = 0.005          // resting bar height for the idle gradient line
 	oscDecayActive = float32(0.82)  // band release decay per tick when audio is present
@@ -66,8 +63,6 @@ func (o *Oscillogram) View(width, height int) string {
 
 	topH := (height + 1) / 2
 	botH := height / 2
-
-	bgR, bgG, bgB := termBG()
 
 	cols := make([]oscCol, width)
 	for col := range width {
@@ -133,15 +128,17 @@ func (o *Oscillogram) View(width, height int) string {
 			}
 
 			blockIdx := int(cellLevel * 8)
-			if blockIdx >= 7 {
-				buf.WriteString(ansiFg(c.r, c.g, c.b))
-				buf.WriteString("█")
-				buf.WriteString(ansiReset)
-			} else {
-				buf.WriteString(ansiFgBg(bgR, bgG, bgB, c.r, c.g, c.b))
-				buf.WriteString(lowerMasks[blockIdx])
-				buf.WriteString(ansiReset)
+			if blockIdx > 7 {
+				blockIdx = 7
 			}
+			buf.WriteString(ansiFg(c.r, c.g, c.b))
+			if blockIdx >= 7 {
+				buf.WriteString("█")
+			} else {
+				buf.WriteString("\x1b[7m")
+				buf.WriteString(upperBlocks[6-blockIdx])
+			}
+			buf.WriteString(ansiReset)
 		}
 		rowsWritten++
 		if rowsWritten < height {

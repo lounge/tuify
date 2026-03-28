@@ -68,8 +68,6 @@ func (s *Spectrum) View(width, height int) string {
 		return ""
 	}
 
-	bgR, bgG, bgB := termBG()
-
 	var buf strings.Builder
 	buf.Grow(width * height * 20)
 
@@ -99,15 +97,13 @@ func (s *Spectrum) View(width, height int) string {
 					blockIdx = 7
 				}
 				r, g, b := hslToRGB(hue, sat, lum)
+				buf.WriteString(ansiFg(r, g, b))
 				if blockIdx >= 7 {
-					buf.WriteString(ansiFg(r, g, b))
 					buf.WriteString("█")
-					buf.WriteString(ansiReset)
 				} else {
-					buf.WriteString(ansiFgBg(r, g, b, bgR, bgG, bgB))
 					buf.WriteString(upperBlocks[blockIdx])
-					buf.WriteString(ansiReset)
 				}
+				buf.WriteString(ansiReset)
 			} else if cellFromBottom == peakRow && peak > 0.02 {
 				// Peak hold indicator.
 				r, g, b := hslToRGB(hue, 0.9, 0.6)
