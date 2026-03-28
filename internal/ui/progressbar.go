@@ -55,6 +55,23 @@ func renderProgressBar(width, progressMs, durationMs int) string {
 	return progressTimeStyle.Render(cur) + " " + bar + " " + progressTimeStyle.Render(total)
 }
 
+func renderMiniBar(barWidth, progressMs, durationMs int) string {
+	filled := 0
+	if durationMs > 0 {
+		filled = barWidth * progressMs / durationMs
+	}
+	if filled > barWidth {
+		filled = barWidth
+	}
+	if filled == 0 && progressMs > 0 {
+		filled = 1
+	}
+	empty := barWidth - filled
+
+	filledStr := renderGradientFill(filled, resolveHex(colorPrimary), resolveHex(colorTip))
+	return filledStr + progressEmptyStyle.Render(strings.Repeat("─", empty))
+}
+
 const progressSolidPct = 70 // percentage of the filled bar that uses the solid color
 
 func renderGradientFill(filled int, solidHex, tipHex string) string {
