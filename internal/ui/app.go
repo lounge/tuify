@@ -58,6 +58,7 @@ type Model struct {
 	seekSeq    int
 	vimMode    bool
 	showHelp   bool
+	miniMode   bool
 }
 
 // ModelOption configures optional Model features.
@@ -259,6 +260,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "c":
 		return m, m.copyTrackLink()
 	case "v":
+		if m.miniMode {
+			return m, nil
+		}
 		if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
 			cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
 			return m, cmd
@@ -274,12 +278,24 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.visualizer.cycle(1)
 			return m, nil
 		}
+	case "m":
+		m.miniMode = !m.miniMode
+		return m, nil
 	case "h", "?":
-		m.showHelp = true
+		if !m.miniMode {
+			m.showHelp = true
+		}
 		return m, nil
 	case "esc":
+		if m.miniMode {
+			m.miniMode = false
+			return m, nil
+		}
 		return m.handleBack()
 	case "enter":
+		if m.miniMode {
+			return m, nil
+		}
 		return m.handleEnter()
 	case "/":
 		if sv, ok := m.currentView().(*searchView); ok {
@@ -596,6 +612,7 @@ func (m Model) helpView(height int) string {
 			"v            visualizer",
 			"left / right cycle viz",
 			"/            search",
+			"m            mini mode",
 			"?            close help",
 			"q            quit",
 		}
@@ -612,6 +629,7 @@ func (m Model) helpView(height int) string {
 			"v            visualizer",
 			"left / right cycle viz",
 			"/            search",
+			"m            mini mode",
 			"h            close help",
 			"q            quit",
 		}
@@ -620,9 +638,83 @@ func (m Model) helpView(height int) string {
 	return lipgloss.Place(m.width, height, lipgloss.Center, lipgloss.Center, box)
 }
 
+func (m Model) miniModeView() string {
+	np := m.nowPlaying
+	if np.statusMsg != "" {
+		style := lipgloss.NewStyle().Foreground(colorText)
+		if np.statusIsError {
+			style = errorStyle
+		}
+		return np.renderGradient([]string{style.Render(np.statusMsg)})
+	}
+	if !np.hasTrack {
+		return np.renderGradient([]string{nowPlayingArtistStyle.Render("No track playing")})
+	}
+
+	icon := "⏸"
+	if np.playing {
+		icon = "▶"
+	}
+	iconStr := nowPlayingIconStyle.Render(icon)
+
+	cur := formatDuration(time.Duration(np.progressMs) * time.Millisecond)
+	total := formatDuration(time.Duration(np.durationMs) * time.Millisecond)
+	timestamps := progressTimeStyle.Render(cur + "/" + total)
+
+	iconLen := lipgloss.Width(iconStr)
+	tsLen := lipgloss.Width(timestamps)
+	innerWidth := m.width - nowPlayingPadding
+
+	// Track — Artist label, truncated to fit.
+	track := np.track
+	artist := " — " + np.artist
+	labelBudget := innerWidth - iconLen - tsLen - 8 // 4 spaces + 4 min bar
+	if labelBudget < 1 {
+		labelBudget = 1
+	}
+	labelRunes := []rune(track + artist)
+	if len(labelRunes) > labelBudget {
+		truncated := string(labelRunes[:labelBudget-1]) + "…"
+		trackRunes := []rune(track)
+		if labelBudget-1 <= len(trackRunes) {
+			track = string(trackRunes[:labelBudget-1]) + "…"
+			artist = ""
+		} else {
+			artist = truncated[len(track):]
+		}
+	}
+	var labelStr string
+	if artist != "" {
+		labelStr = nowPlayingTrackStyle.Render(track) + nowPlayingArtistStyle.Render(artist)
+	} else {
+		labelStr = nowPlayingTrackStyle.Render(track)
+	}
+	labelLen := lipgloss.Width(labelStr)
+
+	// Progress bar fills remaining space.
+	barWidth := innerWidth - iconLen - labelLen - tsLen - 4
+	var barStr string
+	if barWidth >= 4 {
+		barStr = renderMiniBar(barWidth, np.progressMs, np.durationMs)
+	}
+
+	var line string
+	if barStr != "" {
+		line = iconStr + " " + labelStr + "  " + barStr + " " + timestamps
+	} else {
+		line = iconStr + " " + labelStr + "  " + timestamps
+	}
+
+	return np.renderGradient([]string{line})
+}
+
 func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
+	}
+
+	if m.miniMode {
+		return m.miniModeView()
 	}
 
 	var b strings.Builder

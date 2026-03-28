@@ -199,7 +199,7 @@ go test ./...
 
 ## TODO
 
-- make the milkdrop vizs match the ui colors more
+- Waveform visualizer — classic waveform using raw PCM
 - Check light mode colors. they are good enough...
 - Maybe themes? Probably not :)
 - Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
