@@ -571,11 +571,23 @@ func (m Model) stopPlayback() tea.Cmd {
 
 func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
 	client := m.client
+	deviceOverridden := m.nowPlaying.deviceOverridden
 	trackURI := m.nowPlaying.trackURI
 	contextURI := m.nowPlaying.contextURI
 	return func() tea.Msg {
 		ctx := context.Background()
-		deviceID, active, err := client.FindDevice(ctx)
+
+		// If the user manually switched to another device in Spotify,
+		// target whatever device is currently active instead of re-claiming.
+		if deviceOverridden {
+			deviceID, _, err := client.FindDevice(ctx, true)
+			if err != nil {
+				return playbackResultMsg{err: err, seek: seek}
+			}
+			return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
+		}
+
+		deviceID, active, err := client.FindDevice(ctx, false)
 		if err != nil {
 			return playbackResultMsg{err: err, seek: seek}
 		}

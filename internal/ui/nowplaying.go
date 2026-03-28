@@ -79,13 +79,22 @@ type nowPlayingModel struct {
 	progressCache map[string]int // trackURI → last known progressMs
 	resumeUntilMs int            // ignore API progressMs below this until Spotify catches up
 
+	// Device override: when the user manually switches playback to another
+	// device in Spotify, we stop re-claiming the preferred device.
+	preferredDevice  string
+	deviceOverridden bool
+
 	// Status display (errors and info messages)
 	statusMsg     string
 	statusIsError bool
 }
 
 func newNowPlaying(client *spotify.Client) *nowPlayingModel {
-	return &nowPlayingModel{client: client, progressCache: make(map[string]int)}
+	return &nowPlayingModel{
+		client:          client,
+		preferredDevice: client.PreferredDevice,
+		progressCache:   make(map[string]int),
+	}
 }
 
 // Lifecycle
@@ -138,6 +147,22 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	}
 	m.imageURL = msg.state.ImageURL
 	m.durationMs = msg.state.DurationMs
+
+	// Detect external device switches: if playback moved away from the
+	// preferred device without tuify initiating it, stop re-claiming.
+	if m.preferredDevice != "" && msg.state.DeviceName != "" {
+		if msg.state.DeviceName != m.preferredDevice && (m.deviceName == m.preferredDevice || m.deviceName == "") {
+			if !m.deviceOverridden {
+				m.deviceOverridden = true
+				m.client.DeviceOverridden.Store(true)
+				log.Printf("[device] external switch detected: %s → %s; will not re-claim", m.preferredDevice, msg.state.DeviceName)
+			}
+		} else if msg.state.DeviceName == m.preferredDevice && m.deviceOverridden {
+			m.deviceOverridden = false
+			m.client.DeviceOverridden.Store(false)
+			log.Printf("[device] playback returned to preferred device %s", m.preferredDevice)
+		}
+	}
 	m.deviceName = msg.state.DeviceName
 	m.hasTrack = true
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	neturl "net/url"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	sp "github.com/zmb3/spotify/v2"
@@ -19,6 +20,11 @@ type Client struct {
 	httpClient      *http.Client
 	userID          string
 	PreferredDevice string // if set, FindDevice prefers this device name
+
+	// DeviceOverridden is set when the user manually switches playback to
+	// another device in Spotify. Checked by the librespot OnReconnect
+	// callback to avoid stealing playback back.
+	DeviceOverridden atomic.Bool
 }
 
 type Playlist struct {
@@ -423,7 +429,9 @@ func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play boo
 }
 
 // FindDevice returns the best device ID and whether it is currently active.
-func (c *Client) FindDevice(ctx context.Context) (id string, active bool, err error) {
+// When activeOnly is true, only a device currently marked active by Spotify is
+// returned; an error is returned if no device is active.
+func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, active bool, err error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
 		return "", false, err
@@ -431,8 +439,8 @@ func (c *Client) FindDevice(ctx context.Context) (id string, active bool, err er
 	if len(devices) == 0 {
 		return "", false, fmt.Errorf("no Spotify devices found — open Spotify on any device")
 	}
-	// Prefer the configured device (e.g., librespot's "tuify").
-	if c.PreferredDevice != "" {
+	// When not restricted to active-only, prefer the configured device.
+	if !activeOnly && c.PreferredDevice != "" {
 		for _, d := range devices {
 			if d.Name == c.PreferredDevice {
 				return string(d.ID), d.Active, nil
@@ -443,6 +451,9 @@ func (c *Client) FindDevice(ctx context.Context) (id string, active bool, err er
 		if d.Active {
 			return string(d.ID), true, nil
 		}
+	}
+	if activeOnly {
+		return "", false, fmt.Errorf("no active Spotify device found")
 	}
 	return string(devices[0].ID), false, nil
 }

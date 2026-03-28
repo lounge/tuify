@@ -134,9 +134,13 @@ func main() {
 			librespotProc := librespot.NewProcess(lsCfg)
 			librespotProc.OnReconnect = func() {
 				time.Sleep(2 * time.Second)
+				if client.DeviceOverridden.Load() {
+					log.Printf("[librespot] reconnect: device was manually switched, skipping transfer")
+					return
+				}
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				devID, _, err := client.FindDevice(ctx)
+				devID, _, err := client.FindDevice(ctx, false)
 				if err != nil {
 					log.Printf("[librespot] reconnect: could not find device: %v", err)
 					return
