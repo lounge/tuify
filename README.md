@@ -18,6 +18,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 - **Podcasts** — Browse saved shows and episodes
 - **Search** — Find tracks, episodes, artists, albums, and shows
 - **Now Playing** — Live progress bar, track info, shuffle state, active device indicator
+- **Mini Mode** — Compact single-line view with track info and progress
 - **Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and Milkdrop-style presets
 - **Lyrics** — Fetches and displays lyrics from Genius.com
 - **Dark & Light Terminals** — Adaptive color palette that adjusts automatically
@@ -73,6 +74,7 @@ Pre-built binaries for all platforms are available on the [Releases](https://git
 | `/` | Search |
 | `v` | Toggle visualizer |
 | `←` / `→` | Cycle visualizers |
+| `m` | Toggle mini mode |
 | `h` | Show help overlay |
 | `q` | Quit |
 
