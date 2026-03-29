@@ -3,6 +3,7 @@
 A terminal-based Spotify client. Browse playlists, search for music and podcasts, control playback — **Spotify without all the noise.**
 
 ![CI](https://github.com/lounge/tuify/actions/workflows/ci.yml/badge.svg)
+![Go Report Card](https://goreportcard.com/badge/github.com/lounge/tuify)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
@@ -131,7 +132,7 @@ Album Art and Lyrics work out of the box. The audio-reactive visualizers require
 2. Set `"enable_librespot": true` in `~/.config/tuify/config.json`
 3. Restart tuify — it will connect as a Spotify device automatically
 
-If the connection drops, tuify detects the failure, restarts librespot, and transfers playback back automatically. If you manually switch to another device in Spotify, tuify respects that and won't reclaim playback.
+If the connection drops, tuify detects the failure, restarts librespot, and transfers playback back automatically. If you manually switch to another device in Spotify, tuify respects that and won't reclaim playback. When librespot becomes inactive (playback moved away), the UI updates immediately via Spotify Connect signals — no API polling delay.
 
 ### Librespot Config
 
