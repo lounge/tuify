@@ -138,11 +138,8 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 	ts.startProactiveRefresh()
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
-			Timeout:   10 * time.Second,
-			KeepAlive: 15 * time.Second,
+			Timeout: 10 * time.Second,
 		}).DialContext,
-		MaxIdleConnsPerHost:   10,
-		IdleConnTimeout:       30 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ResponseHeaderTimeout: 15 * time.Second,
 		DisableKeepAlives:     true,

@@ -113,7 +113,6 @@ func TestSavingTokenSource_PersistsOnRefresh(t *testing.T) {
 	first := &oauth2.Token{AccessToken: "old", Expiry: time.Now().Add(time.Hour)}
 	second := &oauth2.Token{AccessToken: "new", Expiry: time.Now().Add(2 * time.Hour)}
 
-	calls := 0
 	fake := oauth2.StaticTokenSource(second)
 	ts := &savingTokenSource{
 		base: oauth2.ReuseTokenSource(first, fake),
@@ -143,7 +142,6 @@ func TestSavingTokenSource_PersistsOnRefresh(t *testing.T) {
 	if tok.AccessToken != "new" {
 		t.Errorf("expected refreshed token, got %q", tok.AccessToken)
 	}
-	_ = calls
 
 	// Verify persisted to disk.
 	loaded, err := LoadToken()

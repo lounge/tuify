@@ -443,10 +443,8 @@ func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 		log.Printf("[devices] GetDevices API error: %v", err)
 		return nil, err
 	}
-	log.Printf("[devices] GetDevices returned %d device(s)", len(devices))
 	out := make([]Device, 0, len(devices))
 	for _, d := range devices {
-		log.Printf("[devices]   %s (type=%s, active=%v, id=%s)", d.Name, d.Type, d.Active, d.ID)
 		out = append(out, Device{
 			ID:     string(d.ID),
 			Name:   d.Name,

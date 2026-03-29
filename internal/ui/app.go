@@ -61,12 +61,12 @@ type Model struct {
 	width      int
 	height     int
 	seekSeq    int
-	vimMode              bool
-	showHelp             bool
-	showDeviceSelector   bool
-	deviceSelector       deviceSelectorModel
-	miniMode             bool
-	librespotInactiveCh  <-chan struct{}
+	vimMode             bool
+	showHelp            bool
+	showDeviceSelector  bool
+	deviceSelector      deviceSelectorModel
+	miniMode            bool
+	librespotInactiveCh <-chan struct{}
 }
 
 // ModelOption configures optional Model features.
@@ -199,7 +199,6 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	log.Printf("[key] %q (deviceSelector=%v, help=%v)", msg.String(), m.showDeviceSelector, m.showHelp)
 	// Help overlay: close on h, ? or esc
 	if m.showHelp {
 		switch msg.String() {
@@ -360,7 +359,6 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "tab":
 		if m.deviceSelector.transferring {
-			log.Printf("[key] tab blocked — device transfer in progress")
 			return m, nil
 		}
 		m.deviceSelector.open()
@@ -682,11 +680,6 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 	trackURI := m.nowPlaying.trackURI
 	contextURI := m.nowPlaying.contextURI
 	return func() tea.Msg {
-		defer func() {
-			if r := recover(); r != nil {
-				log.Printf("[withDevice] PANIC: %v", r)
-			}
-		}()
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
