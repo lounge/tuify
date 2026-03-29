@@ -812,7 +812,7 @@ func (m Model) miniModeView() string {
 			track = string(trackRunes[:labelBudget-1]) + "…"
 			artist = ""
 		} else {
-			artist = truncated[len(track):]
+			artist = string([]rune(truncated)[len(trackRunes):])
 		}
 	}
 	var labelStr string

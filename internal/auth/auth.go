@@ -11,14 +11,13 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sync"
 	"time"
-
-	"net/url"
 
 	"github.com/lounge/tuify/internal/config"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
@@ -206,13 +205,13 @@ func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, err
 		server.Shutdown(ctx)
 	}()
 
-	url := a.AuthURL(state,
+	authURL := a.AuthURL(state,
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 	)
-	openBrowser(url)
+	openBrowser(authURL)
 	fmt.Println("Waiting for authentication...")
-	fmt.Printf("If the browser doesn't open, visit:\n  %s\n", url)
+	fmt.Printf("If the browser doesn't open, visit:\n  %s\n", authURL)
 
 	select {
 	case token := <-tokenCh:

@@ -1,6 +1,9 @@
 package testutil
 
-import "net/http"
+import (
+	"net/http"
+	"net/url"
+)
 
 // RewriteTransport redirects all requests to a test server URL.
 type RewriteTransport struct {
@@ -10,7 +13,8 @@ type RewriteTransport struct {
 
 func (t *RewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	r := req.Clone(req.Context())
-	r.URL.Scheme = "http"
-	r.URL.Host = t.Target[len("http://"):]
+	target, _ := url.Parse(t.Target)
+	r.URL.Scheme = target.Scheme
+	r.URL.Host = target.Host
 	return t.Base.RoundTrip(r)
 }

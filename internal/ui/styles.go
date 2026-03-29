@@ -84,9 +84,6 @@ var (
 	loadingStyle = lipgloss.NewStyle().
 			Foreground(colorSubtle)
 
-	helpStyle = lipgloss.NewStyle().
-			Foreground(colorMuted)
-
 	searchInputStyle = lipgloss.NewStyle().
 				Foreground(colorSecondary)
 

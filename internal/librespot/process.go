@@ -133,6 +133,8 @@ func (p *Process) launch() error {
 	log.Printf("[librespot] starting: %s %v", p.config.BinaryPath, args)
 
 	if err := p.cmd.Start(); err != nil {
+		stdout.Close()
+		stderr.Close()
 		p.cmd = nil
 		return fmt.Errorf("failed to start librespot: %w", err)
 	}
