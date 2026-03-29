@@ -3,8 +3,8 @@
 A terminal-based Spotify client. Browse playlists, search for music and podcasts, control playback — **Spotify without all the noise.**
 
 ![CI](https://github.com/lounge/tuify/actions/workflows/ci.yml/badge.svg)
-![Go Report Card](https://goreportcard.com/badge/github.com/lounge/tuify)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![Go Report Card](https://goreportcard.com/badge/github.com/lounge/tuify)
 ![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
