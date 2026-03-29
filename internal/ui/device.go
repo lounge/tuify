@@ -110,11 +110,15 @@ func (d *deviceSelectorModel) view(width, height int) string {
 	} else if len(d.devices) == 0 {
 		body = loadingStyle.Render("No devices found")
 	} else {
-		// Find the longest device name for column alignment.
-		maxName := 0
+		// Find the longest display label for column alignment.
+		maxLabel := 0
 		for _, dev := range d.devices {
-			if len(dev.Name) > maxName {
-				maxName = len(dev.Name)
+			n := len(dev.Name)
+			if dev.ID == d.activeDeviceID {
+				n += 2 // " ◉"
+			}
+			if n > maxLabel {
+				maxLabel = n
 			}
 		}
 		var lines []string
@@ -127,12 +131,14 @@ func (d *deviceSelectorModel) view(width, height int) string {
 				nameStyle = nameStyle.Foreground(colorPrimary).Bold(true)
 			}
 			label := dev.Name
-			if dev.ID == d.activeDeviceID {
-				label += " (active)"
-			}
+			labelLen := len(dev.Name)
 			name := nameStyle.Render(label)
-			pad := strings.Repeat(" ", maxName-len(dev.Name)+2)
-			typ := typeStyle.Render(dev.Type)
+			if dev.ID == d.activeDeviceID {
+				name += " " + lipgloss.NewStyle().Foreground(colorSecondary).Render("◉")
+				labelLen += 2
+			}
+			pad := strings.Repeat(" ", maxLabel-labelLen+2)
+			typ := typeStyle.Render(strings.ToLower(dev.Type))
 			lines = append(lines, name+pad+typ)
 		}
 		body = strings.Join(lines, "\n")
