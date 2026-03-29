@@ -140,7 +140,7 @@ func main() {
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				defer cancel()
-				devID, _, err := client.FindDevice(ctx, false)
+				devID, _, _, err := client.FindDevice(ctx, false)
 				if err != nil {
 					log.Printf("[librespot] reconnect: could not find device: %v", err)
 					return
@@ -156,6 +156,14 @@ func main() {
 			} else {
 				defer librespotProc.Stop()
 			}
+			inactiveCh := make(chan struct{}, 1)
+			librespotProc.OnInactive = func() {
+				select {
+				case inactiveCh <- struct{}{}:
+				default:
+				}
+			}
+			opts = append(opts, ui.WithLibrespotInactive(inactiveCh))
 		}
 	}
 

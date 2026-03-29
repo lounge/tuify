@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -25,11 +26,14 @@ type transferDeviceMsg struct {
 // Model
 
 type deviceSelectorModel struct {
-	devices         []spotify.Device
-	activeDeviceID  string
-	cursor          int
-	loading         bool
-	err             error
+	devices          []spotify.Device
+	activeDeviceID   string
+	cursor           int
+	loading          bool
+	transferring     bool
+	transferTarget   string // device name we're switching to
+	transferDeadline time.Time
+	err              error
 }
 
 func (d *deviceSelectorModel) open() {
@@ -46,28 +50,39 @@ func (d *deviceSelectorModel) handleLoaded(msg devicesLoadedMsg) {
 		d.err = msg.err
 		return
 	}
-	// Track the active device and filter it out of the list.
 	d.activeDeviceID = ""
-	filtered := make([]spotify.Device, 0, len(msg.devices))
 	for _, dev := range msg.devices {
 		if dev.Active {
 			d.activeDeviceID = dev.ID
-		} else {
-			filtered = append(filtered, dev)
+			break
 		}
 	}
-	d.devices = filtered
+	d.devices = msg.devices
+	// Place cursor on the first non-active device.
+	d.cursor = 0
+	for i, dev := range d.devices {
+		if dev.ID != d.activeDeviceID {
+			d.cursor = i
+			break
+		}
+	}
 }
 
 func (d *deviceSelectorModel) up() {
-	if len(d.devices) > 0 && d.cursor > 0 {
+	for d.cursor > 0 {
 		d.cursor--
+		if d.devices[d.cursor].ID != d.activeDeviceID {
+			return
+		}
 	}
 }
 
 func (d *deviceSelectorModel) down() {
-	if len(d.devices) > 0 && d.cursor < len(d.devices)-1 {
+	for d.cursor < len(d.devices)-1 {
 		d.cursor++
+		if d.devices[d.cursor].ID != d.activeDeviceID {
+			return
+		}
 	}
 }
 
@@ -75,7 +90,11 @@ func (d *deviceSelectorModel) selected() (spotify.Device, bool) {
 	if len(d.devices) == 0 {
 		return spotify.Device{}, false
 	}
-	return d.devices[d.cursor], true
+	dev := d.devices[d.cursor]
+	if dev.ID == d.activeDeviceID {
+		return spotify.Device{}, false
+	}
+	return dev, true
 }
 
 // View
@@ -102,10 +121,16 @@ func (d *deviceSelectorModel) view(width, height int) string {
 		for i, dev := range d.devices {
 			nameStyle := lipgloss.NewStyle().Foreground(colorText)
 			typeStyle := lipgloss.NewStyle().Foreground(colorMuted)
-			if i == d.cursor {
+			if dev.ID == d.activeDeviceID {
+				nameStyle = nameStyle.Foreground(colorMuted)
+			} else if i == d.cursor {
 				nameStyle = nameStyle.Foreground(colorPrimary).Bold(true)
 			}
-			name := nameStyle.Render(dev.Name)
+			label := dev.Name
+			if dev.ID == d.activeDeviceID {
+				label += " (active)"
+			}
+			name := nameStyle.Render(label)
 			pad := strings.Repeat(" ", maxName-len(dev.Name)+2)
 			typ := typeStyle.Render(dev.Type)
 			lines = append(lines, name+pad+typ)
@@ -123,14 +148,17 @@ func (d *deviceSelectorModel) view(width, height int) string {
 
 func fetchDevicesCmd(client *spotify.Client) tea.Cmd {
 	return func() tea.Msg {
-		devices, err := client.GetDevices(context.Background())
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		devices, err := client.GetDevices(ctx)
 		return devicesLoadedMsg{devices: devices, err: err}
 	}
 }
 
 func transferDeviceCmd(client *spotify.Client, dev spotify.Device, currentDeviceID string) tea.Cmd {
 	return func() tea.Msg {
-		ctx := context.Background()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 		// Pause librespot before transferring away so it stops local audio.
 		// Only needed for the preferred device; other devices stop via Connect.
 		if currentDeviceID != "" && dev.Name != client.PreferredDevice {

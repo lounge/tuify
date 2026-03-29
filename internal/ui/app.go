@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -37,6 +38,10 @@ type playbackResultMsg struct {
 	seek bool // true for seek results (uses lighter post-action polling)
 }
 
+// LibrespotInactiveMsg is sent (via p.Send) when librespot reports that the
+// device became inactive, indicating playback moved to another device.
+type LibrespotInactiveMsg struct{}
+
 // searchCtx captures the parts that differ between API search and local filter search.
 type searchCtx struct {
 	query    *string
@@ -56,11 +61,12 @@ type Model struct {
 	width      int
 	height     int
 	seekSeq    int
-	vimMode            bool
-	showHelp           bool
-	showDeviceSelector bool
-	deviceSelector     deviceSelectorModel
-	miniMode           bool
+	vimMode              bool
+	showHelp             bool
+	showDeviceSelector   bool
+	deviceSelector       deviceSelectorModel
+	miniMode             bool
+	librespotInactiveCh  <-chan struct{}
 }
 
 // ModelOption configures optional Model features.
@@ -80,6 +86,12 @@ func WithAudioReceiver(r *audio.Receiver) ModelOption {
 // WithVimMode enables vim-style keybindings (h/l for back/select, ctrl+d/u half-page, etc.).
 func WithVimMode() ModelOption {
 	return func(m *Model) { m.vimMode = true }
+}
+
+// WithLibrespotInactive provides a channel that signals when librespot reports
+// its device became inactive (playback moved to another device).
+func WithLibrespotInactive(ch <-chan struct{}) ModelOption {
+	return func(m *Model) { m.librespotInactiveCh = ch }
 }
 
 func NewModel(client *spotify.Client, opts ...ModelOption) Model {
@@ -102,7 +114,19 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 // Lifecycle
 
 func (m Model) Init() tea.Cmd {
-	return m.nowPlaying.Init()
+	cmds := []tea.Cmd{m.nowPlaying.Init()}
+	if m.librespotInactiveCh != nil {
+		cmds = append(cmds, m.waitForLibrespotInactive())
+	}
+	return tea.Batch(cmds...)
+}
+
+func (m Model) waitForLibrespotInactive() tea.Cmd {
+	ch := m.librespotInactiveCh
+	return func() tea.Msg {
+		<-ch
+		return LibrespotInactiveMsg{}
+	}
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -124,11 +148,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.nowPlaying.SetInfo("Copied link to clipboard")
 	case seekFireMsg:
 		return m.handleSeekFire(msg)
+	case LibrespotInactiveMsg:
+		if !m.nowPlaying.deviceOverridden {
+			m.nowPlaying.deviceOverridden = true
+			m.client.DeviceOverridden.Store(true)
+			log.Printf("[device] librespot inactive — playback moved away from %s", m.client.PreferredDevice)
+		}
+		m.nowPlaying.deviceName = ""
+		return m, tea.Batch(m.nowPlaying.pollState(), m.waitForLibrespotInactive())
 	case devicesLoadedMsg:
 		m.deviceSelector.handleLoaded(msg)
 		return m, nil
 	case transferDeviceMsg:
 		if msg.err != nil {
+			m.deviceSelector.transferring = false
+			if errors.Is(msg.err, context.DeadlineExceeded) {
+				return m, nil
+			}
 			return m, m.nowPlaying.SetError("Transfer failed: " + msg.err.Error())
 		}
 		// Update override state based on whether the chosen device is preferred.
@@ -140,7 +176,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.client.DeviceOverridden.Store(false)
 		}
 		m.nowPlaying.deviceName = msg.deviceName
-		return m, m.nowPlaying.SetInfo("Switched to " + msg.deviceName)
+		return m, m.nowPlaying.SetInfo("Switching to " + msg.deviceName)
 	}
 
 	return m.handleStateUpdate(msg)
@@ -163,6 +199,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	log.Printf("[key] %q (deviceSelector=%v, help=%v)", msg.String(), m.showDeviceSelector, m.showHelp)
 	// Help overlay: close on h, ? or esc
 	if m.showHelp {
 		switch msg.String() {
@@ -186,6 +223,9 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case "enter":
 			if dev, ok := m.deviceSelector.selected(); ok {
 				m.showDeviceSelector = false
+				m.deviceSelector.transferring = true
+				m.deviceSelector.transferTarget = dev.Name
+				m.deviceSelector.transferDeadline = time.Now().Add(15 * time.Second)
 				m.nowPlaying.recordUserAction()
 				return m, m.transferDevice(dev)
 			}
@@ -319,6 +359,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 	case "tab":
+		if m.deviceSelector.transferring {
+			log.Printf("[key] tab blocked — device transfer in progress")
+			return m, nil
+		}
 		m.deviceSelector.open()
 		m.showDeviceSelector = true
 		return m, fetchDevicesCmd(m.client)
@@ -369,6 +413,13 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 		if m.nowPlaying.shufflePending {
 			m.nowPlaying.shufflePending = false
 			m.nowPlaying.shuffling = !m.nowPlaying.shuffling
+		}
+		// Don't show transient network errors in the UI — they recover on their own.
+		if errors.Is(msg.err, context.DeadlineExceeded) {
+			if msg.seek {
+				return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
+			}
+			return m, nil
 		}
 		errCmd := m.nowPlaying.SetError(msg.err.Error())
 		if msg.seek {
@@ -424,6 +475,15 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmd := m.nowPlaying.Update(msg)
 	if cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+
+	// Clear transfer lock once the poller confirms the target device is active,
+	// or if the deadline has passed.
+	if m.deviceSelector.transferring {
+		if m.nowPlaying.deviceName == m.deviceSelector.transferTarget ||
+			time.Now().After(m.deviceSelector.transferDeadline) {
+			m.deviceSelector.transferring = false
+		}
 	}
 
 	// Re-init visualizer on track change and reload album art + lyrics
@@ -622,24 +682,42 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 	trackURI := m.nowPlaying.trackURI
 	contextURI := m.nowPlaying.contextURI
 	return func() tea.Msg {
-		ctx := context.Background()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[withDevice] PANIC: %v", r)
+			}
+		}()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
 		// If the user manually switched to another device in Spotify,
 		// target whatever device is currently active instead of re-claiming.
 		if client.DeviceOverridden.Load() {
-			deviceID, _, err := client.FindDevice(ctx, true)
+			log.Printf("[withDevice] DeviceOverridden=true, finding active device")
+			deviceID, _, _, err := client.FindDevice(ctx, true)
 			if err != nil {
+				log.Printf("[withDevice] FindDevice(activeOnly) failed: %v", err)
 				return playbackResultMsg{err: err, seek: seek}
 			}
-			return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
+			log.Printf("[withDevice] targeting overridden device: %s", deviceID)
+			if err := fn(ctx, client, deviceID); err != nil {
+				log.Printf("[withDevice] command failed on overridden device: %v", err)
+				return playbackResultMsg{err: err, seek: seek}
+			}
+			return playbackResultMsg{err: nil, seek: seek}
 		}
 
-		deviceID, active, err := client.FindDevice(ctx, false)
+		deviceID, active, preferred, err := client.FindDevice(ctx, false)
 		if err != nil {
+			log.Printf("[withDevice] FindDevice failed: %v", err)
 			return playbackResultMsg{err: err, seek: seek}
 		}
-		// Re-establish playback context if the preferred device is inactive.
-		if !active && client.PreferredDevice != "" {
+		log.Printf("[withDevice] device=%s active=%v preferred=%v overridden=%v", deviceID, active, preferred, client.DeviceOverridden.Load())
+		// Re-establish playback only when the preferred device was found but is
+		// inactive (e.g. librespot idle). If the preferred device is missing
+		// from the API response entirely (flaky API), don't transfer to a
+		// fallback device — that would steal playback from the actual player.
+		if !active && preferred {
 			var transferErr error
 			if contextURI != "" && trackURI != "" {
 				transferErr = client.Play(ctx, trackURI, contextURI, deviceID)

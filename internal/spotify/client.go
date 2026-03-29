@@ -440,10 +440,13 @@ func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play boo
 func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
+		log.Printf("[devices] GetDevices API error: %v", err)
 		return nil, err
 	}
+	log.Printf("[devices] GetDevices returned %d device(s)", len(devices))
 	out := make([]Device, 0, len(devices))
 	for _, d := range devices {
+		log.Printf("[devices]   %s (type=%s, active=%v, id=%s)", d.Name, d.Type, d.Active, d.ID)
 		out = append(out, Device{
 			ID:     string(d.ID),
 			Name:   d.Name,
@@ -455,34 +458,35 @@ func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 	return out, nil
 }
 
-// FindDevice returns the best device ID and whether it is currently active.
+// FindDevice returns the best device ID, whether it is currently active, and
+// whether the returned device is the configured preferred device.
 // When activeOnly is true, only a device currently marked active by Spotify is
 // returned; an error is returned if no device is active.
-func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, active bool, err error) {
+func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, active bool, preferred bool, err error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
-		return "", false, err
+		return "", false, false, err
 	}
 	if len(devices) == 0 {
-		return "", false, fmt.Errorf("no Spotify devices found — open Spotify on any device")
+		return "", false, false, fmt.Errorf("no Spotify devices found — open Spotify on any device")
 	}
 	// When not restricted to active-only, prefer the configured device.
 	if !activeOnly && c.PreferredDevice != "" {
 		for _, d := range devices {
 			if d.Name == c.PreferredDevice {
-				return string(d.ID), d.Active, nil
+				return string(d.ID), d.Active, true, nil
 			}
 		}
 	}
 	for _, d := range devices {
 		if d.Active {
-			return string(d.ID), true, nil
+			return string(d.ID), true, false, nil
 		}
 	}
 	if activeOnly {
-		return "", false, fmt.Errorf("no active Spotify device found")
+		return "", false, false, fmt.Errorf("no active Spotify device found")
 	}
-	return string(devices[0].ID), false, nil
+	return string(devices[0].ID), false, false, nil
 }
 
 // doWithRetry performs a GET request with 429 retry logic. Returns the
