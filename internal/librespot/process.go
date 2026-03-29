@@ -46,12 +46,12 @@ func (c *Config) setDefaults() {
 
 // Process manages a librespot child process with automatic restart on crash.
 type Process struct {
-	mu       sync.Mutex
-	cmd      *exec.Cmd
-	config   Config
-	done     chan struct{} // closed when process exits (per launch)
-	stopCh   chan struct{} // closed when Stop() is called to suppress restart
-	stopped  bool
+	mu      sync.Mutex
+	cmd     *exec.Cmd
+	config  Config
+	done    chan struct{} // closed when process exits (per launch)
+	stopCh  chan struct{} // closed when Stop() is called to suppress restart
+	stopped bool
 
 	// Broken session detection: an audio key timeout combined with spirc
 	// shutdown (in either order) means librespot is stuck.

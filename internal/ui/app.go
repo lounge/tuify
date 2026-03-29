@@ -54,13 +54,13 @@ type searchCtx struct {
 // Model
 
 type Model struct {
-	viewStack  []view
-	nowPlaying *nowPlayingModel
-	visualizer *visualizerModel
-	client     *spotify.Client
-	width      int
-	height     int
-	seekSeq    int
+	viewStack           []view
+	nowPlaying          *nowPlayingModel
+	visualizer          *visualizerModel
+	client              *spotify.Client
+	width               int
+	height              int
+	seekSeq             int
 	vimMode             bool
 	showHelp            bool
 	showDeviceSelector  bool

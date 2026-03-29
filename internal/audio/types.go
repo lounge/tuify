@@ -6,11 +6,11 @@ const NumBands = 64
 // FrequencyData holds FFT output mapped to visualization-friendly bands.
 type FrequencyData struct {
 	Bands      [NumBands]float32 // log-spaced frequency bands, normalized 0.0–1.0
-	Peak       float32     // overall peak amplitude this frame
-	Bass       float32     // average of bands 0–7
-	Mid        float32     // average of bands 8–31
-	High       float32     // average of bands 32–63
-	ProgressMs int32       // playback progress derived from PCM sample count
+	Peak       float32           // overall peak amplitude this frame
+	Bass       float32           // average of bands 0–7
+	Mid        float32           // average of bands 8–31
+	High       float32           // average of bands 32–63
+	ProgressMs int32             // playback progress derived from PCM sample count
 }
 
 // Band boundary indices for convenience fields.

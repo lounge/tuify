@@ -115,4 +115,4 @@ func (v *episodeView) SyncURI(uri string) tea.Cmd {
 }
 
 func (v *episodeView) SearchableList() *lazyList { return &v.lazyList }
-func (v *episodeView) FetchMore() tea.Cmd         { return v.fetchMore() }
+func (v *episodeView) FetchMore() tea.Cmd        { return v.fetchMore() }

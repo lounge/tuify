@@ -7,9 +7,9 @@ import (
 )
 
 const (
-	oscMinAmp      = 0.005          // resting bar height for the idle gradient line
-	oscDecayActive = float32(0.82)  // band release decay per tick when audio is present
-	oscDecayIdle   = float32(0.88)  // band decay per tick when no audio
+	oscMinAmp      = 0.005         // resting bar height for the idle gradient line
+	oscDecayActive = float32(0.82) // band release decay per tick when audio is present
+	oscDecayIdle   = float32(0.88) // band decay per tick when no audio
 )
 
 type Oscillogram struct {

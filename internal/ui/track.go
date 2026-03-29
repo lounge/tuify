@@ -116,4 +116,4 @@ func (v *trackView) SyncURI(uri string) tea.Cmd {
 }
 
 func (v *trackView) SearchableList() *lazyList { return &v.lazyList }
-func (v *trackView) FetchMore() tea.Cmd         { return v.fetchMore() }
+func (v *trackView) FetchMore() tea.Cmd        { return v.fetchMore() }

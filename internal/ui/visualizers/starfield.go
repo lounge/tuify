@@ -21,17 +21,17 @@ type star struct {
 }
 
 type Starfield struct {
-	stars     []star
-	rng       uint64
-	inited    bool
-	grid      []rune
-	colors    []int32 // packed RGB (-1 = no star)
-	gridW     int
-	gridH     int
-	audioData    *audio.FrequencyData
-	intensity    float64 // audio intensity, computed in Advance()
-	beat         BeatDetector
-	smoothSpeed  float64 // smoothed speed multiplier
+	stars       []star
+	rng         uint64
+	inited      bool
+	grid        []rune
+	colors      []int32 // packed RGB (-1 = no star)
+	gridW       int
+	gridH       int
+	audioData   *audio.FrequencyData
+	intensity   float64 // audio intensity, computed in Advance()
+	beat        BeatDetector
+	smoothSpeed float64 // smoothed speed multiplier
 }
 
 func NewStarfield() *Starfield {

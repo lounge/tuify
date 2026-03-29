@@ -37,7 +37,7 @@ func TestSaveAndLoad(t *testing.T) {
 		LibrespotPath:   "/usr/bin/librespot",
 		DeviceName:      "mydevice",
 		Bitrate:         160,
-		SpotifyUsername:  "user1",
+		SpotifyUsername: "user1",
 		RedirectURL:     "http://localhost:8888/callback",
 		AudioBackend:    "pulseaudio",
 		VimMode:         true,
@@ -108,4 +108,3 @@ func TestSave_OmitsEmptyFields(t *testing.T) {
 		}
 	}
 }
-
