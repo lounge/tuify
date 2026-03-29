@@ -56,9 +56,11 @@ type Model struct {
 	width      int
 	height     int
 	seekSeq    int
-	vimMode    bool
-	showHelp   bool
-	miniMode   bool
+	vimMode            bool
+	showHelp           bool
+	showDeviceSelector bool
+	deviceSelector     deviceSelectorModel
+	miniMode           bool
 }
 
 // ModelOption configures optional Model features.
@@ -122,6 +124,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.nowPlaying.SetInfo("Copied link to clipboard")
 	case seekFireMsg:
 		return m.handleSeekFire(msg)
+	case devicesLoadedMsg:
+		m.deviceSelector.handleLoaded(msg)
+		return m, nil
+	case transferDeviceMsg:
+		if msg.err != nil {
+			return m, m.nowPlaying.SetError("Transfer failed: " + msg.err.Error())
+		}
+		// Update override state based on whether the chosen device is preferred.
+		if m.client.PreferredDevice != "" && msg.deviceName != m.client.PreferredDevice {
+			m.nowPlaying.deviceOverridden = true
+			m.client.DeviceOverridden.Store(true)
+		} else {
+			m.nowPlaying.deviceOverridden = false
+			m.client.DeviceOverridden.Store(false)
+		}
+		m.nowPlaying.deviceName = msg.deviceName
+		return m, m.nowPlaying.SetInfo("Switched to " + msg.deviceName)
 	}
 
 	return m.handleStateUpdate(msg)
@@ -149,6 +168,27 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "h", "?", "esc":
 			m.showHelp = false
+		case "ctrl+c", "q":
+			return m, tea.Quit
+		}
+		return m, nil
+	}
+
+	// Device selector overlay
+	if m.showDeviceSelector {
+		switch msg.String() {
+		case "esc", "tab":
+			m.showDeviceSelector = false
+		case "up", "k":
+			m.deviceSelector.up()
+		case "down", "j":
+			m.deviceSelector.down()
+		case "enter":
+			if dev, ok := m.deviceSelector.selected(); ok {
+				m.showDeviceSelector = false
+				m.nowPlaying.recordUserAction()
+				return m, m.transferDevice(dev)
+			}
 		case "ctrl+c", "q":
 			return m, tea.Quit
 		}
@@ -278,6 +318,10 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.visualizer.cycle(1)
 			return m, nil
 		}
+	case "tab":
+		m.deviceSelector.open()
+		m.showDeviceSelector = true
+		return m, fetchDevicesCmd(m.client)
 	case "m":
 		m.miniMode = !m.miniMode
 		return m, nil
@@ -563,6 +607,10 @@ func (m *Model) copyTrackLink() tea.Cmd {
 	}
 }
 
+func (m Model) transferDevice(dev spotify.Device) tea.Cmd {
+	return transferDeviceCmd(m.client, dev, m.deviceSelector.activeDeviceID)
+}
+
 func (m Model) stopPlayback() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Stop(ctx, id)
@@ -571,7 +619,6 @@ func (m Model) stopPlayback() tea.Cmd {
 
 func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
 	client := m.client
-	deviceOverridden := m.nowPlaying.deviceOverridden
 	trackURI := m.nowPlaying.trackURI
 	contextURI := m.nowPlaying.contextURI
 	return func() tea.Msg {
@@ -579,7 +626,7 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 
 		// If the user manually switched to another device in Spotify,
 		// target whatever device is currently active instead of re-claiming.
-		if deviceOverridden {
+		if client.DeviceOverridden.Load() {
 			deviceID, _, err := client.FindDevice(ctx, true)
 			if err != nil {
 				return playbackResultMsg{err: err, seek: seek}
@@ -624,6 +671,7 @@ func (m Model) helpView(height int) string {
 			"v            visualizer",
 			"left / right cycle viz",
 			"/            search",
+			"tab          devices",
 			"m            mini mode",
 			"?            close help",
 			"q            quit",
@@ -641,6 +689,7 @@ func (m Model) helpView(height int) string {
 			"v            visualizer",
 			"left / right cycle viz",
 			"/            search",
+			"tab          devices",
 			"m            mini mode",
 			"h            close help",
 			"q            quit",
@@ -723,6 +772,10 @@ func (m Model) miniModeView() string {
 func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
+	}
+
+	if m.showDeviceSelector {
+		return m.deviceSelector.view(m.width, m.height)
 	}
 
 	if m.miniMode {

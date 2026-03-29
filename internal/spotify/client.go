@@ -74,6 +74,14 @@ type Episode struct {
 	Duration    time.Duration
 }
 
+type Device struct {
+	ID     string
+	Name   string
+	Type   string // "Computer", "Smartphone", "Speaker", etc.
+	Active bool
+	Volume int // 0–100
+}
+
 type PlayerState struct {
 	Playing    bool
 	Shuffling  bool
@@ -426,6 +434,25 @@ func (c *Client) Seek(ctx context.Context, positionMs int, deviceID string) erro
 
 func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play bool) error {
 	return c.sp.TransferPlayback(ctx, sp.ID(deviceID), play)
+}
+
+// GetDevices returns all available Spotify Connect devices.
+func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
+	devices, err := c.sp.PlayerDevices(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Device, 0, len(devices))
+	for _, d := range devices {
+		out = append(out, Device{
+			ID:     string(d.ID),
+			Name:   d.Name,
+			Type:   d.Type,
+			Active: d.Active,
+			Volume: int(d.Volume),
+		})
+	}
+	return out, nil
 }
 
 // FindDevice returns the best device ID and whether it is currently active.
