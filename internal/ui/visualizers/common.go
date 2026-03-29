@@ -5,7 +5,6 @@ import (
 	"image"
 	"math"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/audio"
 )
 
@@ -215,14 +214,6 @@ func (bd *BeatDetector) updateTempo() {
 
 // upperBlocks are ascending block-fill characters used by spectrum and oscillogram.
 var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
-
-// termBG returns the terminal background color as RGB.
-func termBG() (int, int, int) {
-	if lipgloss.HasDarkBackground() {
-		return 0, 0, 0
-	}
-	return 255, 255, 255
-}
 
 // lerpAngle interpolates two hue values (0–360) taking the shortest arc.
 func lerpAngle(a, b, t float64) float64 {
