@@ -106,6 +106,86 @@ func TestGenerateRandomBase64(t *testing.T) {
 	}
 }
 
+func TestSavingTokenSource_PersistsOnRefresh(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	first := &oauth2.Token{AccessToken: "old", Expiry: time.Now().Add(time.Hour)}
+	second := &oauth2.Token{AccessToken: "new", Expiry: time.Now().Add(2 * time.Hour)}
+
+	fake := oauth2.StaticTokenSource(second)
+	ts := &savingTokenSource{
+		base: oauth2.ReuseTokenSource(first, fake),
+		last: first,
+	}
+
+	// First call: token is still valid, returns cached "old".
+	tok, err := ts.Token()
+	if err != nil {
+		t.Fatalf("Token(): %v", err)
+	}
+	if tok.AccessToken != "old" {
+		t.Errorf("expected cached token, got %q", tok.AccessToken)
+	}
+
+	// Force expiry so the next call triggers a refresh.
+	ts.mu.Lock()
+	ts.last.Expiry = time.Now().Add(-1 * time.Second)
+	ts.mu.Unlock()
+	// Re-create the ReuseTokenSource with the expired token so it refreshes.
+	ts.base = oauth2.ReuseTokenSource(ts.last, fake)
+
+	tok, err = ts.Token()
+	if err != nil {
+		t.Fatalf("Token() after expiry: %v", err)
+	}
+	if tok.AccessToken != "new" {
+		t.Errorf("expected refreshed token, got %q", tok.AccessToken)
+	}
+
+	// Verify persisted to disk.
+	loaded, err := LoadToken()
+	if err != nil {
+		t.Fatalf("LoadToken: %v", err)
+	}
+	if loaded == nil || loaded.AccessToken != "new" {
+		t.Errorf("persisted token: got %v", loaded)
+	}
+}
+
+func TestStartupForceExpire(t *testing.T) {
+	// Token expiring in 2 minutes should be force-expired.
+	tok := &oauth2.Token{
+		AccessToken: "soon",
+		Expiry:      time.Now().Add(2 * time.Minute),
+	}
+	if time.Until(tok.Expiry) >= 5*time.Minute {
+		t.Fatal("test setup: token should expire within 5 minutes")
+	}
+	// Simulate the startup check.
+	if !tok.Expiry.IsZero() && time.Until(tok.Expiry) < 5*time.Minute {
+		tok.Expiry = time.Now().Add(-1 * time.Second)
+	}
+	if !tok.Expiry.Before(time.Now()) {
+		t.Error("token should be force-expired")
+	}
+}
+
+func TestStartupNoForceExpire(t *testing.T) {
+	// Token valid for 30 minutes should NOT be force-expired.
+	tok := &oauth2.Token{
+		AccessToken: "valid",
+		Expiry:      time.Now().Add(30 * time.Minute),
+	}
+	original := tok.Expiry
+	if !tok.Expiry.IsZero() && time.Until(tok.Expiry) < 5*time.Minute {
+		tok.Expiry = time.Now().Add(-1 * time.Second)
+	}
+	if !tok.Expiry.Equal(original) {
+		t.Error("token with >5min remaining should not be modified")
+	}
+}
+
 func TestGenerateCodeChallenge(t *testing.T) {
 	verifier := "test-verifier-string"
 	c1 := generateCodeChallenge(verifier)

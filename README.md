@@ -2,7 +2,8 @@
 
 A terminal-based Spotify client. Browse playlists, search for music and podcasts, control playback — **Spotify without all the noise.**
 
-![CI](https://github.com/lounge/tuify/actions/workflows/ci.yml/badge.svg)
+[![CI](https://github.com/lounge/tuify/actions/workflows/ci.yml/badge.svg)](https://github.com/lounge/tuify/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/lounge/tuify)](https://goreportcard.com/report/github.com/lounge/tuify)
 ![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
@@ -18,6 +19,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 - **Podcasts** — Browse saved shows and episodes
 - **Search** — Find tracks, episodes, artists, albums, and shows
 - **Now Playing** — Live progress bar, track info, shuffle state, active device indicator
+- **Device Selector** — Switch playback between Spotify Connect devices
 - **Mini Mode** — Compact single-line view with track info and progress
 - **Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and Milkdrop-style presets
 - **Lyrics** — Fetches and displays lyrics from Genius.com
@@ -74,6 +76,7 @@ Pre-built binaries for all platforms are available on the [Releases](https://git
 | `/` | Search |
 | `v` | Toggle visualizer |
 | `←` / `→` | Cycle visualizers |
+| `Tab` | Device selector |
 | `m` | Toggle mini mode |
 | `h` | Show help overlay |
 | `q` | Quit |
@@ -129,7 +132,7 @@ Album Art and Lyrics work out of the box. The audio-reactive visualizers require
 2. Set `"enable_librespot": true` in `~/.config/tuify/config.json`
 3. Restart tuify — it will connect as a Spotify device automatically
 
-If the connection drops, tuify detects the failure, restarts librespot, and transfers playback back automatically.
+If the connection drops, tuify detects the failure, restarts librespot, and transfers playback back automatically. If you manually switch to another device in Spotify, tuify respects that and won't reclaim playback. When librespot becomes inactive (playback moved away), the UI updates immediately via Spotify Connect signals — no API polling delay.
 
 ### Librespot Config
 
@@ -201,7 +204,6 @@ go test ./...
 
 ## TODO
 
-- Device selector
 - Waveform visualizer — classic waveform using raw PCM
 - Maybe themes? Probably not :)
 - Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).

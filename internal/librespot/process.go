@@ -59,6 +59,7 @@ type Process struct {
 	sawSpirc       bool
 
 	OnReconnect func() // called when librespot authenticates (initial or restart)
+	OnInactive  func() // called when librespot reports device became inactive
 }
 
 // NewProcess creates a new Process with the given configuration.
@@ -260,6 +261,13 @@ func (p *Process) monitorStderr(line string) {
 		p.sawSpirc = false
 		if p.OnReconnect != nil {
 			go p.OnReconnect()
+		}
+		return
+	}
+
+	if strings.Contains(line, "device became inactive") {
+		if p.OnInactive != nil {
+			go p.OnInactive()
 		}
 		return
 	}
