@@ -96,6 +96,9 @@ var (
 			BorderForeground(colorSecondary).
 			Foreground(colorSubtle)
 
+	helpCmdStyle  = lipgloss.NewStyle().Foreground(colorText)
+	helpDescStyle = lipgloss.NewStyle().Foreground(colorSubtle)
+
 	searchHintBoxStyle = overlayBoxStyle.Padding(1, 2)
 	helpOverlayStyle   = overlayBoxStyle.Padding(1, 3)
 )

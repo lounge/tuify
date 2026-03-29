@@ -728,43 +728,54 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 // View
 
 func (m Model) helpView(height int) string {
-	var lines []string
+	type entry struct{ cmd, desc string }
+	var entries []entry
 	if m.vimMode {
-		lines = []string{
-			"h / l        navigate",
-			"ctrl+d / u   half page",
-			", / .        seek 5s",
-			"space        play / pause",
-			"n / p        next / prev",
-			"r            shuffle",
-			"s            stop",
-			"c            copy link",
-			"v            visualizer",
-			"left / right cycle viz",
-			"/            search",
-			"tab          devices",
-			"m            mini mode",
-			"?            close help",
-			"q            quit",
+		entries = []entry{
+			{"h / l", "navigate"},
+			{"ctrl+d / u", "half page"},
+			{", / .", "seek 5s"},
+			{"space", "play / pause"},
+			{"n / p", "next / prev"},
+			{"r", "shuffle"},
+			{"s", "stop"},
+			{"c", "copy link"},
+			{"v", "visualizer"},
+			{"left / right", "cycle viz"},
+			{"/", "search"},
+			{"tab", "devices"},
+			{"m", "mini mode"},
+			{"?", "close help"},
+			{"q", "quit"},
 		}
 	} else {
-		lines = []string{
-			"enter        select",
-			"esc          back",
-			"a / d        seek 5s",
-			"space        play / pause",
-			"n / p        next / prev",
-			"r            shuffle",
-			"s            stop",
-			"c            copy link",
-			"v            visualizer",
-			"left / right cycle viz",
-			"/            search",
-			"tab          devices",
-			"m            mini mode",
-			"h            close help",
-			"q            quit",
+		entries = []entry{
+			{"enter", "select"},
+			{"esc", "back"},
+			{"a / d", "seek 5s"},
+			{"space", "play / pause"},
+			{"n / p", "next / prev"},
+			{"r", "shuffle"},
+			{"s", "stop"},
+			{"c", "copy link"},
+			{"v", "visualizer"},
+			{"left / right", "cycle viz"},
+			{"/", "search"},
+			{"tab", "devices"},
+			{"m", "mini mode"},
+			{"h", "close help"},
+			{"q", "quit"},
 		}
+	}
+	const cmdWidth = 13
+	lines := make([]string, len(entries))
+	for i, e := range entries {
+		styled := helpCmdStyle.Render(e.cmd)
+		pad := cmdWidth - lipgloss.Width(styled)
+		if pad < 1 {
+			pad = 1
+		}
+		lines[i] = styled + strings.Repeat(" ", pad) + helpDescStyle.Render(e.desc)
 	}
 	box := helpOverlayStyle.Render(strings.Join(lines, "\n"))
 	return lipgloss.Place(m.width, height, lipgloss.Center, lipgloss.Center, box)

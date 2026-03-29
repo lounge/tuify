@@ -63,11 +63,11 @@ const (
 )
 
 var searchHintText = strings.Join([]string{
-	"t:  track search (default)",
-	"e:  episode search",
-	"a:  artist → album → track",
-	"l:  album → track",
-	"s:  show → episode",
+	helpCmdStyle.Render("t:") + helpDescStyle.Render("  track search (default)"),
+	helpCmdStyle.Render("e:") + helpDescStyle.Render("  episode search"),
+	helpCmdStyle.Render("a:") + helpDescStyle.Render("  artist → album → track"),
+	helpCmdStyle.Render("l:") + helpDescStyle.Render("  album → track"),
+	helpCmdStyle.Render("s:") + helpDescStyle.Render("  show → episode"),
 }, "\n")
 
 // parseSearch splits input into prefix + term. Returns prefixTrack for
