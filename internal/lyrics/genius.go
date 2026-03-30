@@ -48,6 +48,12 @@ func improveQuery(s string) string {
 	return strings.TrimSpace(s)
 }
 
+// normalizeQuotes replaces typographic apostrophes/quotes with their ASCII equivalents.
+func normalizeQuotes(s string) string {
+	s = strings.NewReplacer("\u2018", "'", "\u2019", "'", "\u201C", "\"", "\u201D", "\"").Replace(s)
+	return s
+}
+
 type songResult struct {
 	url          string
 	instrumental bool
@@ -96,8 +102,8 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 		}
 		return songResult{}, fmt.Errorf("genius search: %s", msg)
 	}
-	artistLower := strings.ToLower(artist)
-	trackClean := strings.ToLower(improveQuery(track))
+	artistLower := strings.ToLower(normalizeQuotes(artist))
+	trackClean := strings.ToLower(normalizeQuotes(improveQuery(track)))
 	for _, hit := range result.Response.Hits {
 		if hit.Type != "song" {
 			continue
@@ -105,11 +111,13 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 		if strings.Contains(hit.Result.ArtistNames, "Genius") {
 			continue
 		}
-		if !strings.Contains(strings.ToLower(hit.Result.ArtistNames), artistLower) &&
-			!strings.Contains(strings.ToLower(hit.Result.PrimaryArtistNames), artistLower) {
+		hitArtist := strings.ToLower(normalizeQuotes(hit.Result.ArtistNames))
+		hitPrimaryArtist := strings.ToLower(normalizeQuotes(hit.Result.PrimaryArtistNames))
+		if !strings.Contains(hitArtist, artistLower) &&
+			!strings.Contains(hitPrimaryArtist, artistLower) {
 			continue
 		}
-		titleClean := strings.ToLower(improveQuery(hit.Result.Title))
+		titleClean := strings.ToLower(normalizeQuotes(improveQuery(hit.Result.Title)))
 		if !strings.Contains(titleClean, trackClean) && !strings.Contains(trackClean, titleClean) {
 			continue
 		}
