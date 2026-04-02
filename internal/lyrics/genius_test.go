@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lounge/tuify/internal/testutil"
 )
@@ -359,4 +361,121 @@ func TestSearch_CaseInsensitiveMatch(t *testing.T) {
 	if !strings.Contains(text, "Lyrics here") {
 		t.Errorf("unexpected lyrics: %q", text)
 	}
+}
+
+// --- Contract tests (hit real Genius API) ---
+//
+// These tests verify that the Genius API and HTML structure still match our
+// assumptions. They are skipped by default and only run when
+// GENIUS_CONTRACT_TEST=1 is set. Run manually to detect upstream changes:
+//
+//	GENIUS_CONTRACT_TEST=1 go test ./internal/lyrics/ -run TestContract -v
+
+func skipUnlessContract(t *testing.T) {
+	t.Helper()
+	if os.Getenv("GENIUS_CONTRACT_TEST") != "1" {
+		t.Skip("skipping contract test (set GENIUS_CONTRACT_TEST=1 to run)")
+	}
+}
+
+func TestContract_SearchAndScrape(t *testing.T) {
+	skipUnlessContract(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	// Bohemian Rhapsody is a stable, well-known song unlikely to be removed.
+	text, err := Search(ctx, http.DefaultClient, "Bohemian Rhapsody", "Queen")
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	if text == "" {
+		t.Fatal("Search returned empty lyrics — Genius HTML structure may have changed (data-lyrics-container attribute)")
+	}
+
+	// Verify some well-known lyrics are present.
+	for _, phrase := range []string{
+		"Is this the real life",
+		"Mama",
+		"Galileo",
+	} {
+		if !strings.Contains(text, phrase) {
+			t.Errorf("lyrics missing expected phrase %q", phrase)
+		}
+	}
+
+	// Sanity check: lyrics should be substantial (Bohemian Rhapsody is ~370 words).
+	lines := strings.Split(text, "\n")
+	nonEmpty := 0
+	for _, l := range lines {
+		if strings.TrimSpace(l) != "" {
+			nonEmpty++
+		}
+	}
+	if nonEmpty < 30 {
+		t.Errorf("lyrics seem too short (%d non-empty lines), expected 30+", nonEmpty)
+	}
+}
+
+func TestContract_SearchAPI_ReturnsResults(t *testing.T) {
+	skipUnlessContract(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	result, err := searchSong(ctx, http.DefaultClient, "Queen Bohemian Rhapsody", "Bohemian Rhapsody", "Queen")
+	if err != nil {
+		t.Fatalf("searchSong failed: %v", err)
+	}
+	if result.url == "" {
+		t.Fatal("searchSong returned no URL — Genius search API may have changed")
+	}
+	if !strings.Contains(result.url, "genius.com") {
+		t.Errorf("unexpected URL: %q", result.url)
+	}
+}
+
+func TestContract_HTMLStructure(t *testing.T) {
+	skipUnlessContract(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// Fetch a known lyrics page directly and verify the DOM contract.
+	result, err := searchSong(ctx, http.DefaultClient, "Queen Bohemian Rhapsody", "Bohemian Rhapsody", "Queen")
+	if err != nil {
+		t.Fatalf("searchSong failed: %v", err)
+	}
+	if result.url == "" {
+		t.Skip("no URL found, cannot test HTML structure")
+	}
+
+	text, err := scrapeLyrics(ctx, http.DefaultClient, result.url)
+	if err != nil {
+		t.Fatalf("scrapeLyrics failed: %v", err)
+	}
+	if text == "" {
+		t.Fatal("scrapeLyrics returned empty — data-lyrics-container attribute may have been renamed or removed")
+	}
+}
+
+func TestContract_Instrumental(t *testing.T) {
+	skipUnlessContract(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	// "Orion" by Metallica is a well-known instrumental.
+	_, err := Search(ctx, http.DefaultClient, "Orion", "Metallica")
+	if err == ErrInstrumental {
+		// Expected — Genius correctly marks it as instrumental.
+		return
+	}
+	if err != nil {
+		t.Fatalf("Search failed: %v", err)
+	}
+	// If we get here, Genius didn't mark it as instrumental. That's not
+	// necessarily a contract failure (their metadata could change), so
+	// just log it.
+	t.Log("Orion by Metallica was not marked as instrumental — Genius metadata may have changed")
 }
