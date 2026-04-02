@@ -160,7 +160,6 @@ func TestStartLibrespot_SetsPreferredDevice(t *testing.T) {
 		ClientID:        "id",
 		EnableLibrespot: true,
 		DeviceName:      "test-device",
-		AudioBackend:    "pulseaudio", // non-subprocess, avoids audio receiver
 	}
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
@@ -180,7 +179,6 @@ func TestStartLibrespot_ReturnsOptions(t *testing.T) {
 	cfg := &config.Config{
 		ClientID:        "id",
 		EnableLibrespot: true,
-		AudioBackend:    "pulseaudio",
 	}
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
@@ -191,8 +189,8 @@ func TestStartLibrespot_ReturnsOptions(t *testing.T) {
 	}
 	defer svc.Cleanup()
 
-	// Should have at least the librespot inactive channel option.
-	if len(svc.Options) == 0 {
-		t.Error("expected at least one UI model option")
+	// Should have at least the audio source option + librespot inactive channel option.
+	if len(svc.Options) < 2 {
+		t.Errorf("expected at least 2 UI model options (audio source + inactive channel), got %d", len(svc.Options))
 	}
 }

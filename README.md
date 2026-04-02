@@ -108,7 +108,7 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config file.
 
 ## Visualizers
 
-| Visualizer | Requires Librespot (subprocess) |
+| Visualizer | Requires Librespot |
 |------------|--------------------|
 | Album Art | No |
 | Lyrics | No |
@@ -144,18 +144,17 @@ Add these to `~/.config/tuify/config.json`:
 | `librespot_path` | `"librespot"` | Path to librespot binary |
 | `device_name` | `"tuify"` | Spotify Connect device name |
 | `bitrate` | `320` | Audio bitrate (96, 160, or 320 kbps) |
-| `audio_backend` | `"subprocess"` | Audio backend (see below) |
+| `audio_backend` | `"pipe"` | Audio backend (see below) |
 | `spotify_username` | `""` | Spotify username for direct auth |
 
 ### Audio Backends
 
-Only `"subprocess"` enables audio-reactive visualizers.
+Only `"pipe"` enables audio-reactive visualizers.
 
 | Backend | Description |
 |---------|-------------|
-| **subprocess** | Audio piped through tuify for playback and visualizers. **Recommended.** |
-| **rodio** | Cross-platform audio output. Librespot's default. |
-| **pipe** | Outputs raw PCM to stdout. |
+| **pipe** | Audio piped through tuify for playback and visualizers. **Default and recommended.** |
+| **rodio** | Cross-platform audio output. Librespot's built-in default. |
 | **alsa** | Direct ALSA output (Linux). |
 | **pulseaudio** | Audio via PulseAudio (Linux). |
 
@@ -194,17 +193,17 @@ go test ./...
 
 | Package | Description |
 |---------|-------------|
+| `internal/app` | Application bootstrap — config, auth, librespot wiring, composition root |
 | `internal/ui` | TUI views, components, and visualizers ([Bubble Tea](https://github.com/charmbracelet/bubbletea) + [Lip Gloss](https://github.com/charmbracelet/lipgloss)) |
 | `internal/spotify` | Spotify Web API client ([zmb3/spotify](https://github.com/zmb3/spotify)) |
-| `internal/audio` | Real-time audio pipeline — FFT, binary protocol, receiver ([oto](https://github.com/ebitengine/oto)) |
-| `internal/librespot` | [Librespot](https://github.com/librespot-org/librespot) subprocess lifecycle |
+| `internal/audio` | Real-time audio pipeline — FFT analysis, PCM pipe reader ([oto](https://github.com/ebitengine/oto)) |
+| `internal/librespot` | [Librespot](https://github.com/librespot-org/librespot) process lifecycle |
 | `internal/lyrics` | Genius.com lyrics scraping |
 | `internal/auth` | OAuth2 PKCE authentication |
 | `internal/config` | Configuration management |
 
 ## TODO
 
-- Eliminate the audio-worker subprocess by using librespot's --backend pipe
 - Waveform visualizer — classic waveform using raw PCM
 - Maybe themes? Probably not :)
 - Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).

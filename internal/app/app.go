@@ -158,7 +158,7 @@ type LibrespotServices struct {
 	Cleanup func()
 }
 
-// StartLibrespot starts the librespot process and audio receiver if enabled
+// StartLibrespot starts the librespot process and audio pipe reader if enabled
 // by the config. Returns UI model options and a cleanup function. If librespot
 // is not enabled, returns nil.
 func StartLibrespot(rc RuntimeConfig, client *spotify.Client) *LibrespotServices {
@@ -185,26 +185,21 @@ func StartLibrespot(rc RuntimeConfig, client *spotify.Client) *LibrespotServices
 	var cleanups []func()
 	var opts []ui.ModelOption
 
-	if backend == librespot.DefaultBackend {
-		audioRecv := audio.NewReceiver()
-		if err := audioRecv.Start(); err != nil {
-			log.Printf("[startup] audio receiver failed: %v", err)
-			return &LibrespotServices{Cleanup: func() {}}
-		}
-		cleanups = append(cleanups, audioRecv.Stop)
-		opts = append(opts, ui.WithAudioReceiver(audioRecv))
-
-		selfPath, err := os.Executable()
-		if err != nil {
-			selfPath = os.Args[0]
-		}
-		selfPath = filepath.ToSlash(selfPath)
-		log.Printf("[librespot] audio worker command: %s --audio-worker --socket %s", selfPath, audioRecv.SocketPath())
-		lsCfg.AudioWorker = fmt.Sprintf("%s --audio-worker --socket %s", selfPath, audioRecv.SocketPath())
+	var pipeRdr *audio.PipeReader
+	if backend == "pipe" {
+		pipeRdr = audio.NewPipeReader()
+		cleanups = append(cleanups, pipeRdr.Stop)
+		opts = append(opts, ui.WithAudioSource(pipeRdr))
 	}
 
 	librespotProc := librespot.NewProcess(lsCfg)
 	librespotProc.OnReconnect = reconnectHandler(client, rc.ResolvedDeviceName)
+
+	if pipeRdr != nil {
+		librespotProc.OnStdout = func(pipe io.ReadCloser) {
+			pipeRdr.Start(pipe)
+		}
+	}
 
 	if err := librespotProc.Start(); err != nil {
 		log.Printf("[startup] librespot failed to start: %v", err)
@@ -224,7 +219,7 @@ func StartLibrespot(rc RuntimeConfig, client *spotify.Client) *LibrespotServices
 	return &LibrespotServices{
 		Options: opts,
 		Cleanup: func() {
-			// Cleanup in reverse order (librespot before audio receiver).
+			// Cleanup in reverse order (librespot before pipe reader).
 			for i := len(cleanups) - 1; i >= 0; i-- {
 				cleanups[i]()
 			}
