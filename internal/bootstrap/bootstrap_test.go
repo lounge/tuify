@@ -1,4 +1,4 @@
-package app
+package bootstrap
 
 import (
 	"os"

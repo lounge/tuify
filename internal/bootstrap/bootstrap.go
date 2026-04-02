@@ -1,4 +1,4 @@
-package app
+package bootstrap
 
 import (
 	"bufio"
@@ -112,14 +112,14 @@ func ResolveRuntime(cfg *config.Config) RuntimeConfig {
 	return rc
 }
 
-// AuthSession holds the result of auth bootstrap.
+// AuthSession holds the result of authentication.
 type AuthSession struct {
 	Client *spotify.Client
 }
 
-// Bootstrap authenticates with Spotify and returns a ready-to-use session.
+// Authenticate connects to Spotify and returns a ready-to-use session.
 // If no saved token exists, it runs the interactive login flow.
-func Bootstrap(rc RuntimeConfig) (*AuthSession, error) {
+func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
 	token, err := auth.LoadToken()
 	if err != nil {
 		return nil, fmt.Errorf("loading token: %w", err)
@@ -244,7 +244,7 @@ func Run() error {
 
 	rc := ResolveRuntime(cfg)
 
-	session, err := Bootstrap(rc)
+	session, err := Authenticate(rc)
 	if err != nil {
 		return err
 	}

@@ -193,7 +193,7 @@ go test ./...
 
 | Package | Description |
 |---------|-------------|
-| `internal/app` | Application bootstrap — config, auth, librespot wiring, composition root |
+| `internal/bootstrap` | Application bootstrap — config, auth, librespot wiring, composition root |
 | `internal/ui` | TUI views, components, and visualizers ([Bubble Tea](https://github.com/charmbracelet/bubbletea) + [Lip Gloss](https://github.com/charmbracelet/lipgloss)) |
 | `internal/spotify` | Spotify Web API client ([zmb3/spotify](https://github.com/zmb3/spotify)) |
 | `internal/audio` | Real-time audio pipeline — FFT analysis, PCM pipe reader ([oto](https://github.com/ebitengine/oto)) |

@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lounge/tuify/internal/app"
+	"github.com/lounge/tuify/internal/bootstrap"
 )
 
 func main() {
-	if err := app.Run(); err != nil {
+	if err := bootstrap.Run(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
