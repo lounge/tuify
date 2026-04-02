@@ -3,6 +3,7 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -31,6 +32,18 @@ func Dir() string {
 		log.Printf("[config] failed to resolve home directory: %v", err)
 	}
 	return filepath.Join(home, ".config", "tuify")
+}
+
+// Validate checks that configured values are valid. Zero values (omitted
+// fields) are not checked — defaults are applied elsewhere.
+func (c *Config) Validate() error {
+	if c.Bitrate != 0 && c.Bitrate != 96 && c.Bitrate != 160 && c.Bitrate != 320 {
+		return fmt.Errorf("invalid bitrate %d: must be 96, 160, or 320", c.Bitrate)
+	}
+	if c.ClientID == "" {
+		return fmt.Errorf("client_id is required")
+	}
+	return nil
 }
 
 func Load() (*Config, error) {

@@ -45,6 +45,11 @@ func main() {
 		cfg = runSetup()
 	}
 
+	if err := cfg.Validate(); err != nil {
+		fmt.Fprintf(os.Stderr, "Config error: %v\n", err)
+		os.Exit(1)
+	}
+
 	token, err := auth.LoadToken()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading token: %v\n", err)

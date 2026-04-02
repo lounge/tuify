@@ -86,6 +86,37 @@ func TestLoad_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestValidate_ValidBitrates(t *testing.T) {
+	for _, br := range []int{0, 96, 160, 320} {
+		cfg := &Config{ClientID: "id", Bitrate: br}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("bitrate %d should be valid, got: %v", br, err)
+		}
+	}
+}
+
+func TestValidate_InvalidBitrate(t *testing.T) {
+	cfg := &Config{ClientID: "id", Bitrate: 128}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for bitrate 128")
+	}
+	if !strings.Contains(err.Error(), "128") {
+		t.Errorf("error should mention invalid value, got: %v", err)
+	}
+}
+
+func TestValidate_MissingClientID(t *testing.T) {
+	cfg := &Config{}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing client_id")
+	}
+	if !strings.Contains(err.Error(), "client_id") {
+		t.Errorf("error should mention client_id, got: %v", err)
+	}
+}
+
 func TestSave_OmitsEmptyFields(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
