@@ -48,41 +48,45 @@ func TestConfigSetDefaults_Preserves(t *testing.T) {
 	}
 }
 
-func TestArgs_SubprocessBackend(t *testing.T) {
+func TestArgs_PipeBackend(t *testing.T) {
 	p := NewProcess(Config{
-		DeviceName:  "test-device",
-		Backend:     DefaultBackend,
-		AudioWorker: "/path/to/worker",
-		Bitrate:     160,
-		CacheDir:    "/tmp/cache",
-		Username:    "user1",
+		DeviceName: "test-device",
+		Backend:    DefaultBackend,
+		Bitrate:    160,
+		CacheDir:   "/tmp/cache",
+		Username:   "user1",
 	})
 
 	args := p.args()
 
 	assertContains(t, args, "--name", "test-device")
-	assertContains(t, args, "--backend", DefaultBackend)
-	assertContains(t, args, "--device", "/path/to/worker")
+	assertContains(t, args, "--backend", "pipe")
 	assertContains(t, args, "--cache", "/tmp/cache")
 	assertContains(t, args, "--bitrate", "160")
 	assertContains(t, args, "--username", "user1")
 	assertContains(t, args, "--initial-volume", "60")
 	assertContains(t, args, "--volume-ctrl", "fixed")
 	assertHasFlag(t, args, "--disable-audio-cache")
+
+	// --device should NOT be present for pipe backend.
+	for _, a := range args {
+		if a == "--device" {
+			t.Error("--device should not be present for pipe backend")
+		}
+	}
 }
 
-func TestArgs_NonSubprocessBackend(t *testing.T) {
+func TestArgs_NonPipeBackend(t *testing.T) {
 	p := NewProcess(Config{
-		Backend:     "pulseaudio",
-		AudioWorker: "/path/to/worker",
+		Backend: "pulseaudio",
 	})
 
 	args := p.args()
 
-	// --device should NOT be present for non-subprocess backends
-	for i, a := range args {
+	// --device should NOT be present for any backend.
+	for _, a := range args {
 		if a == "--device" {
-			t.Errorf("--device should not be present for non-subprocess backend, found at index %d with value %q", i, args[i+1])
+			t.Error("--device should not be present")
 		}
 	}
 	assertContains(t, args, "--backend", "pulseaudio")

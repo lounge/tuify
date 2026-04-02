@@ -14,19 +14,18 @@ import (
 )
 
 const (
-	DefaultBackend    = "subprocess"
+	DefaultBackend    = "pipe"
 	DefaultDeviceName = "tuify"
 )
 
 // Config holds librespot launch parameters.
 type Config struct {
-	BinaryPath  string // path to librespot binary, default "librespot"
-	DeviceName  string // Spotify Connect device name, default DefaultDeviceName
-	Bitrate     int    // 96, 160, or 320; default 320
-	Backend     string // audio backend: DefaultBackend, "pulseaudio", etc.
-	AudioWorker string // full command for subprocess backend (only used when Backend == DefaultBackend)
-	Username    string // Spotify username for direct auth (avoids zeroconf key issues)
-	CacheDir    string // directory for librespot credential/audio cache
+	BinaryPath string // path to librespot binary, default "librespot"
+	DeviceName string // Spotify Connect device name, default DefaultDeviceName
+	Bitrate    int    // 96, 160, or 320; default 320
+	Backend    string // audio backend: DefaultBackend ("pipe"), "pulseaudio", etc.
+	Username   string // Spotify username for direct auth (avoids zeroconf key issues)
+	CacheDir   string // directory for librespot credential/audio cache
 }
 
 func (c *Config) setDefaults() {
@@ -58,8 +57,9 @@ type Process struct {
 	sawAudioKeyErr bool
 	sawSpirc       bool
 
-	OnReconnect func() // called when librespot authenticates (initial or restart)
-	OnInactive  func() // called when librespot reports device became inactive
+	OnReconnect func()              // called when librespot authenticates (initial or restart)
+	OnInactive  func()              // called when librespot reports device became inactive
+	OnStdout    func(io.ReadCloser) // called with the stdout pipe in launch(); for pipe backend audio
 }
 
 // NewProcess creates a new Process with the given configuration.
@@ -76,9 +76,6 @@ func (p *Process) args() []string {
 	args := []string{
 		"--name", p.config.DeviceName,
 		"--backend", p.config.Backend,
-	}
-	if p.config.Backend == DefaultBackend {
-		args = append(args, "--device", p.config.AudioWorker)
 	}
 	if p.config.CacheDir != "" {
 		args = append(args, "--cache", p.config.CacheDir)
@@ -142,7 +139,11 @@ func (p *Process) launch() error {
 	p.sawAudioKeyErr = false
 	p.sawSpirc = false
 
-	go pipeLog("[librespot:out]", stdout, nil)
+	if p.OnStdout != nil {
+		go p.OnStdout(stdout)
+	} else {
+		go pipeLog("[librespot:out]", stdout, nil)
+	}
 	go pipeLog("[librespot:err]", stderr, p.monitorStderr)
 
 	startedAt := time.Now()

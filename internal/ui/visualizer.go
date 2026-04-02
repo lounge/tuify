@@ -13,7 +13,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/lyrics"
 	"github.com/lounge/tuify/internal/ui/visualizers"
 )
@@ -110,7 +109,7 @@ type visualizerModel struct {
 	imageCache  boundedCache[string, image.Image]
 	lyrics      asyncLoader[lyricsFetchResult]
 	lyricsCache boundedCache[string, cachedLyrics]
-	audioRecv   *audio.Receiver
+	audioSrc    AudioSource
 }
 
 func newVisualizerModel(hasAudio bool) *visualizerModel {
@@ -171,9 +170,9 @@ func (m *visualizerModel) advance(progressMs int) {
 	m.drainImages()
 	m.drainLyrics()
 	v := m.viz()
-	if m.audioRecv != nil {
+	if m.audioSrc != nil {
 		if aa, ok := v.(visualizers.AudioAware); ok {
-			aa.SetAudioData(m.audioRecv.Latest())
+			aa.SetAudioData(m.audioSrc.Latest())
 		}
 	}
 	if pa, ok := v.(visualizers.ProgressAware); ok {
