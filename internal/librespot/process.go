@@ -173,6 +173,21 @@ const (
 	stopTimeout      = 5 * time.Second
 )
 
+// restartDelay returns the backoff delay based on how long the process was alive.
+// The faster it died, the longer we wait (up to restartMaxDelay).
+// If it ran longer than stableThreshold, restart quickly (restartBaseDelay).
+func restartDelay(uptime time.Duration) time.Duration {
+	if uptime >= stableThreshold {
+		return restartBaseDelay
+	}
+	ratio := float64(stableThreshold-uptime) / float64(stableThreshold)
+	delay := time.Duration(float64(restartMaxDelay) * ratio)
+	if delay < restartBaseDelay {
+		delay = restartBaseDelay
+	}
+	return delay
+}
+
 // scheduleRestart handles automatic restart with linear backoff.
 func (p *Process) scheduleRestart(lastStart time.Time) {
 	p.mu.Lock()
@@ -182,18 +197,8 @@ func (p *Process) scheduleRestart(lastStart time.Time) {
 	}
 	p.mu.Unlock()
 
-	// Determine backoff delay based on how long the process was alive.
-	// The faster it died, the longer we wait (up to restartMaxDelay).
-	// If it ran longer than stableThreshold, restart quickly.
 	uptime := time.Since(lastStart)
-	delay := restartBaseDelay
-	if uptime < stableThreshold {
-		ratio := float64(stableThreshold-uptime) / float64(stableThreshold)
-		delay = time.Duration(float64(restartMaxDelay) * ratio)
-		if delay < restartBaseDelay {
-			delay = restartBaseDelay
-		}
-	}
+	delay := restartDelay(uptime)
 
 	log.Printf("[librespot] restarting in %v (uptime was %v)", delay.Round(time.Second), uptime.Round(time.Second))
 

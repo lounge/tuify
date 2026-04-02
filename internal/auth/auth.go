@@ -27,9 +27,10 @@ import (
 // savingTokenSource wraps a TokenSource and persists the token to disk
 // whenever it is refreshed, so refreshed tokens survive app restarts.
 type savingTokenSource struct {
-	mu   sync.Mutex
-	base oauth2.TokenSource
-	last *oauth2.Token
+	mu     sync.Mutex
+	base   oauth2.TokenSource
+	last   *oauth2.Token
+	cancel context.CancelFunc
 }
 
 func (s *savingTokenSource) Token() (*oauth2.Token, error) {
@@ -53,8 +54,12 @@ func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 }
 
 // startProactiveRefresh runs a background goroutine that refreshes the token
-// before it expires, preventing request-time refresh blocking.
-func (s *savingTokenSource) startProactiveRefresh() {
+// before it expires, preventing request-time refresh blocking. The goroutine
+// exits when the context is cancelled. Call the returned cancel function (also
+// stored as s.cancel) to stop the goroutine.
+func (s *savingTokenSource) startProactiveRefresh(ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+	s.cancel = cancel
 	go func() {
 		for {
 			s.mu.Lock()
@@ -62,8 +67,12 @@ func (s *savingTokenSource) startProactiveRefresh() {
 			s.mu.Unlock()
 
 			if tok == nil || tok.Expiry.IsZero() {
-				time.Sleep(30 * time.Second)
-				continue
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(30 * time.Second):
+					continue
+				}
 			}
 
 			// Sleep until 5s before the token expires. The oauth2
@@ -71,14 +80,22 @@ func (s *savingTokenSource) startProactiveRefresh() {
 			// before expiry a Token() call triggers a real refresh.
 			wait := time.Until(tok.Expiry.Add(-5 * time.Second))
 			if wait > 0 {
-				time.Sleep(wait)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(wait):
+				}
 			}
 
 			log.Printf("[auth] proactive token refresh")
 			newTok, err := s.Token()
 			if err != nil {
 				log.Printf("[auth] proactive token refresh failed: %v", err)
-				time.Sleep(10 * time.Second)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(10 * time.Second):
+				}
 			} else {
 				log.Printf("[auth] token refreshed, valid until %v", newTok.Expiry.Local().Format("15:04:05"))
 			}
@@ -134,7 +151,7 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 	} else {
 		log.Printf("[auth] token valid until %v", freshTok.Expiry.Local().Format("15:04:05"))
 	}
-	ts.startProactiveRefresh()
+	ts.startProactiveRefresh(context.Background())
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout: 10 * time.Second,

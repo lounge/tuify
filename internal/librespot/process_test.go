@@ -226,6 +226,150 @@ func TestStopIdempotent(t *testing.T) {
 	}
 }
 
+// --- restartDelay tests ---
+
+func TestRestartDelay_ImmediateCrash(t *testing.T) {
+	// Process died instantly — should get max delay.
+	delay := restartDelay(0)
+	if delay != restartMaxDelay {
+		t.Errorf("expected %v for instant crash, got %v", restartMaxDelay, delay)
+	}
+}
+
+func TestRestartDelay_StableUptime(t *testing.T) {
+	// Process ran longer than stable threshold — should get base delay.
+	delay := restartDelay(stableThreshold + time.Second)
+	if delay != restartBaseDelay {
+		t.Errorf("expected %v for stable process, got %v", restartBaseDelay, delay)
+	}
+}
+
+func TestRestartDelay_ExactThreshold(t *testing.T) {
+	// Process ran exactly at the stable threshold — should get base delay.
+	delay := restartDelay(stableThreshold)
+	if delay != restartBaseDelay {
+		t.Errorf("expected %v at threshold, got %v", restartBaseDelay, delay)
+	}
+}
+
+func TestRestartDelay_HalfUptime(t *testing.T) {
+	// Process lived half the stable threshold — delay should be ~half of max.
+	delay := restartDelay(stableThreshold / 2)
+	expected := restartMaxDelay / 2
+	tolerance := time.Second
+	if delay < expected-tolerance || delay > expected+tolerance {
+		t.Errorf("expected ~%v for half uptime, got %v", expected, delay)
+	}
+}
+
+func TestRestartDelay_NearThreshold(t *testing.T) {
+	// Process lived almost to threshold — delay should be close to base, but clamped.
+	delay := restartDelay(stableThreshold - 100*time.Millisecond)
+	if delay < restartBaseDelay {
+		t.Errorf("delay %v should be >= base delay %v", delay, restartBaseDelay)
+	}
+}
+
+// --- monitorStderr additional tests ---
+
+func TestMonitorStderr_InactiveCallsOnInactive(t *testing.T) {
+	p := NewProcess(Config{})
+
+	done := make(chan struct{})
+	p.OnInactive = func() { close(done) }
+
+	p.monitorStderr("device became inactive")
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("OnInactive not called within 1s")
+	}
+}
+
+func TestMonitorStderr_InactiveNilCallback(t *testing.T) {
+	p := NewProcess(Config{})
+	p.OnInactive = nil
+
+	// Should not panic with nil OnInactive.
+	p.monitorStderr("device became inactive")
+}
+
+func TestMonitorStderr_AuthenticatedResetsFlags(t *testing.T) {
+	p := NewProcess(Config{})
+	p.OnReconnect = func() {} // non-nil but no-op
+
+	// Set broken session flags.
+	p.sawAudioKeyErr = true
+	p.sawSpirc = true
+
+	p.monitorStderr("Authenticated as user@example.com")
+
+	if p.sawAudioKeyErr {
+		t.Error("sawAudioKeyErr should be reset on authentication")
+	}
+	if p.sawSpirc {
+		t.Error("sawSpirc should be reset on authentication")
+	}
+}
+
+func TestMonitorStderr_AuthenticatedNilCallback(t *testing.T) {
+	p := NewProcess(Config{})
+	p.OnReconnect = nil
+
+	// Should not panic with nil OnReconnect.
+	p.monitorStderr("Authenticated as user@example.com")
+}
+
+func TestMonitorStderr_UnrelatedLine(t *testing.T) {
+	p := NewProcess(Config{})
+
+	// Unrelated lines should not affect state.
+	p.monitorStderr("Loading track xyz")
+	if p.sawAudioKeyErr || p.sawSpirc {
+		t.Error("unrelated line should not set flags")
+	}
+}
+
+func TestMonitorStderr_SpircThenAudioKey(t *testing.T) {
+	// Reverse order: spirc first, then audio key — should still trigger.
+	p := NewProcess(Config{})
+
+	p.monitorStderr("Spirc shut down unexpectedly")
+	if !p.sawSpirc {
+		t.Fatal("sawSpirc should be set")
+	}
+
+	p.monitorStderr("Audio key response timeout")
+	// Now both flags should have been set and the detection should have reset them.
+	if p.sawAudioKeyErr || p.sawSpirc {
+		t.Error("flags should be reset after broken session detection")
+	}
+}
+
+// --- scheduleRestart tests ---
+
+func TestScheduleRestart_StopChSuppresses(t *testing.T) {
+	p := NewProcess(Config{})
+
+	// Close stopCh before scheduleRestart so it returns immediately.
+	close(p.stopCh)
+	p.stopped = true
+
+	// Should return immediately without trying to launch.
+	done := make(chan struct{})
+	go func() {
+		p.scheduleRestart(time.Now())
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("scheduleRestart did not return after stopCh closed")
+	}
+}
+
 // helpers
 
 func assertContains(t *testing.T, args []string, flag, value string) {
