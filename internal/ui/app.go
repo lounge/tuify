@@ -149,11 +149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case seekFireMsg:
 		return m.handleSeekFire(msg)
 	case LibrespotInactiveMsg:
-		if !m.nowPlaying.deviceOverridden {
-			m.nowPlaying.deviceOverridden = true
-			m.client.DeviceOverridden.Store(true)
-			log.Printf("[device] librespot inactive — playback moved away from %s", m.client.PreferredDevice)
-		}
+		m.nowPlaying.setDeviceOverride(true, "librespot inactive — playback moved away from "+m.client.PreferredDevice)
 		m.nowPlaying.deviceName = ""
 		return m, tea.Batch(m.nowPlaying.pollState(), m.waitForLibrespotInactive())
 	case devicesLoadedMsg:
@@ -169,11 +165,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		// Update override state based on whether the chosen device is preferred.
 		if m.client.PreferredDevice != "" && msg.deviceName != m.client.PreferredDevice {
-			m.nowPlaying.deviceOverridden = true
-			m.client.DeviceOverridden.Store(true)
+			m.nowPlaying.setDeviceOverride(true, "transferred to non-preferred device "+msg.deviceName)
 		} else {
-			m.nowPlaying.deviceOverridden = false
-			m.client.DeviceOverridden.Store(false)
+			m.nowPlaying.setDeviceOverride(false, "transferred to preferred device "+msg.deviceName)
 		}
 		m.nowPlaying.deviceName = msg.deviceName
 		return m, m.nowPlaying.SetInfo("Switching to " + msg.deviceName)

@@ -89,6 +89,21 @@ type nowPlayingModel struct {
 	statusIsError bool
 }
 
+// setDeviceOverride updates the device override state in both the UI model and
+// the spotify client (atomic, read by background goroutines). Logs transitions.
+func (m *nowPlayingModel) setDeviceOverride(overridden bool, reason string) {
+	if m.deviceOverridden == overridden {
+		return
+	}
+	m.deviceOverridden = overridden
+	m.client.DeviceOverridden.Store(overridden)
+	if overridden {
+		log.Printf("[device] override set: %s", reason)
+	} else {
+		log.Printf("[device] override cleared: %s", reason)
+	}
+}
+
 func newNowPlaying(client *spotify.Client) *nowPlayingModel {
 	return &nowPlayingModel{
 		client:          client,
@@ -152,15 +167,9 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	// preferred device without tuify initiating it, stop re-claiming.
 	if m.preferredDevice != "" && msg.state.DeviceName != "" {
 		if msg.state.DeviceName != m.preferredDevice && (m.deviceName == m.preferredDevice || m.deviceName == "") {
-			if !m.deviceOverridden {
-				m.deviceOverridden = true
-				m.client.DeviceOverridden.Store(true)
-				log.Printf("[device] external switch detected: %s → %s; will not re-claim", m.preferredDevice, msg.state.DeviceName)
-			}
+			m.setDeviceOverride(true, fmt.Sprintf("external switch: %s → %s", m.preferredDevice, msg.state.DeviceName))
 		} else if msg.state.DeviceName == m.preferredDevice && m.deviceOverridden {
-			m.deviceOverridden = false
-			m.client.DeviceOverridden.Store(false)
-			log.Printf("[device] playback returned to preferred device %s", m.preferredDevice)
+			m.setDeviceOverride(false, fmt.Sprintf("playback returned to %s", m.preferredDevice))
 		}
 	}
 	m.deviceName = msg.state.DeviceName
