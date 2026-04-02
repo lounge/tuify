@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -139,7 +140,14 @@ func scrapeLyrics(ctx context.Context, client *http.Client, songURL string) (str
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("genius fetch: status %d", resp.StatusCode)
 	}
-	return extractLyrics(resp.Body)
+	text, err := extractLyrics(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	if text == "" {
+		log.Printf("[lyrics] warning: Genius returned 200 OK for %s but no lyrics containers found — HTML structure may have changed", songURL)
+	}
+	return text, nil
 }
 
 func extractLyrics(r io.Reader) (string, error) {
