@@ -87,6 +87,12 @@ type nowPlayingModel struct {
 	// Status display (errors and info messages)
 	statusMsg     string
 	statusIsError bool
+
+	// statusSpinning flips on when statusMsg represents an operation in
+	// progress (e.g. transferring playback). The actual spinner frame is
+	// rendered from the package-level loadingSpinner, which ticks once for
+	// the whole UI — no per-model spinner state or tick chain required.
+	statusSpinning bool
 }
 
 // setDeviceOverride updates the device override state in both the UI model and
@@ -130,6 +136,7 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 		return m.pollState()
 	case clearStatusMsg:
 		m.statusMsg = ""
+		m.statusSpinning = false
 		return nil
 	}
 	return nil
@@ -292,6 +299,7 @@ func (m *nowPlayingModel) recordUserAction() {
 func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
 	m.statusMsg = msg
 	m.statusIsError = true
+	m.statusSpinning = false
 	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
 		return clearStatusMsg{}
 	})
@@ -300,6 +308,21 @@ func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
 func (m *nowPlayingModel) SetInfo(msg string) tea.Cmd {
 	m.statusMsg = msg
 	m.statusIsError = false
+	m.statusSpinning = false
+	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
+		return clearStatusMsg{}
+	})
+}
+
+// SetSpinningInfo shows msg prefixed with the global spinner until the
+// status auto-clears (or a subsequent SetError / SetInfo replaces it).
+// Use for operations that take a moment to settle — e.g. "Switching to
+// Living Room Speaker" while the device poll confirms the transfer. The
+// spinner tick is driven by Model.Init / Model.Update at the top level.
+func (m *nowPlayingModel) SetSpinningInfo(msg string) tea.Cmd {
+	m.statusMsg = msg
+	m.statusIsError = false
+	m.statusSpinning = true
 	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
 		return clearStatusMsg{}
 	})
@@ -313,11 +336,7 @@ func (m nowPlayingModel) progressBarView() string {
 
 func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
 	if m.statusMsg != "" {
-		style := lipgloss.NewStyle().Foreground(colorText)
-		if m.statusIsError {
-			style = errorStyle
-		}
-		lines := []string{"", style.Render(m.statusMsg), "", "", ""}
+		lines := []string{"", renderStatusLine(m.statusMsg, m.statusSpinning, m.statusIsError), "", "", ""}
 		if searchActive {
 			lines = append(lines, "")
 		}

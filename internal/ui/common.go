@@ -6,8 +6,25 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
+
+// loadingSpinner is a single spinner instance shared by every "loading" UI
+// in the package — list status rows, the device selector, and the
+// now-playing "Switching to…" banner. A global is cleaner than giving
+// each view its own spinner: the Tick chain is started once from Model.Init
+// and a single spinner.TickMsg per frame updates the current frame, which
+// every consumer reads via loadingSpinner.View().
+var loadingSpinner = newLoadingSpinner()
+
+func newLoadingSpinner() spinner.Model {
+	s := spinner.New()
+	s.Spinner = spinner.MiniDot
+	s.Style = lipgloss.NewStyle().Foreground(colorPrimary)
+	return s
+}
 
 // view is the interface all navigable views must implement.
 type view interface {
@@ -47,15 +64,40 @@ type statusItem struct {
 	text    string
 	desc    string
 	isError bool
+	// spinning adds an animated spinner prefix to Title. True for active
+	// loading states ("Loading…", "Searching…", "Loading more…"); left
+	// false for final-state rows ("No results", "No matching results")
+	// and errors so those don't flicker in place.
+	spinning bool
 }
 
-var loadingStatusItem = statusItem{text: "Loading..."}
+var loadingStatusItem = statusItem{text: "Loading...", spinning: true}
 
 func (i statusItem) Title() string {
 	if i.isError {
 		return errorStyle.Render(i.text)
 	}
+	if i.spinning {
+		return loadingSpinner.View() + " " + loadingStyle.Render(i.text)
+	}
 	return loadingStyle.Render(i.text)
+}
+
+// renderStatusLine formats a now-playing status banner: prefixes the
+// message with the global spinner frame when spinning, and colors the
+// text red for errors. Shared by the full and mini now-playing views so
+// both render the same line; without this helper the two call sites
+// drift out of sync as styling tweaks land.
+func renderStatusLine(msg string, spinning, isError bool) string {
+	style := lipgloss.NewStyle().Foreground(colorText)
+	if isError {
+		style = errorStyle
+	}
+	rendered := style.Render(msg)
+	if spinning {
+		rendered = loadingSpinner.View() + " " + rendered
+	}
+	return rendered
 }
 func (i statusItem) Description() string {
 	if i.isError {

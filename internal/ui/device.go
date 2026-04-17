@@ -104,7 +104,7 @@ var deviceOverlayStyle = overlayBoxStyle.Padding(1, 3)
 func (d *deviceSelectorModel) view(width, height int) string {
 	var body string
 	if d.loading {
-		body = loadingStyle.Render("Loading devices…")
+		body = loadingSpinner.View() + " " + loadingStyle.Render("Loading devices…")
 	} else if d.err != nil {
 		body = errorStyle.Render(d.err.Error())
 	} else if len(d.devices) == 0 {

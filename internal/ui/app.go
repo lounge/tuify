@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/spotify"
@@ -137,7 +138,12 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 // Lifecycle
 
 func (m Model) Init() tea.Cmd {
-	cmds := []tea.Cmd{m.nowPlaying.Init()}
+	cmds := []tea.Cmd{
+		m.nowPlaying.Init(),
+		// Drive the single global spinner used by list loading rows, the
+		// device selector, and the now-playing "Switching to…" banner.
+		loadingSpinner.Tick,
+	}
 	if m.librespotInactiveCh != nil {
 		cmds = append(cmds, m.waitForLibrespotInactive())
 	}
@@ -194,6 +200,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.nowPlaying.SetError("Token save failed: "+msg.Err.Error()),
 			m.waitForTokenSaveErr(),
 		)
+	case spinner.TickMsg:
+		// Advance the global loading spinner and reschedule. Every frame
+		// that references loadingSpinner.View() — list status rows, device
+		// overlay, now-playing banner — sees the new frame on the next
+		// View() call triggered by this very tick.
+		var cmd tea.Cmd
+		loadingSpinner, cmd = loadingSpinner.Update(msg)
+		return m, cmd
 	case devicesLoadedMsg:
 		m.deviceSelector.handleLoaded(msg)
 		return m, nil
@@ -212,7 +226,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.nowPlaying.setDeviceOverride(false, "transferred to preferred device "+msg.deviceName)
 		}
 		m.nowPlaying.deviceName = msg.deviceName
-		return m, m.nowPlaying.SetInfo("Switching to " + msg.deviceName)
+		return m, m.nowPlaying.SetSpinningInfo("Switching to " + msg.deviceName)
 	}
 
 	return m.handleStateUpdate(msg)

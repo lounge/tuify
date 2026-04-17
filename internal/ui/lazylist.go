@@ -216,11 +216,11 @@ func (l *lazyList) applyFilter() {
 		pending := l.hasMore || l.loading
 		switch {
 		case len(filtered) == 0 && pending:
-			displayed = []list.Item{statusItem{text: "Searching…", desc: "loading more tracks"}}
+			displayed = []list.Item{statusItem{text: "Searching…", desc: "loading more tracks", spinning: true}}
 		case len(filtered) == 0:
 			displayed = []list.Item{statusItem{text: "No matching results"}}
 		case pending:
-			displayed = append(filtered, statusItem{text: "Loading more…"})
+			displayed = append(filtered, statusItem{text: "Loading more…", spinning: true})
 		default:
 			displayed = filtered
 		}

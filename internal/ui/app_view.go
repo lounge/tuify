@@ -112,11 +112,7 @@ func (m Model) helpView(height int) string {
 func (m Model) miniModeView() string {
 	np := m.nowPlaying
 	if np.statusMsg != "" {
-		style := lipgloss.NewStyle().Foreground(colorText)
-		if np.statusIsError {
-			style = errorStyle
-		}
-		return np.renderGradient([]string{style.Render(np.statusMsg)})
+		return np.renderGradient([]string{renderStatusLine(np.statusMsg, np.statusSpinning, np.statusIsError)})
 	}
 	if !np.hasTrack {
 		return np.renderGradient([]string{nowPlayingArtistStyle.Render("No track playing")})
