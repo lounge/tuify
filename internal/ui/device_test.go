@@ -70,21 +70,110 @@ func TestUpDown_SkipsActive(t *testing.T) {
 	d.open()
 	d.handleLoaded(devicesLoadedMsg{devices: devs})
 
-	// Cursor starts at 0 (first non-active).
-	if d.cursor != 0 {
-		t.Fatalf("initial cursor: got %d, want 0", d.cursor)
+	// After reordering, the list is [B (active), A, C]. First non-active
+	// is at index 1 (A), so the cursor starts there.
+	if d.cursor != 1 {
+		t.Fatalf("initial cursor: got %d, want 1", d.cursor)
 	}
 
-	// Down should skip B (active) and land on C.
+	// Down moves to C at index 2.
 	d.down()
 	if d.cursor != 2 {
 		t.Errorf("after down: got %d, want 2", d.cursor)
 	}
 
-	// Up should skip B (active) and land on A.
+	// Up skips B (active, index 0) and lands back on A at index 1.
 	d.up()
+	if d.cursor != 1 {
+		t.Errorf("after up: got %d, want 1", d.cursor)
+	}
+}
+
+// TestUp_StaysPutWhenNoSelectableAbove reproduces the bug where the cursor
+// could land on the active (non-selectable) device after a sequence of
+// up-presses. With the active pinned to index 0, pressing up from the
+// first non-active must be a no-op, not a silent move to the active row.
+func TestUp_StaysPutWhenNoSelectableAbove(t *testing.T) {
+	d := deviceSelectorModel{}
+	d.open()
+	d.handleLoaded(devicesLoadedMsg{devices: twoDevices()})
+
+	// Active ("comp") is at index 0 after the reorder; cursor starts at 1.
+	if d.cursor != 1 {
+		t.Fatalf("setup: cursor should be at 1, got %d", d.cursor)
+	}
+
+	d.up()
+	if d.cursor != 1 {
+		t.Errorf("up from first selectable should stay put, got cursor=%d (device=%q)",
+			d.cursor, d.devices[d.cursor].ID)
+	}
+}
+
+// TestDown_StaysPutWhenNoSelectableBelow is the mirror of the above:
+// down from the last non-active must not silently skip onto nothing.
+func TestDown_StaysPutWhenNoSelectableBelow(t *testing.T) {
+	devs := []spotify.Device{
+		{ID: "active", Name: "Active", Active: true},
+		{ID: "last", Name: "Last", Active: false},
+	}
+	d := deviceSelectorModel{}
+	d.open()
+	d.handleLoaded(devicesLoadedMsg{devices: devs})
+
+	if d.cursor != 1 {
+		t.Fatalf("setup: cursor should be at 1, got %d", d.cursor)
+	}
+
+	d.down()
+	if d.cursor != 1 {
+		t.Errorf("down from last selectable should stay put, got cursor=%d", d.cursor)
+	}
+}
+
+// TestHandleLoaded_ActiveDeviceMovedToTop pins that the currently-playing
+// device is always pinned to index 0 regardless of where the API listed it.
+func TestHandleLoaded_ActiveDeviceMovedToTop(t *testing.T) {
+	devs := []spotify.Device{
+		{ID: "a", Name: "A", Active: false},
+		{ID: "b", Name: "B", Active: false},
+		{ID: "active", Name: "Playing Now", Active: true},
+		{ID: "c", Name: "C", Active: false},
+	}
+	d := deviceSelectorModel{}
+	d.open()
+	d.handleLoaded(devicesLoadedMsg{devices: devs})
+
+	if d.devices[0].ID != "active" {
+		t.Errorf("active device should be pinned to top; got %q at index 0", d.devices[0].ID)
+	}
+	// Relative order of the rest must be preserved.
+	wantRest := []string{"a", "b", "c"}
+	for i, want := range wantRest {
+		if got := d.devices[i+1].ID; got != want {
+			t.Errorf("devices[%d]: got %q, want %q", i+1, got, want)
+		}
+	}
+}
+
+// TestHandleLoaded_NoActiveDevice ensures the reorder is a no-op when no
+// device is flagged active — we don't want to shuffle the API's list for
+// no reason.
+func TestHandleLoaded_NoActiveDevice(t *testing.T) {
+	devs := []spotify.Device{
+		{ID: "a", Name: "A", Active: false},
+		{ID: "b", Name: "B", Active: false},
+	}
+	d := deviceSelectorModel{}
+	d.open()
+	d.handleLoaded(devicesLoadedMsg{devices: devs})
+
+	if d.devices[0].ID != "a" || d.devices[1].ID != "b" {
+		t.Errorf("order should be unchanged when no active device; got %v",
+			[]string{d.devices[0].ID, d.devices[1].ID})
+	}
 	if d.cursor != 0 {
-		t.Errorf("after up: got %d, want 0", d.cursor)
+		t.Errorf("cursor should start at 0 when no active device; got %d", d.cursor)
 	}
 }
 

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"log"
+	"sort"
 	"strings"
 	"time"
 
@@ -58,6 +59,13 @@ func (d *deviceSelectorModel) handleLoaded(msg devicesLoadedMsg) {
 		}
 	}
 	d.devices = msg.devices
+	// Pin the currently-playing device to the top of the list. Stable sort
+	// preserves the relative order of the inactive devices below it.
+	if d.activeDeviceID != "" {
+		sort.SliceStable(d.devices, func(i, j int) bool {
+			return d.devices[i].ID == d.activeDeviceID && d.devices[j].ID != d.activeDeviceID
+		})
+	}
 	// Place cursor on the first non-active device.
 	d.cursor = 0
 	for i, dev := range d.devices {
@@ -68,19 +76,26 @@ func (d *deviceSelectorModel) handleLoaded(msg devicesLoadedMsg) {
 	}
 }
 
+// up moves the cursor to the nearest selectable (non-active) device above
+// the current position. If no selectable device exists above, the cursor
+// stays put — otherwise it would land on the active device, which renders
+// as muted and leaves the UI looking like nothing is selected.
 func (d *deviceSelectorModel) up() {
-	for d.cursor > 0 {
-		d.cursor--
-		if d.devices[d.cursor].ID != d.activeDeviceID {
+	for i := d.cursor - 1; i >= 0; i-- {
+		if d.devices[i].ID != d.activeDeviceID {
+			d.cursor = i
 			return
 		}
 	}
 }
 
+// down moves the cursor to the nearest selectable (non-active) device
+// below the current position. Same "no-op rather than land on active"
+// rule as up().
 func (d *deviceSelectorModel) down() {
-	for d.cursor < len(d.devices)-1 {
-		d.cursor++
-		if d.devices[d.cursor].ID != d.activeDeviceID {
+	for i := d.cursor + 1; i < len(d.devices); i++ {
+		if d.devices[i].ID != d.activeDeviceID {
+			d.cursor = i
 			return
 		}
 	}
