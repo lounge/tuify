@@ -31,6 +31,12 @@ type savingTokenSource struct {
 	base   oauth2.TokenSource
 	last   *oauth2.Token
 	cancel context.CancelFunc
+
+	// saveErrCh receives persistence failures. Buffered and lossy on full so
+	// we never block a refresh. Consumers (the UI) render these as visible
+	// warnings; without this signal a refresh failure is silent and the user
+	// only notices on the next app restart when they're forced to re-login.
+	saveErrCh chan error
 }
 
 func (s *savingTokenSource) Token() (*oauth2.Token, error) {
@@ -47,10 +53,22 @@ func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 		s.last = tok
 		if err := SaveToken(tok); err != nil {
 			log.Printf("[auth] failed to persist refreshed token: %v", err)
+			s.notifySaveErr(err)
 		}
 	}
 	s.mu.Unlock()
 	return tok, nil
+}
+
+// notifySaveErr pushes a save failure onto the channel without blocking.
+func (s *savingTokenSource) notifySaveErr(err error) {
+	if s.saveErrCh == nil {
+		return
+	}
+	select {
+	case s.saveErrCh <- err:
+	default:
+	}
 }
 
 // startProactiveRefresh runs a background goroutine that refreshes the token
@@ -120,7 +138,9 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 // NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
 // and persists them to disk on each refresh. The returned cleanup function
 // stops the proactive-refresh goroutine; callers must invoke it on shutdown.
-func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, func(), error) {
+// saveErrCh emits persistence failures so the caller can surface them to
+// the user (e.g. a status banner); it is buffered and lossy on full.
+func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, <-chan error, func(), error) {
 	// Provide a timeout-configured client for oauth2 token refresh requests.
 	// Without this, token refreshes use http.DefaultClient (no timeouts) and
 	// a hanging refresh blocks ALL API calls behind the oauth2 mutex.
@@ -143,9 +163,10 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 	base := a.Client(ctx, token)
 	t, ok := base.Transport.(*oauth2.Transport)
 	if !ok || t == nil {
-		return nil, nil, fmt.Errorf("unexpected transport type from spotify authenticator")
+		return nil, nil, nil, fmt.Errorf("unexpected transport type from spotify authenticator")
 	}
-	ts := &savingTokenSource{base: t.Source, last: token}
+	saveErrCh := make(chan error, 4)
+	ts := &savingTokenSource{base: t.Source, last: token, saveErrCh: saveErrCh}
 	// Trigger a refresh now so the token is fresh before any polls start.
 	if freshTok, err := ts.Token(); err != nil {
 		log.Printf("[auth] startup token refresh failed: %v", err)
@@ -171,7 +192,7 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 			Source: ts,
 			Base:   transport,
 		},
-	}, cleanup, nil
+	}, saveErrCh, cleanup, nil
 }
 
 func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, error) {
@@ -245,7 +266,10 @@ func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, err
 }
 
 func SaveToken(token *oauth2.Token) error {
-	dir := config.Dir()
+	dir, err := config.Dir()
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -257,7 +281,11 @@ func SaveToken(token *oauth2.Token) error {
 }
 
 func LoadToken() (*oauth2.Token, error) {
-	data, err := os.ReadFile(filepath.Join(config.Dir(), "token.json"))
+	dir, err := config.Dir()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "token.json"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil

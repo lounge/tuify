@@ -42,6 +42,13 @@ type playbackResultMsg struct {
 // device became inactive, indicating playback moved to another device.
 type LibrespotInactiveMsg struct{}
 
+// TokenSaveErrMsg is delivered when the auth layer fails to persist a
+// refreshed OAuth token. The UI surfaces this as a visible warning because
+// the in-memory token still works for the session — but the user will be
+// forced to log in again on next restart, and without a signal they have
+// no way to connect that to a fixable cause (permissions, disk full, etc.).
+type TokenSaveErrMsg struct{ Err error }
+
 // searchCtx captures the parts that differ between API search and local filter search.
 type searchCtx struct {
 	query    *string
@@ -67,6 +74,7 @@ type Model struct {
 	deviceSelector      deviceSelectorModel
 	miniMode            bool
 	librespotInactiveCh <-chan struct{}
+	tokenSaveErrCh      <-chan error
 }
 
 // ModelOption configures optional Model features.
@@ -100,6 +108,13 @@ func WithLibrespotInactive(ch <-chan struct{}) ModelOption {
 	return func(m *Model) { m.librespotInactiveCh = ch }
 }
 
+// WithTokenSaveErrors provides a channel that emits OAuth token persistence
+// failures. Each value is rendered as a visible warning so the user can tell
+// why they're getting logged out between sessions.
+func WithTokenSaveErrors(ch <-chan error) ModelOption {
+	return func(m *Model) { m.tokenSaveErrCh = ch }
+}
+
 func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 	home := newHomeView(0, 0)
 	m := Model{
@@ -124,6 +139,9 @@ func (m Model) Init() tea.Cmd {
 	if m.librespotInactiveCh != nil {
 		cmds = append(cmds, m.waitForLibrespotInactive())
 	}
+	if m.tokenSaveErrCh != nil {
+		cmds = append(cmds, m.waitForTokenSaveErr())
+	}
 	return tea.Batch(cmds...)
 }
 
@@ -132,6 +150,17 @@ func (m Model) waitForLibrespotInactive() tea.Cmd {
 	return func() tea.Msg {
 		<-ch
 		return LibrespotInactiveMsg{}
+	}
+}
+
+func (m Model) waitForTokenSaveErr() tea.Cmd {
+	ch := m.tokenSaveErrCh
+	return func() tea.Msg {
+		err, ok := <-ch
+		if !ok {
+			return nil
+		}
+		return TokenSaveErrMsg{Err: err}
 	}
 }
 
@@ -158,6 +187,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nowPlaying.setDeviceOverride(true, "librespot inactive — playback moved away from "+m.client.PreferredDevice)
 		m.nowPlaying.deviceName = ""
 		return m, tea.Batch(m.nowPlaying.pollState(), m.waitForLibrespotInactive())
+	case TokenSaveErrMsg:
+		return m, tea.Batch(
+			m.nowPlaying.SetError("Token save failed: "+msg.Err.Error()),
+			m.waitForTokenSaveErr(),
+		)
 	case devicesLoadedMsg:
 		m.deviceSelector.handleLoaded(msg)
 		return m, nil

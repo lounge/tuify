@@ -31,14 +31,24 @@ type RuntimeConfig struct {
 }
 
 // SetupLog configures the global logger to write to debug.log in the config
-// directory. Returns a cleanup function that closes the log file.
+// directory. Returns a cleanup function that closes the log file. If the log
+// file can't be opened (missing home dir, read-only fs, etc.) the reason is
+// printed to stderr so subsequent debug sessions aren't blind to why log
+// output is missing.
 func SetupLog() func() {
-	logPath := filepath.Join(config.Dir(), "debug.log")
-	if err := os.MkdirAll(config.Dir(), 0o700); err != nil {
+	dir, err := config.Dir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "tuify: debug log disabled: %v\n", err)
 		return func() {}
 	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		fmt.Fprintf(os.Stderr, "tuify: debug log disabled: create %s: %v\n", dir, err)
+		return func() {}
+	}
+	logPath := filepath.Join(dir, "debug.log")
 	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
+		fmt.Fprintf(os.Stderr, "tuify: debug log disabled: open %s: %v\n", logPath, err)
 		return func() {}
 	}
 	log.SetOutput(f)
@@ -114,8 +124,9 @@ func ResolveRuntime(cfg *config.Config) RuntimeConfig {
 
 // AuthSession holds the result of authentication.
 type AuthSession struct {
-	Client  *spotify.Client
-	Cleanup func()
+	Client     *spotify.Client
+	Cleanup    func()
+	SaveErrCh  <-chan error // emits token-persistence failures
 }
 
 // Authenticate connects to Spotify and returns a ready-to-use session.
@@ -139,7 +150,7 @@ func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
 		}
 	}
 
-	httpClient, cleanup, err := auth.NewSavingClient(authenticator, token)
+	httpClient, saveErrCh, cleanup, err := auth.NewSavingClient(authenticator, token)
 	if err != nil {
 		return nil, err
 	}
@@ -150,7 +161,7 @@ func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
 		fmt.Fprintf(os.Stderr, "Warning: could not fetch user ID: %v\n", err)
 	}
 
-	return &AuthSession{Client: client, Cleanup: cleanup}, nil
+	return &AuthSession{Client: client, Cleanup: cleanup, SaveErrCh: saveErrCh}, nil
 }
 
 // LibrespotServices holds the result of librespot/audio startup.
@@ -175,13 +186,17 @@ func StartLibrespot(rc RuntimeConfig, client *spotify.Client) (*LibrespotService
 		backend = librespot.DefaultBackend
 	}
 
+	dir, err := config.Dir()
+	if err != nil {
+		return nil, fmt.Errorf("resolve config dir: %w", err)
+	}
 	lsCfg := librespot.Config{
 		BinaryPath: rc.LibrespotPath,
 		DeviceName: rc.ResolvedDeviceName,
 		Bitrate:    rc.Bitrate,
 		Backend:    backend,
 		Username:   rc.SpotifyUsername,
-		CacheDir:   filepath.Join(config.Dir(), "librespot"),
+		CacheDir:   filepath.Join(dir, "librespot"),
 	}
 
 	var cleanups []func()
@@ -267,6 +282,9 @@ func Run() error {
 	var opts []ui.ModelOption
 	if cfg.VimMode {
 		opts = append(opts, ui.WithVimMode())
+	}
+	if session.SaveErrCh != nil {
+		opts = append(opts, ui.WithTokenSaveErrors(session.SaveErrCh))
 	}
 
 	svc, err := StartLibrespot(rc, session.Client)

@@ -10,7 +10,10 @@ import (
 func TestDir_XDGOverride(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
-	got := Dir()
+	got, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
 	want := filepath.Join(tmp, "tuify")
 	if got != want {
 		t.Errorf("Dir() = %q, want %q", got, want)
@@ -19,11 +22,26 @@ func TestDir_XDGOverride(t *testing.T) {
 
 func TestDir_DefaultHome(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
-	got := Dir()
+	got, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
 	home, _ := os.UserHomeDir()
 	want := filepath.Join(home, ".config", "tuify")
 	if got != want {
 		t.Errorf("Dir() = %q, want %q", got, want)
+	}
+}
+
+func TestDir_HomeLookupFailure(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	// os.UserHomeDir consults HOME on Unix and USERPROFILE on Windows.
+	// Clear both so the lookup fails deterministically and we can assert
+	// the error is propagated instead of silently returning an empty path.
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	if _, err := Dir(); err == nil {
+		t.Fatal("expected error when home cannot be resolved")
 	}
 }
 

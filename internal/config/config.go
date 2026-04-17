@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 )
@@ -23,15 +22,19 @@ type Config struct {
 	VimMode         bool   `json:"vim_mode,omitempty"`
 }
 
-func Dir() string {
+// Dir returns the tuify config directory. Honors $XDG_CONFIG_HOME, otherwise
+// derives from the user's home directory. Returns an error if neither is
+// available — silently defaulting to an empty path meant every downstream
+// "failed to open" error pointed at a phantom file at the repo root.
+func Dir() (string, error) {
 	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
-		return filepath.Join(dir, "tuify")
+		return filepath.Join(dir, "tuify"), nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		log.Printf("[config] failed to resolve home directory: %v", err)
+		return "", fmt.Errorf("resolve home directory: %w", err)
 	}
-	return filepath.Join(home, ".config", "tuify")
+	return filepath.Join(home, ".config", "tuify"), nil
 }
 
 // Validate checks that configured values are valid. Zero values (omitted
@@ -47,7 +50,11 @@ func (c *Config) Validate() error {
 }
 
 func Load() (*Config, error) {
-	data, err := os.ReadFile(filepath.Join(Dir(), "config.json"))
+	dir, err := Dir()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -62,7 +69,10 @@ func Load() (*Config, error) {
 }
 
 func Save(cfg *Config) error {
-	dir := Dir()
+	dir, err := Dir()
+	if err != nil {
+		return err
+	}
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
