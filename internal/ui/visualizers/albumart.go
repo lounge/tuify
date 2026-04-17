@@ -113,10 +113,10 @@ func (a *AlbumArt) View(width, height int) string {
 				if botC < 0 {
 					botC = bgColor
 				}
-				buf.WriteString(ansiFgBg(
+				writeAnsiFgBg(&buf,
 					int(topC>>16&0xFF), int(topC>>8&0xFF), int(topC&0xFF),
 					int(botC>>16&0xFF), int(botC>>8&0xFF), int(botC&0xFF),
-				))
+				)
 				buf.WriteRune('▀')
 				buf.WriteString(ansiReset)
 			}

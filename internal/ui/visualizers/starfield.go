@@ -195,7 +195,7 @@ func (sf *Starfield) View(width, height int) string {
 				cr := int(sf.colors[idx] >> 16 & 0xFF)
 				cg := int(sf.colors[idx] >> 8 & 0xFF)
 				cb := int(sf.colors[idx] & 0xFF)
-				buf.WriteString(ansiFg(cr, cg, cb))
+				writeAnsiFg(&buf, cr, cg, cb)
 				buf.WriteRune(sf.grid[idx])
 				buf.WriteString(ansiReset)
 			}

@@ -115,6 +115,7 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config file.
 | Spectrum | Yes |
 | Starfield | Yes |
 | Oscillogram | Yes |
+| Spectrogram | Yes |
 | Milkdrop Spiral | Yes |
 | Milkdrop Tunnel | Yes |
 | Milkdrop Kaleidoscope | Yes |

@@ -127,6 +127,7 @@ func newVisualizerModel(hasAudio bool) *visualizerModel {
 			visualizers.NewStarfield(),
 			visualizers.NewSpectrum(),
 			visualizers.NewOscillogram(),
+			visualizers.NewSpectrogram(),
 			visualizers.NewMilkdropSpiral(),
 			visualizers.NewMilkdropTunnel(),
 			visualizers.NewMilkdropKaleidoscope(),

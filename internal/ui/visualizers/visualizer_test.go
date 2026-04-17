@@ -327,3 +327,126 @@ func TestSpectrum_DecaysToZero(t *testing.T) {
 		}
 	}
 }
+
+// ---- Spectrogram ----
+
+func TestSpectrogram_ViewBeforeInit(t *testing.T) {
+	s := NewSpectrogram()
+	if got := s.View(80, 10); got != "" {
+		t.Errorf("View before Init should return empty, got %q", got)
+	}
+}
+
+func TestSpectrogram_AdvanceBeforeInit(t *testing.T) {
+	NewSpectrogram().Advance() // must not panic
+}
+
+func TestSpectrogram_ViewZeroDimensions(t *testing.T) {
+	s := NewSpectrogram()
+	s.Init("seed", 10000)
+	if got := s.View(0, 10); got != "" {
+		t.Errorf("width=0 should return empty, got %q", got)
+	}
+	if got := s.View(10, 0); got != "" {
+		t.Errorf("height=0 should return empty, got %q", got)
+	}
+}
+
+func TestSpectrogram_ViewDimensions(t *testing.T) {
+	s := NewSpectrogram()
+	s.Init("seed", 10000)
+
+	height := 10
+	got := s.View(80, height)
+	lines := strings.Split(got, "\n")
+	if len(lines) != height {
+		t.Errorf("expected %d lines, got %d", height, len(lines))
+	}
+}
+
+// TestSpectrogram_ScrollsRightToLeft pins the core contract: the most
+// recently pushed frame must show up on the right edge of the render, and
+// quadrant rendering must produce some non-space block glyph. The exact
+// glyph depends on the 4-way rank; we just smoke-check one of the common
+// "right-side hot" shapes is present.
+func TestSpectrogram_ScrollsRightToLeft(t *testing.T) {
+	s := NewSpectrogram()
+	s.Init("seed", 10000)
+
+	width, height := 8, 4
+
+	// Flood with silence, then push many loud frames so the EMA has time
+	// to climb out of the quiet prior. Each char shows 2 time steps.
+	for range 2 * width {
+		s.SetAudioData(nil)
+		s.Advance()
+	}
+	loud := &audio.FrequencyData{}
+	for i := range loud.Bands {
+		loud.Bands[i] = 0.9
+	}
+	s.SetAudioData(loud)
+	for range 5 {
+		s.Advance()
+	}
+
+	out := s.View(width, height)
+	if out == "" {
+		t.Fatal("expected non-empty output")
+	}
+	// The rightmost cells should carry loud signal; any of these right-
+	// leaning block shapes indicates scrolling is plumbed correctly.
+	hasRightShape := strings.ContainsAny(out, "▐▗▝█▟▜")
+	if !hasRightShape {
+		t.Errorf("expected a right-filled block glyph on the loud edge; got: %q", out)
+	}
+}
+
+// TestSpectrogram_SmoothingReducesFrameDelta verifies the EMA actually mixes
+// a new frame with the previous — a full-brightness frame pushed onto a
+// silent buffer must NOT produce a band at full amplitude on the first call,
+// because the smoothing weights it with the zero-valued previous frame.
+func TestSpectrogram_SmoothingReducesFrameDelta(t *testing.T) {
+	s := NewSpectrogram()
+	s.Init("seed", 10000)
+
+	loud := &audio.FrequencyData{}
+	for i := range loud.Bands {
+		loud.Bands[i] = 1.0
+	}
+	s.SetAudioData(loud)
+	s.Advance()
+
+	newest := (s.head - 1 + spectroMaxWidth) % spectroMaxWidth
+	for b, v := range s.frames[newest] {
+		if v >= 1.0 {
+			t.Fatalf("band %d=%.3f should be attenuated by EMA smoothing", b, v)
+		}
+	}
+}
+
+// TestSpectrogram_DecaysToFloor verifies the no-audio path: each new frame
+// is a fraction of the previous one, so the head of the ring decays toward
+// zero over time. (Older slots still hold their original data — that's the
+// whole point of the ring buffer; this test only checks the rolling tail.)
+func TestSpectrogram_DecaysToFloor(t *testing.T) {
+	s := NewSpectrogram()
+	s.Init("seed", 10000)
+
+	s.SetAudioData(&audio.FrequencyData{
+		Bands: [audio.NumBands]float32{0.5, 0.6, 0.7, 0.8},
+	})
+	s.Advance()
+
+	s.SetAudioData(nil)
+	for range 200 {
+		s.Advance()
+	}
+
+	newest := (s.head - 1 + spectroMaxWidth) % spectroMaxWidth
+	for b, v := range s.frames[newest] {
+		if v > 0.001 {
+			t.Fatalf("newest frame [%d]=%.4f should have decayed to ~0", b, v)
+		}
+	}
+}

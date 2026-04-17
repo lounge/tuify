@@ -176,7 +176,7 @@ func (l *Lyrics) View(width, height int) string {
 			buf.WriteString(style.Width(width).Render(padded))
 		} else {
 			g := lyricGray(isDark, isSection, dist)
-			buf.WriteString(ansiFg(g, g, g))
+			writeAnsiFg(&buf, g, g, g)
 			buf.WriteString(padded)
 			buf.WriteString(ansiReset)
 		}

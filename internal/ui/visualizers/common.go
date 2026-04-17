@@ -1,9 +1,10 @@
 package visualizers
 
 import (
-	"fmt"
 	"image"
 	"math"
+	"strconv"
+	"strings"
 
 	"github.com/lounge/tuify/internal/audio"
 )
@@ -51,6 +52,16 @@ func clamp(v, lo, hi int) int {
 	return v
 }
 
+func clampF64(v, lo, hi float64) float64 {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
 func hslToRGB(h, s, l float64) (int, int, int) {
 	h = math.Mod(h, 360)
 	if h < 0 {
@@ -81,14 +92,31 @@ func hslToRGB(h, s, l float64) (int, int, int) {
 		clamp(int((b+m)*255), 0, 255)
 }
 
-// ansiFg returns a direct ANSI 24-bit foreground escape for the given color.
-func ansiFg(r, g, b int) string {
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm", r, g, b)
+// writeAnsiFg appends a 24-bit ANSI foreground escape (`\x1b[38;2;R;G;Bm`)
+// directly to the builder. Using the writer form instead of an allocating
+// `fmt.Sprintf` return avoids ~1 string alloc per rendered cell — at 30 FPS
+// on a 100-wide terminal that's ~60k allocs/sec avoided for the spectrum,
+// oscillogram, and spectrogram hot paths.
+func writeAnsiFg(w *strings.Builder, r, g, b int) {
+	w.WriteString("\x1b[38;2;")
+	w.WriteString(strconv.Itoa(r))
+	w.WriteByte(';')
+	w.WriteString(strconv.Itoa(g))
+	w.WriteByte(';')
+	w.WriteString(strconv.Itoa(b))
+	w.WriteByte('m')
 }
 
-// ansiFgBg returns ANSI 24-bit foreground + background escapes.
-func ansiFgBg(fgR, fgG, fgB, bgR, bgG, bgB int) string {
-	return fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm", fgR, fgG, fgB, bgR, bgG, bgB)
+// writeAnsiFgBg appends fused 24-bit foreground + background ANSI escapes.
+func writeAnsiFgBg(w *strings.Builder, fgR, fgG, fgB, bgR, bgG, bgB int) {
+	writeAnsiFg(w, fgR, fgG, fgB)
+	w.WriteString("\x1b[48;2;")
+	w.WriteString(strconv.Itoa(bgR))
+	w.WriteByte(';')
+	w.WriteString(strconv.Itoa(bgG))
+	w.WriteByte(';')
+	w.WriteString(strconv.Itoa(bgB))
+	w.WriteByte('m')
 }
 
 const ansiReset = "\x1b[0m"
@@ -214,6 +242,57 @@ func (bd *BeatDetector) updateTempo() {
 
 // upperBlocks are ascending block-fill characters used by spectrum and oscillogram.
 var upperBlocks = [8]string{"▁", "▂", "▃", "▄", "▅", "▆", "▇", "█"}
+
+// quadrantGlyphs maps a 4-bit fill pattern to the unicode block character
+// whose filled pixels match the pattern. Bit layout (MSB→LSB): top-left,
+// top-right, bottom-left, bottom-right. Set bits render with the foreground
+// color, clear bits with the background — so combined with fg+bg escapes a
+// single character encodes 4 independent-color sub-cells (subject to the
+// 2-colors-per-character terminal limit).
+var quadrantGlyphs = [16]string{
+	" ", "▗", "▖", "▄",
+	"▝", "▐", "▞", "▟",
+	"▘", "▚", "▌", "▙",
+	"▀", "▜", "▛", "█",
+}
+
+// quadrantBits is a fixed mask table indexed the same way as quadrantGlyphs.
+// Package-level so it's not re-materialised on every per-cell call.
+var quadrantBits = [4]int{8, 4, 2, 1} // tl, tr, bl, br
+
+// paletteStop is one anchor in a piecewise-linear color palette. Palettes
+// are defined as a slice of stops in ascending `t` (0..1) order; see
+// buildPaletteLUT256 for how they're expanded into a per-entry table.
+type paletteStop struct {
+	t       float64 // position in [0, 1], strictly increasing across a palette
+	r, g, b int     // 0–255
+}
+
+// buildPaletteLUT256 expands a slice of paletteStops into a 256-entry
+// RGB lookup table by linear interpolation between consecutive stops.
+// Use this at package-scope (via a `var lut = buildPaletteLUT256(...)`)
+// so the per-cell color lookup is a single array index.
+func buildPaletteLUT256(stops []paletteStop) [256][3]uint8 {
+	var lut [256][3]uint8
+	for i := range 256 {
+		t := float64(i) / 255.0
+		for j := 1; j < len(stops); j++ {
+			hiStop := stops[j]
+			if t > hiStop.t {
+				continue
+			}
+			loStop := stops[j-1]
+			u := (t - loStop.t) / (hiStop.t - loStop.t)
+			lut[i] = [3]uint8{
+				uint8(float64(loStop.r) + (float64(hiStop.r)-float64(loStop.r))*u + 0.5),
+				uint8(float64(loStop.g) + (float64(hiStop.g)-float64(loStop.g))*u + 0.5),
+				uint8(float64(loStop.b) + (float64(hiStop.b)-float64(loStop.b))*u + 0.5),
+			}
+			break
+		}
+	}
+	return lut
+}
 
 // lerpAngle interpolates two hue values (0–360) taking the shortest arc.
 func lerpAngle(a, b, t float64) float64 {

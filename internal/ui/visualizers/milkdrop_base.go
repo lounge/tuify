@@ -228,7 +228,7 @@ func (m *MilkdropPreset) render(termW, termH int) string {
 			tr, tg, tb := hslToRGB(top.h, top.s, top.l)
 			br, bg, bb := hslToRGB(bot.h, bot.s, bot.l)
 
-			buf.WriteString(ansiFgBg(tr, tg, tb, br, bg, bb))
+			writeAnsiFgBg(&buf, tr, tg, tb, br, bg, bb)
 			buf.WriteString("▀")
 		}
 		buf.WriteString(ansiReset)
