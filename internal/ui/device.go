@@ -113,10 +113,7 @@ func (d *deviceSelectorModel) view(width, height int) string {
 		// Find the longest display label for column alignment.
 		maxLabel := 0
 		for _, dev := range d.devices {
-			n := len(dev.Name)
-			if dev.ID == d.activeDeviceID {
-				n += 2 // " ◉"
-			}
+			n := lipgloss.Width(dev.Name)
 			if n > maxLabel {
 				maxLabel = n
 			}
@@ -130,16 +127,16 @@ func (d *deviceSelectorModel) view(width, height int) string {
 			} else if i == d.cursor {
 				nameStyle = nameStyle.Foreground(colorPrimary).Bold(true)
 			}
-			label := dev.Name
-			labelLen := len(dev.Name)
-			name := nameStyle.Render(label)
+			var icon string
 			if dev.ID == d.activeDeviceID {
-				name += " " + lipgloss.NewStyle().Foreground(colorSecondary).Render("◉")
-				labelLen += 2
+				icon = lipgloss.NewStyle().Foreground(colorSecondary).Render("◉") + " "
+			} else {
+				icon = "  "
 			}
-			pad := strings.Repeat(" ", maxLabel-labelLen+2)
+			name := nameStyle.Render(dev.Name)
+			pad := strings.Repeat(" ", maxLabel-lipgloss.Width(dev.Name)+2)
 			typ := typeStyle.Render(strings.ToLower(dev.Type))
-			lines = append(lines, name+pad+typ)
+			lines = append(lines, icon+name+pad+typ)
 		}
 		body = strings.Join(lines, "\n")
 	}
