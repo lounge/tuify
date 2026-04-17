@@ -207,9 +207,15 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 	}
 	addr := ":" + parsed.Port()
 
-	verifier := generateRandomBase64(32)
+	verifier, err := generateRandomBase64(32)
+	if err != nil {
+		return nil, fmt.Errorf("generate PKCE verifier: %w", err)
+	}
 	challenge := generateCodeChallenge(verifier)
-	state := generateRandomBase64(16)
+	state, err := generateRandomBase64(16)
+	if err != nil {
+		return nil, fmt.Errorf("generate OAuth state: %w", err)
+	}
 
 	tokenCh := make(chan *oauth2.Token, 1)
 	errCh := make(chan error, 1)
@@ -306,12 +312,12 @@ func LoadToken() (*oauth2.Token, error) {
 	return &token, nil
 }
 
-func generateRandomBase64(n int) string {
+func generateRandomBase64(n int) (string, error) {
 	b := make([]byte, n)
 	if _, err := rand.Read(b); err != nil {
-		panic("crypto/rand: " + err.Error())
+		return "", fmt.Errorf("crypto/rand: %w", err)
 	}
-	return base64.RawURLEncoding.EncodeToString(b)
+	return base64.RawURLEncoding.EncodeToString(b), nil
 }
 
 func generateCodeChallenge(verifier string) string {

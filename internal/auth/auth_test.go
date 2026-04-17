@@ -102,8 +102,14 @@ func TestLoadToken_InvalidJSON(t *testing.T) {
 }
 
 func TestGenerateRandomBase64(t *testing.T) {
-	a := generateRandomBase64(32)
-	b := generateRandomBase64(32)
+	a, err := generateRandomBase64(32)
+	if err != nil {
+		t.Fatalf("generateRandomBase64: %v", err)
+	}
+	b, err := generateRandomBase64(32)
+	if err != nil {
+		t.Fatalf("generateRandomBase64: %v", err)
+	}
 
 	if a == b {
 		t.Error("two random values should not be equal")
@@ -530,7 +536,10 @@ func TestOpenBrowser_UnknownOS(t *testing.T) {
 	// Just verifying it doesn't panic on unknown OS.
 	// The function checks runtime.GOOS, so we can't easily test it,
 	// but we can verify the code challenge round-trip.
-	verifier := generateRandomBase64(32)
+	verifier, err := generateRandomBase64(32)
+	if err != nil {
+		t.Fatalf("generateRandomBase64: %v", err)
+	}
 	challenge := generateCodeChallenge(verifier)
 	if challenge == "" {
 		t.Error("code challenge should not be empty")
