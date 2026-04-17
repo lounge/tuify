@@ -946,7 +946,13 @@ func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 	case "enter":
 		selected := sc.list.SelectedItem()
-		if _, ok := selected.(uriItem); !ok {
+		// Don't try to play/drill into status rows ("Loading more…",
+		// "No matching results"). Real items — tracks, episodes, albums,
+		// artists, shows, playlists — all pass this check.
+		if selected == nil {
+			return nil, true
+		}
+		if _, ok := selected.(statusItem); ok {
 			return nil, true
 		}
 		sc.close()
