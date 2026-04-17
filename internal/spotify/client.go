@@ -303,14 +303,11 @@ func (c *Client) GetAlbumTracks(ctx context.Context, albumID string, offset, lim
 
 func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 	body, status, err := c.doWithRetry(ctx, "https://api.spotify.com/v1/me/player?additional_types=track,episode")
-	if err != nil {
-		return nil, err
-	}
 	if status == http.StatusNoContent {
 		return nil, nil
 	}
-	if status != http.StatusOK {
-		return nil, fmt.Errorf("Spotify API %d: %s", status, body)
+	if err != nil {
+		return nil, err
 	}
 	var state struct {
 		Playing    bool `json:"is_playing"`
@@ -487,8 +484,24 @@ func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, ac
 	return string(devices[0].ID), false, false, nil
 }
 
+// APIError is returned by doWithRetry for non-2xx responses. It carries the
+// status code and (truncated) response body so callers can distinguish error
+// shapes (e.g. StatusNoContent for "no active playback") without re-parsing.
+type APIError struct {
+	Status int
+	Body   []byte
+	URL    string
+}
+
+func (e *APIError) Error() string {
+	return fmt.Sprintf("Spotify API %d: %s", e.Status, e.Body)
+}
+
 // doWithRetry performs a GET request with 429 retry logic. Returns the
-// response body and status code, or an error if the request itself failed.
+// response body, status code, and an error for non-2xx responses. The
+// error is an *APIError for HTTP-level failures; callers that need to
+// treat a specific status as non-error (e.g. 204) should check for it
+// via errors.As before propagating.
 func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
 	for attempts := 0; attempts < 3; attempts++ {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -504,9 +517,6 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		if err != nil {
 			return nil, 0, err
 		}
-		if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
-			log.Printf("[spotify] %s %d body=%s", url, resp.StatusCode, body)
-		}
 		if resp.StatusCode == http.StatusTooManyRequests {
 			wait := 0
 			if s := resp.Header.Get("Retry-After"); s != "" {
@@ -515,7 +525,7 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 				}
 			}
 			if wait > 10 {
-				return nil, resp.StatusCode, fmt.Errorf("rate limited — retry in %dm", wait/60)
+				return nil, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), URL: url}
 			}
 			select {
 			case <-time.After(time.Duration(wait) * time.Second):
@@ -524,18 +534,29 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 				return nil, 0, ctx.Err()
 			}
 		}
-		return body, resp.StatusCode, nil
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return body, resp.StatusCode, nil
+		}
+		log.Printf("[spotify] %s %d body=%s", url, resp.StatusCode, truncateForLog(body))
+		return body, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), URL: url}
 	}
 	return nil, http.StatusTooManyRequests, fmt.Errorf("Spotify API 429: rate limited after retries")
 }
 
+// truncateForLog caps a response body for logging/error storage. Large
+// bodies can contain sensitive tokens or flood logs.
+func truncateForLog(b []byte) []byte {
+	const max = 500
+	if len(b) <= max {
+		return b
+	}
+	return append(append([]byte(nil), b[:max]...), "…"...)
+}
+
 func (c *Client) apiGet(ctx context.Context, url string, result any) error {
-	body, status, err := c.doWithRetry(ctx, url)
+	body, _, err := c.doWithRetry(ctx, url)
 	if err != nil {
 		return err
-	}
-	if status != http.StatusOK {
-		return fmt.Errorf("Spotify API %d: %s", status, body)
 	}
 	return json.Unmarshal(body, result)
 }

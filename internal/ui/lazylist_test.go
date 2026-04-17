@@ -287,3 +287,82 @@ func TestLazyList_Append_NormalMode(t *testing.T) {
 		t.Errorf("offset should be 1, got %d", ll.offset)
 	}
 }
+
+// TestLazyList_ApplyFilter_FromDeepCursor_NoViewPanic reproduces the bubbles/list
+// panic we hit when the user scrolled to a far index in a large playlist, then
+// pressed "/" and typed a query that filtered the list down to a handful of
+// matches. After SetItems the paginator's Page*PerPage could still point past
+// the new, smaller item slice, so the next View() did items[Page*PerPage:len]
+// with start > end and crashed. applyFilter now resets the cursor before
+// SetItems; this test pins that behavior by calling View() to force rendering.
+func TestLazyList_ApplyFilter_FromDeepCursor_NoViewPanic(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = false
+	ll.searching = true
+
+	// Big backing list (~matches the real-world scenario where the user had
+	// scrolled past index 4000 in a multi-page playlist).
+	items := make([]list.Item, 5000)
+	for i := range items {
+		items[i] = trackItem{
+			name: "Track " + string(rune('A'+i%26)),
+			uri:  "uri" + string(rune('a'+i%26)) + string(rune('0'+i%10)),
+		}
+	}
+	// Place one item that matches the upcoming query at a known index.
+	items[12] = trackItem{name: "XYZ match", uri: "xyz-match"}
+	ll.items = items
+	ll.list.SetItems(ll.items)
+
+	// Simulate the user scrolling to a far index before filtering.
+	ll.list.Select(4020)
+
+	// Filter to a small match set. This is the exact shape of the panic repro.
+	ll.searchQuery = "XYZ"
+	ll.applyFilter()
+
+	// Force the renderer — this is what panicked before the fix.
+	_ = ll.View()
+
+	if got := len(ll.list.Items()); got != 1 {
+		t.Fatalf("expected 1 filtered item, got %d", got)
+	}
+}
+
+// TestLazyList_ApplyFilter_ShrinkThenGrow_NoViewPanic covers the related case
+// where the filter first shrinks the view, then a background page arrives and
+// applyFilter runs again with more items. View() must stay safe across both.
+func TestLazyList_ApplyFilter_ShrinkThenGrow_NoViewPanic(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = true
+	ll.searching = true
+
+	initial := make([]list.Item, 2000)
+	for i := range initial {
+		initial[i] = trackItem{name: "Track", uri: "u"}
+	}
+	initial[5] = trackItem{name: "needle", uri: "needle-1"}
+	ll.items = initial
+	ll.list.SetItems(ll.items)
+	ll.list.Select(1800)
+
+	ll.searchQuery = "needle"
+	ll.applyFilter()
+	_ = ll.View()
+
+	// A new page of items arrives in the background.
+	more := make([]list.Item, 2000)
+	for i := range more {
+		more[i] = trackItem{name: "Track", uri: "u"}
+	}
+	more[100] = trackItem{name: "needle", uri: "needle-2"}
+	ll.append(more, len(more), false)
+
+	_ = ll.View()
+
+	if got := len(ll.list.Items()); got != 2 {
+		t.Fatalf("expected 2 filtered items after append, got %d", got)
+	}
+}

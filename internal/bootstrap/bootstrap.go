@@ -114,7 +114,8 @@ func ResolveRuntime(cfg *config.Config) RuntimeConfig {
 
 // AuthSession holds the result of authentication.
 type AuthSession struct {
-	Client *spotify.Client
+	Client  *spotify.Client
+	Cleanup func()
 }
 
 // Authenticate connects to Spotify and returns a ready-to-use session.
@@ -138,7 +139,7 @@ func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
 		}
 	}
 
-	httpClient, err := auth.NewSavingClient(authenticator, token)
+	httpClient, cleanup, err := auth.NewSavingClient(authenticator, token)
 	if err != nil {
 		return nil, err
 	}
@@ -149,7 +150,7 @@ func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
 		fmt.Fprintf(os.Stderr, "Warning: could not fetch user ID: %v\n", err)
 	}
 
-	return &AuthSession{Client: client}, nil
+	return &AuthSession{Client: client, Cleanup: cleanup}, nil
 }
 
 // LibrespotServices holds the result of librespot/audio startup.
@@ -247,6 +248,9 @@ func Run() error {
 	session, err := Authenticate(rc)
 	if err != nil {
 		return err
+	}
+	if session.Cleanup != nil {
+		defer session.Cleanup()
 	}
 
 	var opts []ui.ModelOption

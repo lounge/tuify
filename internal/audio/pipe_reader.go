@@ -38,24 +38,27 @@ func NewPipeReader() *PipeReader {
 // This handles librespot restarts which create a new stdout pipe each time.
 func (pr *PipeReader) Start(pipe io.ReadCloser) {
 	pr.mu.Lock()
-	defer pr.mu.Unlock()
-
 	if pr.stopped {
+		pr.mu.Unlock()
 		pipe.Close()
 		return
 	}
-
-	// Cancel any previous read loop.
-	if pr.cancelFn != nil {
-		pr.cancelFn()
-		<-pr.done // wait for previous goroutine to exit
-	}
+	prevCancel := pr.cancelFn
+	prevDone := pr.done
 
 	done := make(chan struct{})
-	pr.done = done
-
 	quit := make(chan struct{})
+	pr.done = done
 	pr.cancelFn = func() { close(quit) }
+	pr.mu.Unlock()
+
+	// Wait for the previous read loop to exit without holding the mutex, so
+	// a concurrent Stop() can still acquire it (and so we don't deadlock if
+	// the previous loop is blocked on a hung player.IsPlaying()).
+	if prevCancel != nil {
+		prevCancel()
+		<-prevDone
+	}
 
 	go pr.readLoop(pipe, quit, done)
 }
@@ -74,17 +77,22 @@ func (pr *PipeReader) Latest() *FrequencyData {
 // Stop cancels any active read loop. Safe to call multiple times.
 func (pr *PipeReader) Stop() {
 	pr.mu.Lock()
-	defer pr.mu.Unlock()
-
 	if pr.stopped {
+		pr.mu.Unlock()
 		return
 	}
 	pr.stopped = true
+	cancel := pr.cancelFn
+	done := pr.done
+	pr.cancelFn = nil
+	pr.mu.Unlock()
 
-	if pr.cancelFn != nil {
-		pr.cancelFn()
-		<-pr.done
-		pr.cancelFn = nil
+	// Wait for the read loop to exit without holding the mutex, so a
+	// hung readLoop (e.g. blocked in player.IsPlaying) can't deadlock
+	// concurrent callers that need the lock.
+	if cancel != nil {
+		cancel()
+		<-done
 	}
 }
 

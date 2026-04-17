@@ -118,8 +118,9 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 }
 
 // NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
-// and persists them to disk on each refresh.
-func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, error) {
+// and persists them to disk on each refresh. The returned cleanup function
+// stops the proactive-refresh goroutine; callers must invoke it on shutdown.
+func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, func(), error) {
 	// Provide a timeout-configured client for oauth2 token refresh requests.
 	// Without this, token refreshes use http.DefaultClient (no timeouts) and
 	// a hanging refresh blocks ALL API calls behind the oauth2 mutex.
@@ -142,7 +143,7 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 	base := a.Client(ctx, token)
 	t, ok := base.Transport.(*oauth2.Transport)
 	if !ok || t == nil {
-		return nil, fmt.Errorf("unexpected transport type from spotify authenticator")
+		return nil, nil, fmt.Errorf("unexpected transport type from spotify authenticator")
 	}
 	ts := &savingTokenSource{base: t.Source, last: token}
 	// Trigger a refresh now so the token is fresh before any polls start.
@@ -160,12 +161,17 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 		ResponseHeaderTimeout: 15 * time.Second,
 		DisableKeepAlives:     true,
 	}
+	cleanup := func() {
+		if ts.cancel != nil {
+			ts.cancel()
+		}
+	}
 	return &http.Client{
 		Transport: &oauth2.Transport{
 			Source: ts,
 			Base:   transport,
 		},
-	}, nil
+	}, cleanup, nil
 }
 
 func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, error) {
