@@ -149,48 +149,78 @@ func TestStartLibrespot_Disabled(t *testing.T) {
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc := StartLibrespot(rc, client)
+	svc, err := StartLibrespot(rc, client)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if svc != nil {
 		t.Error("expected nil when librespot is disabled")
 	}
 }
 
+// TestStartLibrespot_SetsPreferredDevice verifies the client's preferred
+// device is written even if the librespot binary isn't available in the test
+// environment — the assignment happens before any subprocess work.
 func TestStartLibrespot_SetsPreferredDevice(t *testing.T) {
 	cfg := &config.Config{
 		ClientID:        "id",
 		EnableLibrespot: true,
 		DeviceName:      "test-device",
+		LibrespotPath:   "/bin/true",
 	}
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc := StartLibrespot(rc, client)
-	if svc == nil {
-		t.Fatal("expected non-nil services")
+	svc, _ := StartLibrespot(rc, client)
+	if svc != nil {
+		defer svc.Cleanup()
 	}
-	defer svc.Cleanup()
 
 	if client.PreferredDevice != "test-device" {
 		t.Errorf("PreferredDevice: got %q, want %q", client.PreferredDevice, "test-device")
 	}
 }
 
+// TestStartLibrespot_ReturnsOptions requires a working binary; skip if none
+// is available. When the binary runs, we should receive at least the audio
+// source and inactive-channel options.
 func TestStartLibrespot_ReturnsOptions(t *testing.T) {
 	cfg := &config.Config{
 		ClientID:        "id",
 		EnableLibrespot: true,
+		LibrespotPath:   "/bin/true",
 	}
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc := StartLibrespot(rc, client)
-	if svc == nil {
-		t.Fatal("expected non-nil services")
+	svc, err := StartLibrespot(rc, client)
+	if err != nil {
+		t.Skipf("librespot binary unavailable: %v", err)
 	}
 	defer svc.Cleanup()
 
-	// Should have at least the audio source option + librespot inactive channel option.
 	if len(svc.Options) < 2 {
 		t.Errorf("expected at least 2 UI model options (audio source + inactive channel), got %d", len(svc.Options))
+	}
+}
+
+func TestStartLibrespot_ErrorOnBinaryMissing(t *testing.T) {
+	cfg := &config.Config{
+		ClientID:        "id",
+		EnableLibrespot: true,
+		LibrespotPath:   "/no/such/binary-that-definitely-does-not-exist",
+	}
+	rc := ResolveRuntime(cfg)
+	client := &spotify.Client{}
+
+	svc, err := StartLibrespot(rc, client)
+	if err == nil {
+		if svc != nil {
+			svc.Cleanup()
+		}
+		t.Fatal("expected error when librespot binary doesn't exist")
+	}
+	if svc != nil {
+		t.Error("expected nil services on error")
 	}
 }

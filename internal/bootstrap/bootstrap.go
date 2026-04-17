@@ -160,11 +160,12 @@ type LibrespotServices struct {
 }
 
 // StartLibrespot starts the librespot process and audio pipe reader if enabled
-// by the config. Returns UI model options and a cleanup function. If librespot
-// is not enabled, returns nil.
-func StartLibrespot(rc RuntimeConfig, client *spotify.Client) *LibrespotServices {
+// by the config. Returns UI model options and a cleanup function, or an error
+// if librespot was enabled but failed to start. If librespot is not enabled,
+// returns (nil, nil).
+func StartLibrespot(rc RuntimeConfig, client *spotify.Client) (*LibrespotServices, error) {
 	if !rc.EnableLibrespot {
-		return nil
+		return nil, nil
 	}
 
 	client.PreferredDevice = rc.ResolvedDeviceName
@@ -190,7 +191,6 @@ func StartLibrespot(rc RuntimeConfig, client *spotify.Client) *LibrespotServices
 	if backend == "pipe" {
 		pipeRdr = audio.NewPipeReader()
 		cleanups = append(cleanups, pipeRdr.Stop)
-		opts = append(opts, ui.WithAudioSource(pipeRdr))
 	}
 
 	librespotProc := librespot.NewProcess(lsCfg)
@@ -202,18 +202,29 @@ func StartLibrespot(rc RuntimeConfig, client *spotify.Client) *LibrespotServices
 		}
 	}
 
-	if err := librespotProc.Start(); err != nil {
-		log.Printf("[startup] librespot failed to start: %v", err)
-	} else {
-		cleanups = append(cleanups, func() { librespotProc.Stop() })
-	}
-
 	inactiveCh := make(chan struct{}, 1)
 	librespotProc.OnInactive = func() {
 		select {
 		case inactiveCh <- struct{}{}:
 		default:
 		}
+	}
+
+	if err := librespotProc.Start(); err != nil {
+		// Run cleanups we've queued (pipe reader) so the partial startup
+		// doesn't leak resources, then surface the failure to the caller.
+		for i := len(cleanups) - 1; i >= 0; i-- {
+			cleanups[i]()
+		}
+		return nil, fmt.Errorf("librespot failed to start: %w", err)
+	}
+	cleanups = append(cleanups, func() { librespotProc.Stop() })
+
+	// Only expose the audio source and inactive channel to the UI once we
+	// know librespot is actually running; otherwise the UI would poll a
+	// dead pipe and listen for inactive signals that never arrive.
+	if pipeRdr != nil {
+		opts = append(opts, ui.WithAudioSource(pipeRdr))
 	}
 	opts = append(opts, ui.WithLibrespotInactive(inactiveCh))
 
@@ -225,7 +236,7 @@ func StartLibrespot(rc RuntimeConfig, client *spotify.Client) *LibrespotServices
 				cleanups[i]()
 			}
 		},
-	}
+	}, nil
 }
 
 // Run is the main application entry point. It loads config, authenticates,
@@ -258,7 +269,11 @@ func Run() error {
 		opts = append(opts, ui.WithVimMode())
 	}
 
-	if svc := StartLibrespot(rc, session.Client); svc != nil {
+	svc, err := StartLibrespot(rc, session.Client)
+	if err != nil {
+		return err
+	}
+	if svc != nil {
 		defer svc.Cleanup()
 		opts = append(opts, svc.Options...)
 	}

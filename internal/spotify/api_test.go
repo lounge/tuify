@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/lounge/tuify/internal/testutil"
 )
@@ -353,5 +354,44 @@ func TestApiGet_InvalidJSON(t *testing.T) {
 	err := c.apiGet(context.Background(), "https://api.spotify.com/v1/test", &result)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestTruncateForLog_ShortInput(t *testing.T) {
+	in := []byte("hello")
+	out := truncateForLog(in)
+	if string(out) != "hello" {
+		t.Errorf("short input should be returned unchanged, got %q", out)
+	}
+}
+
+func TestTruncateForLog_LongASCII(t *testing.T) {
+	in := make([]byte, 1000)
+	for i := range in {
+		in[i] = 'a'
+	}
+	out := truncateForLog(in)
+	if !utf8.Valid(out) {
+		t.Errorf("output is not valid UTF-8: %q", out)
+	}
+}
+
+// TestTruncateForLog_MultibyteBoundary reproduces the class of bug where the
+// cut fell in the middle of a multi-byte rune, yielding malformed bytes.
+// Every prefix length must still produce valid UTF-8 output.
+func TestTruncateForLog_MultibyteBoundary(t *testing.T) {
+	// Build a payload where the 500-byte cut lands mid-rune. "日" is 3 bytes.
+	// Prefixing 499 ASCII bytes means position 500 is the 2nd byte of 日.
+	in := make([]byte, 0, 1000)
+	for range 499 {
+		in = append(in, 'x')
+	}
+	for range 200 {
+		in = append(in, []byte("日")...)
+	}
+
+	out := truncateForLog(in)
+	if !utf8.Valid(out) {
+		t.Errorf("truncated output has invalid UTF-8: %q", out)
 	}
 }

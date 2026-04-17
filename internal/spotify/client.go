@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	sp "github.com/zmb3/spotify/v2"
 )
@@ -544,13 +545,23 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 }
 
 // truncateForLog caps a response body for logging/error storage. Large
-// bodies can contain sensitive tokens or flood logs.
+// bodies can contain sensitive tokens or flood logs. The cut is aligned to
+// a UTF-8 rune boundary so we never emit a malformed byte sequence followed
+// by the ellipsis.
 func truncateForLog(b []byte) []byte {
 	const max = 500
 	if len(b) <= max {
 		return b
 	}
-	return append(append([]byte(nil), b[:max]...), "…"...)
+	cut := max
+	for cut > 0 {
+		r, _ := utf8.DecodeLastRune(b[:cut])
+		if r != utf8.RuneError {
+			break
+		}
+		cut--
+	}
+	return append(append([]byte(nil), b[:cut]...), "…"...)
 }
 
 func (c *Client) apiGet(ctx context.Context, url string, result any) error {

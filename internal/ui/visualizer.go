@@ -6,6 +6,7 @@ import (
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
+	"io"
 	"log"
 	"net/http"
 	"strings"
@@ -18,6 +19,11 @@ import (
 )
 
 var httpClient = &http.Client{Timeout: 10 * time.Second}
+
+// maxAlbumArtBytes caps image downloads so a hostile or malformed URL can't
+// stream unbounded data into image.Decode. Spotify artwork fits comfortably
+// under this; anything larger is almost certainly not the expected content.
+const maxAlbumArtBytes = 5 * 1024 * 1024
 
 // asyncLoader manages a buffered channel for a background fetch with optional
 // cancellation. Both the image and lyrics loaders share this lifecycle.
@@ -252,7 +258,7 @@ func (m *visualizerModel) loadImage(imageURL string) {
 			return
 		}
 		defer resp.Body.Close()
-		img, _, err := image.Decode(resp.Body)
+		img, _, err := image.Decode(io.LimitReader(resp.Body, maxAlbumArtBytes))
 		select {
 		case ch <- fetchResult{img: img, url: url, err: err}:
 		default:
