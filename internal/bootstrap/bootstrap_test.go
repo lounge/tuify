@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -149,7 +150,7 @@ func TestStartLibrespot_Disabled(t *testing.T) {
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, err := StartLibrespot(rc, client)
+	svc, err := StartLibrespot(context.Background(), rc, client)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestStartLibrespot_SetsPreferredDevice(t *testing.T) {
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, _ := StartLibrespot(rc, client)
+	svc, _ := StartLibrespot(context.Background(), rc, client)
 	if svc != nil {
 		defer svc.Cleanup()
 	}
@@ -193,7 +194,7 @@ func TestStartLibrespot_ReturnsOptions(t *testing.T) {
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, err := StartLibrespot(rc, client)
+	svc, err := StartLibrespot(context.Background(), rc, client)
 	if err != nil {
 		t.Skipf("librespot binary unavailable: %v", err)
 	}
@@ -213,7 +214,7 @@ func TestStartLibrespot_ErrorOnBinaryMissing(t *testing.T) {
 	rc := ResolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, err := StartLibrespot(rc, client)
+	svc, err := StartLibrespot(context.Background(), rc, client)
 	if err == nil {
 		if svc != nil {
 			svc.Cleanup()

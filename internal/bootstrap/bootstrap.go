@@ -130,8 +130,10 @@ type AuthSession struct {
 }
 
 // Authenticate connects to Spotify and returns a ready-to-use session.
-// If no saved token exists, it runs the interactive login flow.
-func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
+// If no saved token exists, it runs the interactive login flow. ctx is the
+// parent lifetime — cancelling it aborts login and stops the proactive
+// token-refresh goroutine owned by the returned session.
+func Authenticate(ctx context.Context, rc RuntimeConfig) (*AuthSession, error) {
 	token, err := auth.LoadToken()
 	if err != nil {
 		return nil, fmt.Errorf("loading token: %w", err)
@@ -141,7 +143,7 @@ func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
 
 	if token == nil {
 		fmt.Fprintln(os.Stderr, "No saved session found. Starting login...")
-		token, err = auth.Login(authenticator, rc.ResolvedRedirectURL)
+		token, err = auth.Login(ctx, authenticator, rc.ResolvedRedirectURL)
 		if err != nil {
 			return nil, fmt.Errorf("login failed: %w", err)
 		}
@@ -150,14 +152,14 @@ func Authenticate(rc RuntimeConfig) (*AuthSession, error) {
 		}
 	}
 
-	httpClient, saveErrCh, cleanup, err := auth.NewSavingClient(authenticator, token)
+	httpClient, saveErrCh, cleanup, err := auth.NewSavingClient(ctx, authenticator, token)
 	if err != nil {
 		return nil, err
 	}
 
 	spClient := sp.New(httpClient)
 	client := spotify.New(spClient, httpClient)
-	if err := client.FetchUserID(context.Background()); err != nil {
+	if err := client.FetchUserID(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not fetch user ID: %v\n", err)
 	}
 
@@ -173,8 +175,9 @@ type LibrespotServices struct {
 // StartLibrespot starts the librespot process and audio pipe reader if enabled
 // by the config. Returns UI model options and a cleanup function, or an error
 // if librespot was enabled but failed to start. If librespot is not enabled,
-// returns (nil, nil).
-func StartLibrespot(rc RuntimeConfig, client *spotify.Client) (*LibrespotServices, error) {
+// returns (nil, nil). ctx is the app's root context, used so the reconnect
+// handler's transfer requests are cancellable at shutdown.
+func StartLibrespot(ctx context.Context, rc RuntimeConfig, client *spotify.Client) (*LibrespotServices, error) {
 	if !rc.EnableLibrespot {
 		return nil, nil
 	}
@@ -209,7 +212,7 @@ func StartLibrespot(rc RuntimeConfig, client *spotify.Client) (*LibrespotService
 	}
 
 	librespotProc := librespot.NewProcess(lsCfg)
-	librespotProc.OnReconnect = reconnectHandler(client, rc.ResolvedDeviceName)
+	librespotProc.OnReconnect = reconnectHandler(ctx, client, rc.ResolvedDeviceName)
 
 	if pipeRdr != nil {
 		librespotProc.OnStdout = func(pipe io.ReadCloser) {
@@ -261,6 +264,12 @@ func Run() error {
 	closeLog := SetupLog()
 	defer closeLog()
 
+	// Root context for the whole app run. Cancelled on return so every
+	// background goroutine (token refresh, device polling, librespot
+	// reconnect ops) unwinds cleanly instead of lingering after exit.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	cfg, err := LoadOrSetupConfig(nil, nil)
 	if err != nil {
 		return err
@@ -271,7 +280,7 @@ func Run() error {
 
 	rc := ResolveRuntime(cfg)
 
-	session, err := Authenticate(rc)
+	session, err := Authenticate(ctx, rc)
 	if err != nil {
 		return err
 	}
@@ -287,7 +296,7 @@ func Run() error {
 		opts = append(opts, ui.WithTokenSaveErrors(session.SaveErrCh))
 	}
 
-	svc, err := StartLibrespot(rc, session.Client)
+	svc, err := StartLibrespot(ctx, rc, session.Client)
 	if err != nil {
 		return err
 	}
@@ -303,14 +312,20 @@ func Run() error {
 
 // reconnectHandler returns a callback for librespot reconnection that
 // transfers playback back to the preferred device (unless overridden).
-func reconnectHandler(client *spotify.Client, deviceName string) func() {
+// parent is the app's root context; cancelling it aborts any in-flight
+// reconnect transfer instead of letting it linger past shutdown.
+func reconnectHandler(parent context.Context, client *spotify.Client, deviceName string) func() {
 	return func() {
-		time.Sleep(2 * time.Second)
+		select {
+		case <-time.After(2 * time.Second):
+		case <-parent.Done():
+			return
+		}
 		if client.DeviceOverridden.Load() {
 			log.Printf("[librespot] reconnect: device was manually switched, skipping transfer")
 			return
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 		devID, _, _, err := client.FindDevice(ctx, false)
 		if err != nil {

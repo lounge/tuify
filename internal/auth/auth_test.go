@@ -518,7 +518,7 @@ func TestLogin_EmptyCode(t *testing.T) {
 
 func TestLogin_InvalidRedirectURL(t *testing.T) {
 	a := NewAuthenticator("test-client", "http://127.0.0.1:4444/callback")
-	_, err := Login(a, "://invalid")
+	_, err := Login(context.Background(), a, "://invalid")
 	if err == nil {
 		t.Fatal("expected error for invalid redirect URL")
 	}

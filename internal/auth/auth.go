@@ -140,7 +140,9 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 // stops the proactive-refresh goroutine; callers must invoke it on shutdown.
 // saveErrCh emits persistence failures so the caller can surface them to
 // the user (e.g. a status banner); it is buffered and lossy on full.
-func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, <-chan error, func(), error) {
+// ctx is the parent lifetime: when it is cancelled, the proactive-refresh
+// goroutine exits and in-flight oauth2 refresh requests are cancelled too.
+func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, <-chan error, func(), error) {
 	// Provide a timeout-configured client for oauth2 token refresh requests.
 	// Without this, token refreshes use http.DefaultClient (no timeouts) and
 	// a hanging refresh blocks ALL API calls behind the oauth2 mutex.
@@ -159,8 +161,8 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 		log.Printf("[auth] token expires in %v, refreshing at startup", time.Until(token.Expiry).Round(time.Second))
 		token.Expiry = time.Now().Add(-1 * time.Second)
 	}
-	ctx := context.WithValue(context.Background(), oauth2.HTTPClient, refreshClient)
-	base := a.Client(ctx, token)
+	oauthCtx := context.WithValue(ctx, oauth2.HTTPClient, refreshClient)
+	base := a.Client(oauthCtx, token)
 	t, ok := base.Transport.(*oauth2.Transport)
 	if !ok || t == nil {
 		return nil, nil, nil, fmt.Errorf("unexpected transport type from spotify authenticator")
@@ -173,7 +175,7 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 	} else {
 		log.Printf("[auth] token valid until %v", freshTok.Expiry.Local().Format("15:04:05"))
 	}
-	ts.startProactiveRefresh(context.Background())
+	ts.startProactiveRefresh(ctx)
 	transport := &http.Transport{
 		DialContext: (&net.Dialer{
 			Timeout: 10 * time.Second,
@@ -195,7 +197,10 @@ func NewSavingClient(a *spotifyauth.Authenticator, token *oauth2.Token) (*http.C
 	}, saveErrCh, cleanup, nil
 }
 
-func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, error) {
+// Login runs the interactive PKCE flow: spins up a local callback server,
+// opens the browser, and blocks until the user completes auth. Cancel ctx
+// to abort a login that is stuck waiting for the browser callback.
+func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, error) {
 	parsed, err := url.Parse(redirectURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redirect URL: %w", err)
@@ -262,6 +267,8 @@ func Login(a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, err
 		return token, nil
 	case err := <-errCh:
 		return nil, err
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 }
 
