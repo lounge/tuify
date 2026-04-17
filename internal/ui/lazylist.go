@@ -135,7 +135,17 @@ func (l *lazyList) openSearch() bool {
 func (l *lazyList) closeSearch() {
 	l.searching = false
 	l.searchQuery = ""
+	selected := l.list.SelectedItem()
 	l.list.SetItems(l.items)
+	if u, ok := selected.(uriItem); ok {
+		if i, found := l.findByURI(u.URI()); found {
+			l.list.Select(i)
+			return
+		}
+	}
+	if l.list.Index() >= len(l.items) {
+		l.list.ResetSelected()
+	}
 }
 
 // findByURI locates an item by URI. Items must implement URI() string.
@@ -184,29 +194,61 @@ func (l *lazyList) resolveSync() bool {
 }
 
 func (l *lazyList) applyFilter() {
+	var displayed []list.Item
 	if l.searchQuery == "" {
-		l.list.SetItems(l.items)
+		displayed = l.items
+	} else {
+		query := strings.ToLower(l.searchQuery)
+		var filtered []list.Item
+		for _, item := range l.items {
+			if _, ok := item.(statusItem); ok {
+				continue
+			}
+			di, ok := item.(list.DefaultItem)
+			if !ok {
+				continue
+			}
+			if strings.Contains(strings.ToLower(di.Title()), query) ||
+				strings.Contains(strings.ToLower(di.Description()), query) {
+				filtered = append(filtered, item)
+			}
+		}
+		pending := l.hasMore || l.loading
+		switch {
+		case len(filtered) == 0 && pending:
+			displayed = []list.Item{statusItem{text: "Searching…", desc: "loading more tracks"}}
+		case len(filtered) == 0:
+			displayed = []list.Item{statusItem{text: "No matching results"}}
+		case pending:
+			displayed = append(filtered, statusItem{text: "Loading more…"})
+		default:
+			displayed = filtered
+		}
+	}
+	l.setItemsResetCursor(displayed)
+}
+
+// setItemsResetCursor replaces items, preserving the selected item by URI
+// when possible. Bubbles' list.Model restores the old cursor position via
+// Page*PerPage+cursor after SetItems, which can leave Page*PerPage past the
+// end of the new items slice and panic on the next render. Resetting the
+// cursor to 0 before SetItems makes the paginator's restored index safe, and
+// we then re-select the previous item by URI if it's still visible.
+func (l *lazyList) setItemsResetCursor(items []list.Item) {
+	var selectedURI string
+	if u, ok := l.list.SelectedItem().(uriItem); ok {
+		selectedURI = u.URI()
+	}
+	l.list.ResetSelected()
+	l.list.SetItems(items)
+	if selectedURI == "" {
 		return
 	}
-	query := strings.ToLower(l.searchQuery)
-	var filtered []list.Item
-	for _, item := range l.items {
-		if _, ok := item.(statusItem); ok {
-			continue
+	for i, item := range items {
+		if u, ok := item.(uriItem); ok && u.URI() == selectedURI {
+			l.list.Select(i)
+			return
 		}
-		di, ok := item.(list.DefaultItem)
-		if !ok {
-			continue
-		}
-		if strings.Contains(strings.ToLower(di.Title()), query) ||
-			strings.Contains(strings.ToLower(di.Description()), query) {
-			filtered = append(filtered, item)
-		}
-	}
-	if len(filtered) == 0 {
-		l.list.SetItems([]list.Item{statusItem{text: "No matching results"}})
-	} else {
-		l.list.SetItems(filtered)
 	}
 }
 

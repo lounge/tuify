@@ -68,6 +68,7 @@ func TestLazyList_TriggerLoad_NoMore(t *testing.T) {
 func TestLazyList_ApplyFilter_Matches(t *testing.T) {
 	ll := newTestLazyList()
 	ll.loading = false
+	ll.hasMore = false
 	ll.searching = true
 	ll.items = []list.Item{
 		trackItem{name: "Hello World", uri: "u1"},
@@ -86,6 +87,8 @@ func TestLazyList_ApplyFilter_Matches(t *testing.T) {
 
 func TestLazyList_ApplyFilter_NoMatches(t *testing.T) {
 	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = false
 	ll.items = []list.Item{
 		trackItem{name: "Song A", uri: "u1"},
 	}
@@ -100,6 +103,47 @@ func TestLazyList_ApplyFilter_NoMatches(t *testing.T) {
 	si, ok := displayed[0].(statusItem)
 	if !ok || si.text != "No matching results" {
 		t.Errorf("expected 'No matching results' statusItem, got %+v", displayed[0])
+	}
+}
+
+func TestLazyList_ApplyFilter_PendingAppendsLoadingItem(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = true
+	ll.searching = true
+	ll.items = []list.Item{
+		trackItem{name: "Hello World", uri: "u1"},
+		trackItem{name: "Goodbye Moon", uri: "u2"},
+	}
+	ll.searchQuery = "hello"
+
+	ll.applyFilter()
+
+	displayed := ll.list.Items()
+	if len(displayed) != 2 {
+		t.Fatalf("expected 1 match + loading item, got %d", len(displayed))
+	}
+	si, ok := displayed[1].(statusItem)
+	if !ok || si.text != "Loading more…" {
+		t.Errorf("expected 'Loading more…' status item, got %+v", displayed[1])
+	}
+}
+
+func TestLazyList_ApplyFilter_NoMatchesWhilePendingShowsSearching(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = true
+	ll.items = []list.Item{
+		trackItem{name: "Song A", uri: "u1"},
+	}
+	ll.searchQuery = "zzzzz"
+
+	ll.applyFilter()
+
+	displayed := ll.list.Items()
+	si, ok := displayed[0].(statusItem)
+	if !ok || si.text != "Searching…" {
+		t.Errorf("expected 'Searching…' status item while pending, got %+v", displayed[0])
 	}
 }
 

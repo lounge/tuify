@@ -946,6 +946,9 @@ func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
 		return nil, true
 	case "enter":
 		selected := sc.list.SelectedItem()
+		if _, ok := selected.(uriItem); !ok {
+			return nil, true
+		}
 		sc.close()
 		return sc.play(selected), true
 	case "backspace":
