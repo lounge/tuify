@@ -35,6 +35,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleResize(msg)
 	case tea.KeyMsg:
 		return m.handleKeyMsg(msg)
+	case tea.MouseMsg:
+		// handleMouse returns handled=true to consume an event (even a
+		// debounced wheel tick that does nothing), preventing it from
+		// reaching handleStateUpdate. Unhandled mouse events (middle
+		// click, motion, etc.) fall through so future consumers can pick
+		// them up — nothing downstream acts on them today.
+		if handled, model, cmd := m.handleMouse(msg); handled {
+			return model, cmd
+		}
 	case playbackResultMsg:
 		return m.handlePlaybackResult(msg)
 	case vizTickMsg:

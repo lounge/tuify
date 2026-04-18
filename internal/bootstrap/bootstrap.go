@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/auth"
 	"github.com/lounge/tuify/internal/config"
@@ -305,7 +306,19 @@ func Run() error {
 		opts = append(opts, svc.Options...)
 	}
 
-	p := tea.NewProgram(ui.NewModel(session.Client, opts...), tea.WithAltScreen())
+	// Initialize the bubblezone global manager so the UI can mark
+	// clickable regions in rendered output and resolve mouse clicks to
+	// specific list items. Must be called before any zone.Mark/Scan use.
+	zone.NewGlobal()
+
+	// WithMouseCellMotion enables click + scroll wheel events. CellMotion
+	// is cheaper than AllMotion (events only on cell boundaries) and
+	// sufficient for click-to-select + wheel scroll.
+	p := tea.NewProgram(
+		ui.NewModel(session.Client, opts...),
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 	_, err = p.Run()
 	return err
 }

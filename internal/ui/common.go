@@ -108,7 +108,7 @@ func (i statusItem) Description() string {
 func (i statusItem) FilterValue() string { return "" }
 
 func newList(width, height int, vimMode bool) list.Model {
-	l := list.New(nil, newListDelegate(), width, height)
+	l := list.New(nil, zoneListDelegate{DefaultDelegate: newListDelegate()}, width, height)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)

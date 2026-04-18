@@ -24,6 +24,7 @@ func (i albumItem) Description() string {
 	return fmt.Sprintf("%s · %s · %d tracks", i.artist, year, i.trackCount)
 }
 func (i albumItem) FilterValue() string { return i.name }
+func (i albumItem) URI() string         { return i.uri }
 
 // artistItem represents an artist in a list.
 type artistItem struct {
@@ -41,3 +42,4 @@ func (i artistItem) Description() string {
 	return strings.Join(i.genres, ", ")
 }
 func (i artistItem) FilterValue() string { return i.name }
+func (i artistItem) URI() string         { return i.uri }

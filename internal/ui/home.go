@@ -3,6 +3,7 @@ package ui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 type homeItem struct {
@@ -81,11 +82,16 @@ func (v *homeView) Breadcrumb() string { return "" }
 func (v *homeView) View() string {
 	var tabs []string
 	for i, item := range homeItems {
+		var rendered string
 		if i == v.cursor {
-			tabs = append(tabs, homeTabActive.Render(item.name))
+			rendered = homeTabActive.Render(item.name)
 		} else {
-			tabs = append(tabs, homeTabInactive.Render(item.name))
+			rendered = homeTabInactive.Render(item.name)
 		}
+		// Mark each tab with its name so mouse clicks can resolve to the
+		// corresponding homeItem. Item names are unique, so they double
+		// as stable zone ids.
+		tabs = append(tabs, zone.Mark(item.name, rendered))
 	}
 
 	column := lipgloss.JoinVertical(lipgloss.Center, tabs...)

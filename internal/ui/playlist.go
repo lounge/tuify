@@ -21,6 +21,7 @@ func (i playlistItem) Description() string {
 	return fmt.Sprintf("by %s · %d tracks", i.ownerName, i.trackCount)
 }
 func (i playlistItem) FilterValue() string { return i.name }
+func (i playlistItem) URI() string         { return "spotify:playlist:" + i.id }
 
 type playlistsLoadedMsg struct {
 	playlists []spotify.Playlist

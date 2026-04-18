@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lucasb-eyer/go-colorful"
+	runewidth "github.com/mattn/go-runewidth"
 )
 
 // ansiSGR matches any ANSI SGR (Select Graphic Rendition) escape sequence.
@@ -27,37 +28,7 @@ func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
 
 	var status string
 	if m.hasTrack {
-		icon := "⏸"
-		if m.playing {
-			icon = "▶"
-		}
-		shuffle := ""
-		if m.shuffling {
-			shuffle = "[shuffle] "
-		}
-		left := fmt.Sprintf("%s %s%s — %s",
-			nowPlayingIconStyle.Render(icon),
-			nowPlayingIconStyle.Render(shuffle),
-			nowPlayingTrackStyle.Render(m.track),
-			nowPlayingArtistStyle.Render(m.artist),
-		)
-		device := ""
-		if m.deviceName != "" {
-			device = nowPlayingTrackStyle.Render("◉ ") + nowPlayingArtistStyle.Render(m.deviceName)
-		}
-		if device != "" {
-			leftLen := lipgloss.Width(left)
-			deviceLen := lipgloss.Width(device)
-			innerWidth := m.width - nowPlayingPadding
-			gap := innerWidth - leftLen - deviceLen
-			if gap >= 2 {
-				status = left + strings.Repeat(" ", gap) + device
-			} else {
-				status = left
-			}
-		} else {
-			status = left
-		}
+		status = m.renderTrackLine()
 	} else {
 		status = nowPlayingArtistStyle.Render("No track playing")
 	}
@@ -80,6 +51,79 @@ func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
 		lines = append(lines, search)
 	}
 	return m.renderGradient(lines)
+}
+
+// renderTrackLine builds the one-line "icon track — artist   device" status,
+// truncating the label portion so the rendered line stays within m.width.
+// Keeping it on a single line is load-bearing: a wrapped NP bar makes the
+// total View() output exceed terminal height, which scrolls the viewport
+// and shifts mouse-click zone coordinates in the list above.
+func (m nowPlayingModel) renderTrackLine() string {
+	icon := "⏸"
+	if m.playing {
+		icon = "▶"
+	}
+	shufflePrefix := ""
+	if m.shuffling {
+		shufflePrefix = "[shuffle] "
+	}
+	devicePlain := ""
+	if m.deviceName != "" {
+		devicePlain = "◉ " + m.deviceName
+	}
+
+	innerWidth := m.width - nowPlayingPadding
+	// Fixed portion consumed before the label: icon + space + shuffle prefix.
+	prefixW := lipgloss.Width(icon) + 1 + lipgloss.Width(shufflePrefix)
+	// Trailing: 2-space gap + device, dropped if it wouldn't leave room.
+	trailingW := 0
+	if devicePlain != "" {
+		trailingW = 2 + lipgloss.Width(devicePlain)
+	}
+	labelBudget := innerWidth - prefixW - trailingW
+	if labelBudget < 8 {
+		// Not enough room; drop the device and use all remaining width
+		// for the track/artist label.
+		devicePlain = ""
+		trailingW = 0
+		labelBudget = innerWidth - prefixW
+	}
+
+	track, artist, sep := m.track, m.artist, " — "
+	// Use display-cell widths (not rune counts) so wide runes — CJK,
+	// emoji, etc. — don't slip past the budget and wrap the line.
+	if runewidth.StringWidth(track+sep+artist) > labelBudget && labelBudget > 1 {
+		trackSepW := runewidth.StringWidth(track + sep)
+		if trackSepW >= labelBudget {
+			// Label bigger than budget even without artist — truncate track.
+			track = runewidth.Truncate(track, labelBudget, "…")
+			artist, sep = "", ""
+		} else {
+			artistBudget := labelBudget - trackSepW
+			if artistBudget > 1 {
+				artist = runewidth.Truncate(artist, artistBudget, "…")
+			} else {
+				artist, sep = "", ""
+			}
+		}
+	}
+
+	left := nowPlayingIconStyle.Render(icon) + " " +
+		nowPlayingIconStyle.Render(shufflePrefix) +
+		nowPlayingTrackStyle.Render(track)
+	if artist != "" {
+		left += nowPlayingArtistStyle.Render(sep + artist)
+	}
+
+	if devicePlain == "" {
+		return left
+	}
+	device := nowPlayingTrackStyle.Render("◉ ") + nowPlayingArtistStyle.Render(m.deviceName)
+	gap := innerWidth - lipgloss.Width(left) - lipgloss.Width(device)
+	if gap < 2 {
+		return left
+	}
+	return left + strings.Repeat(" ", gap) + device
 }
 
 // renderGradient renders the now-playing area with a purple background that

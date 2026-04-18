@@ -1,8 +1,13 @@
 package ui
 
 import (
+	"bytes"
+	"fmt"
+	"io"
+
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 const homeTabWidth = 20
@@ -112,4 +117,28 @@ func newListDelegate() list.DefaultDelegate {
 	d.Styles.DimmedTitle = normalStyle.Foreground(colorTextDim)
 	d.Styles.DimmedDesc = d.Styles.DimmedTitle.Foreground(colorDim)
 	return d
+}
+
+// zoneListDelegate wraps the default delegate so each uriItem row is
+// rendered inside a bubblezone Mark with the item's URI as the zone id.
+// The main Update loop resolves mouse clicks to item indices by checking
+// the URI-keyed zones against the click coordinates.
+//
+// Height(), Spacing(), and Update() are promoted from the embedded
+// DefaultDelegate. If bubbles/list extends ItemDelegate in a future
+// release, Go's compile-time check on list.New will flag the gap — but
+// the silent inheritance is worth keeping aware of during upgrades.
+type zoneListDelegate struct {
+	list.DefaultDelegate
+}
+
+func (d zoneListDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
+	u, ok := item.(uriItem)
+	if !ok || u.URI() == "" {
+		d.DefaultDelegate.Render(w, m, index, item)
+		return
+	}
+	var buf bytes.Buffer
+	d.DefaultDelegate.Render(&buf, m, index, item)
+	fmt.Fprint(w, zone.Mark(u.URI(), buf.String()))
 }

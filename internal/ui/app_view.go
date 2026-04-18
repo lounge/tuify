@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // View rendering: the main View() dispatcher, the help overlay, and the
@@ -52,7 +53,10 @@ func (m Model) View() string {
 	}
 	b.WriteString(m.nowPlaying.View(searchActive, searchQuery))
 
-	return b.String()
+	// zone.Scan replaces zoneMark tokens in the rendered output with real
+	// screen coordinates. Must wrap every View() return so mouse clicks
+	// can be resolved against marked regions.
+	return zone.Scan(b.String())
 }
 
 func (m Model) helpView(height int) string {

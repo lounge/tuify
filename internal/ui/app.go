@@ -1,10 +1,21 @@
 package ui
 
 import (
+	"time"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
 )
+
+// doubleClickWindow is the max interval between two left clicks on the
+// same item for the pair to count as a double-click (activate).
+const doubleClickWindow = 500 * time.Millisecond
+
+// wheelDebounceWindow swallows consecutive wheel events that arrive faster
+// than this. Tuned against macOS/iTerm scroll acceleration, which fires
+// 2–3 events per physical wheel tick in burst.
+const wheelDebounceWindow = 40 * time.Millisecond
 
 // This file holds the core Model plus Init and the view-stack helpers. Message
 // types are in app_messages.go, optional constructors in app_options.go,
@@ -34,6 +45,17 @@ type Model struct {
 	miniMode            bool
 	librespotInactiveCh <-chan struct{}
 	tokenSaveErrCh      <-chan error
+
+	// Click state for double-click detection. When a left click lands on a
+	// zoned item, we record the item URI and timestamp; a second click on
+	// the same URI within doubleClickWindow fires the enter action.
+	lastClickURI  string
+	lastClickTime time.Time
+
+	// Wheel debounce: OS scroll acceleration emits multiple MouseMsg
+	// events per physical wheel notch, so we coalesce events closer
+	// together than wheelDebounceWindow into one cursor move.
+	lastWheelTime time.Time
 }
 
 func NewModel(client *spotify.Client, opts ...ModelOption) Model {

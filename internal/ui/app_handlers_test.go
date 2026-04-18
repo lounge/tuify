@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
 )
 
@@ -122,5 +125,70 @@ func TestHandleResize_SubtractsBreadcrumbOnlyWhenPresent(t *testing.T) {
 	}
 	if noCrumb.gotWidth != 100 || withCrumb.gotWidth != 100 {
 		t.Error("both views should receive the full terminal width")
+	}
+}
+
+// Double-click bookkeeping must be per-zone-id: rapidly clicking on two
+// different items should never fire Enter, even if the second click
+// happens within doubleClickWindow. Only matching ids close the pair.
+func TestRegisterClick_DifferentIdsDontTriggerActivate(t *testing.T) {
+	m := newTestModelWithClient("")
+
+	handled, m1, cmd := m.registerClick("id-a")
+	if !handled {
+		t.Fatal("first click should be handled")
+	}
+	if cmd != nil {
+		t.Errorf("first click should not fire Enter: got cmd %v", cmd)
+	}
+
+	// Second click on a DIFFERENT id, well within the doubleClickWindow.
+	m2 := m1.(Model)
+	handled, _, cmd = m2.registerClick("id-b")
+	if !handled {
+		t.Fatal("second click should be handled")
+	}
+	if cmd != nil {
+		t.Errorf("click on different id must not fire Enter: got cmd %v", cmd)
+	}
+}
+
+// renderTrackLine uses display-cell widths so wide runes (CJK, emoji)
+// that count as 1 Unicode point but 2 cells don't slip past the budget
+// and wrap the now-playing bar. A wrap would shift zone coordinates in
+// the list above and make mouse clicks land on the wrong row.
+func TestRenderTrackLine_WideRunesStaySingleLine(t *testing.T) {
+	np := &nowPlayingModel{
+		width:    40,
+		hasTrack: true,
+		track:    "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほ", // ~60 cells of wide runes
+		artist:   "まみむめも",
+		playing:  true,
+	}
+	line := np.renderTrackLine()
+	if strings.Contains(line, "\n") {
+		t.Errorf("renderTrackLine produced multi-line output: %q", line)
+	}
+	// The rendered line should fit within the width budget once styling
+	// is applied. lipgloss.Width ignores ANSI codes, so it's the cell count.
+	if w := lipgloss.Width(line); w > np.width-nowPlayingPadding {
+		t.Errorf("line width %d exceeds budget %d", w, np.width-nowPlayingPadding)
+	}
+}
+
+// handleMouseClick on a list-backed view that contains only non-URI
+// items (e.g. a lone loading status row) should report the click as
+// unhandled so the caller can decide what to do — NOT silently absorb it.
+func TestHandleMouseClick_ListWithNoURIItems_ReportsUnhandled(t *testing.T) {
+	tv := newTrackView(nil, "pid", "Test Playlist", 80, 20, false)
+	tv.items = []list.Item{statusItem{text: "Loading…"}}
+	tv.list.SetItems(tv.items)
+	m := newTestModelWithClient("")
+	m.viewStack = []view{tv}
+
+	click := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: 0, Y: 0}
+	handled, _, _ := m.handleMouseClick(click)
+	if handled {
+		t.Error("click on a list with no uriItems should report unhandled")
 	}
 }
