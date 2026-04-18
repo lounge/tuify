@@ -21,7 +21,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 - **Now Playing** — Live progress bar, track info, shuffle state, active device indicator
 - **Device Selector** — Switch playback between Spotify Connect devices
 - **Mini Mode** — Compact single-line view with track info and progress
-- **Visualizers** — Album art, spectrum analyzer, starfield, oscillogram, and Milkdrop-style presets
+- **Visualizers** — Album art, starfield, spectrum, oscillogram, spectrogram, and Milkdrop-style presets (spiral, tunnel, kaleidoscope, ripple)
 - **Lyrics** — Fetches and displays lyrics from Genius.com
 - **Dark & Light Terminals** — Adaptive color palette that adjusts automatically
 
