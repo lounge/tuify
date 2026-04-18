@@ -1,146 +1,172 @@
 package spotify
 
 import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
 	"testing"
-	"time"
+	"unicode/utf8"
+
+	"github.com/lounge/tuify/internal/testutil"
 )
 
-func TestConvertTracks(t *testing.T) {
-	raw := []rawTrack{
-		{
-			ID:       "t1",
-			URI:      "spotify:track:t1",
-			Name:     "Song One",
-			Duration: 210000,
-			Artists:  []rawArtistRef{{Name: "Artist A"}},
-			Album: struct {
-				Name string `json:"name"`
-			}{Name: "Album X"},
-		},
-		{
-			ID:       "t2",
-			URI:      "spotify:track:t2",
-			Name:     "Song Two",
-			Duration: 180000,
-		},
-	}
+// newTestClient creates a Client backed by a test HTTP server.
+// The handler receives all requests. The returned cleanup function must be deferred.
+// Lives here (alongside Client, doWithRetry, apiGet, truncateForLog) and is
+// shared with every other *_test.go in the package.
+func newTestClient(handler http.HandlerFunc) (*Client, func()) {
+	srv := httptest.NewServer(handler)
+	transport := &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}
+	c := &Client{httpClient: &http.Client{Transport: transport}}
+	return c, srv.Close
+}
 
-	tracks := convertTracks(raw)
+func TestFetchUserID(t *testing.T) {
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		if !strings.Contains(r.URL.Path, "/v1/me") {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		json.NewEncoder(w).Encode(map[string]string{"id": "testuser123"})
+	})
+	defer cleanup()
 
-	if len(tracks) != 2 {
-		t.Fatalf("expected 2 tracks, got %d", len(tracks))
+	if err := c.FetchUserID(context.Background()); err != nil {
+		t.Fatalf("FetchUserID: %v", err)
 	}
-
-	// Track with artist and album
-	if tracks[0].ID != "t1" || tracks[0].URI != "spotify:track:t1" || tracks[0].Name != "Song One" {
-		t.Errorf("track 0 basic fields: got %+v", tracks[0])
-	}
-	if tracks[0].Artist != "Artist A" {
-		t.Errorf("track 0 artist: got %q, want %q", tracks[0].Artist, "Artist A")
-	}
-	if tracks[0].Album != "Album X" {
-		t.Errorf("track 0 album: got %q, want %q", tracks[0].Album, "Album X")
-	}
-	if tracks[0].Duration != 210*time.Second {
-		t.Errorf("track 0 duration: got %v, want %v", tracks[0].Duration, 210*time.Second)
-	}
-
-	// Track without artist/album (e.g. album track endpoint)
-	if tracks[1].Artist != "" {
-		t.Errorf("track 1 artist: got %q, want empty", tracks[1].Artist)
-	}
-	if tracks[1].Album != "" {
-		t.Errorf("track 1 album: got %q, want empty", tracks[1].Album)
+	if c.userID != "testuser123" {
+		t.Errorf("userID: got %q, want %q", c.userID, "testuser123")
 	}
 }
 
-func TestConvertTracks_Empty(t *testing.T) {
-	tracks := convertTracks(nil)
-	if tracks != nil {
-		t.Errorf("expected nil, got %v", tracks)
+func TestDoWithRetry_429(t *testing.T) {
+	var attempts atomic.Int32
+
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		n := attempts.Add(1)
+		if n <= 2 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte("rate limited"))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok": true}`))
+	})
+	defer cleanup()
+
+	body, status, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if status != http.StatusOK {
+		t.Errorf("status: got %d, want 200", status)
+	}
+	if string(body) != `{"ok": true}` {
+		t.Errorf("body: got %q", string(body))
+	}
+	if attempts.Load() != 3 {
+		t.Errorf("attempts: got %d, want 3", attempts.Load())
 	}
 }
 
-func TestConvertAlbums(t *testing.T) {
-	raw := []rawAlbum{
-		{
-			ID:          "a1",
-			URI:         "spotify:album:a1",
-			Name:        "Album One",
-			ReleaseDate: "2023-05-15",
-			TotalTracks: 12,
-			Artists:     []rawArtistRef{{Name: "Artist B"}},
-		},
-		{
-			ID:          "a2",
-			URI:         "spotify:album:a2",
-			Name:        "Album Two",
-			ReleaseDate: "2020-01-01",
-			TotalTracks: 8,
-		},
-	}
+func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "0")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte("rate limited"))
+	})
+	defer cleanup()
 
-	albums := convertAlbums(raw)
-
-	if len(albums) != 2 {
-		t.Fatalf("expected 2 albums, got %d", len(albums))
+	_, status, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
+	if err == nil {
+		t.Fatal("expected error after exhausted retries")
 	}
-
-	if albums[0].Artist != "Artist B" {
-		t.Errorf("album 0 artist: got %q, want %q", albums[0].Artist, "Artist B")
-	}
-	if albums[0].TrackCount != 12 {
-		t.Errorf("album 0 track count: got %d, want 12", albums[0].TrackCount)
-	}
-	if albums[0].ReleaseDate != "2023-05-15" {
-		t.Errorf("album 0 release date: got %q", albums[0].ReleaseDate)
-	}
-
-	// No artists
-	if albums[1].Artist != "" {
-		t.Errorf("album 1 artist: got %q, want empty", albums[1].Artist)
+	if status != http.StatusTooManyRequests {
+		t.Errorf("status: got %d, want 429", status)
 	}
 }
 
-func TestConvertAlbums_Empty(t *testing.T) {
-	albums := convertAlbums(nil)
-	if albums != nil {
-		t.Errorf("expected nil, got %v", albums)
+func TestDoWithRetry_429_LongRetryAfter(t *testing.T) {
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+		w.Write([]byte("rate limited"))
+	})
+	defer cleanup()
+
+	_, _, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
+	if err == nil {
+		t.Fatal("expected error for long retry-after")
 	}
 }
 
-func TestConvertEpisodes(t *testing.T) {
-	raw := []rawEpisode{
-		{
-			ID:          "e1",
-			URI:         "spotify:episode:e1",
-			Name:        "Episode One",
-			ReleaseDate: "2024-03-01",
-			DurationMs:  3600000,
-		},
-	}
+func TestApiGet_NonOK(t *testing.T) {
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		w.Write([]byte("not found"))
+	})
+	defer cleanup()
 
-	episodes := convertEpisodes(raw)
-
-	if len(episodes) != 1 {
-		t.Fatalf("expected 1 episode, got %d", len(episodes))
-	}
-
-	ep := episodes[0]
-	if ep.ID != "e1" || ep.URI != "spotify:episode:e1" || ep.Name != "Episode One" {
-		t.Errorf("episode basic fields: got %+v", ep)
-	}
-	if ep.ReleaseDate != "2024-03-01" {
-		t.Errorf("episode release date: got %q", ep.ReleaseDate)
-	}
-	if ep.Duration != time.Hour {
-		t.Errorf("episode duration: got %v, want %v", ep.Duration, time.Hour)
+	var result struct{}
+	err := c.apiGet(context.Background(), "https://api.spotify.com/v1/test", &result)
+	if err == nil {
+		t.Fatal("expected error for 404")
 	}
 }
 
-func TestConvertEpisodes_Empty(t *testing.T) {
-	episodes := convertEpisodes(nil)
-	if episodes != nil {
-		t.Errorf("expected nil, got %v", episodes)
+func TestApiGet_InvalidJSON(t *testing.T) {
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("not json"))
+	})
+	defer cleanup()
+
+	var result struct{ Name string }
+	err := c.apiGet(context.Background(), "https://api.spotify.com/v1/test", &result)
+	if err == nil {
+		t.Fatal("expected error for invalid JSON")
+	}
+}
+
+func TestTruncateForLog_ShortInput(t *testing.T) {
+	in := []byte("hello")
+	out := truncateForLog(in)
+	if string(out) != "hello" {
+		t.Errorf("short input should be returned unchanged, got %q", out)
+	}
+}
+
+func TestTruncateForLog_LongASCII(t *testing.T) {
+	in := make([]byte, 1000)
+	for i := range in {
+		in[i] = 'a'
+	}
+	out := truncateForLog(in)
+	if !utf8.Valid(out) {
+		t.Errorf("output is not valid UTF-8: %q", out)
+	}
+}
+
+// TestTruncateForLog_MultibyteBoundary reproduces the class of bug where the
+// cut fell in the middle of a multi-byte rune, yielding malformed bytes.
+// Every prefix length must still produce valid UTF-8 output.
+func TestTruncateForLog_MultibyteBoundary(t *testing.T) {
+	// Build a payload where the 500-byte cut lands mid-rune. "日" is 3 bytes.
+	// Prefixing 499 ASCII bytes means position 500 is the 2nd byte of 日.
+	in := make([]byte, 0, 1000)
+	for range 499 {
+		in = append(in, 'x')
+	}
+	for range 200 {
+		in = append(in, []byte("日")...)
+	}
+
+	out := truncateForLog(in)
+	if !utf8.Valid(out) {
+		t.Errorf("truncated output has invalid UTF-8: %q", out)
 	}
 }
