@@ -8,7 +8,6 @@ import (
 	"github.com/atotto/clipboard"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
-	"github.com/lounge/tuify/internal/ui/uri"
 )
 
 // Playback commands — each returns a tea.Cmd that performs a Spotify API
@@ -106,7 +105,7 @@ func (m *Model) copyTrackLink() tea.Cmd {
 	if !m.nowPlaying.hasTrack {
 		return nil
 	}
-	url := uri.URL(m.nowPlaying.trackURI)
+	url := spotifyURL(m.nowPlaying.trackURI)
 	if url == "" {
 		return nil
 	}

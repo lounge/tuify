@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -153,4 +154,29 @@ func formatDuration(d time.Duration) string {
 	m := int(d.Minutes())
 	s := int(d.Seconds()) % 60
 	return fmt.Sprintf("%d:%02d", m, s)
+}
+
+// Spotify URI helpers. URIs look like spotify:{track,episode,album,...}:{id}.
+
+func isPlayableURI(uri string) bool {
+	return strings.HasPrefix(uri, "spotify:track:") || strings.HasPrefix(uri, "spotify:episode:")
+}
+
+func isEpisodeURI(uri string) bool {
+	return strings.HasPrefix(uri, "spotify:episode:")
+}
+
+func idFromURI(uri string) string {
+	if i := strings.LastIndex(uri, ":"); i >= 0 {
+		return uri[i+1:]
+	}
+	return uri
+}
+
+func spotifyURL(uri string) string {
+	parts := strings.SplitN(uri, ":", 3)
+	if len(parts) == 3 {
+		return "https://open.spotify.com/" + parts[1] + "/" + parts[2]
+	}
+	return ""
 }
