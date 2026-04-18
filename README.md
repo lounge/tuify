@@ -21,6 +21,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 - **Now Playing** — Live progress bar, track info, shuffle state, active device indicator
 - **Device Selector** — Switch playback between Spotify Connect devices
 - **Mini Mode** — Compact single-line view with track info and progress
+- **Mouse Support** — Scroll wheel to navigate lists, click to select, double-click to play or drill down
 - **Visualizers** — Album art, starfield, spectrum, oscillogram, spectrogram, and Milkdrop-style presets (spiral, tunnel, kaleidoscope, ripple)
 - **Lyrics** — Fetches and displays lyrics from Genius.com
 - **Dark & Light Terminals** — Adaptive color palette that adjusts automatically
@@ -188,6 +189,7 @@ git clone https://github.com/lounge/tuify.git
 cd tuify
 go build
 go test ./...
+golangci-lint run ./...   # matches CI; catches formatting + lint issues
 ```
 
 ### Architecture
@@ -202,6 +204,7 @@ go test ./...
 | `internal/lyrics` | Genius.com lyrics scraping |
 | `internal/auth` | OAuth2 PKCE authentication |
 | `internal/config` | Configuration management |
+| `internal/testutil` | Test-only helpers shared across packages (HTTP stubbing) |
 
 ## TODO
 
