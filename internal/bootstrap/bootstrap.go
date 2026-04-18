@@ -289,7 +289,7 @@ func Run() error {
 		defer session.Cleanup()
 	}
 
-	opts := []ui.ModelOption{ui.WithRootContext(ctx)}
+	var opts []ui.ModelOption
 	if cfg.VimMode {
 		opts = append(opts, ui.WithVimMode())
 	}
@@ -315,7 +315,7 @@ func Run() error {
 	// is cheaper than AllMotion (events only on cell boundaries) and
 	// sufficient for click-to-select + wheel scroll.
 	p := tea.NewProgram(
-		ui.NewModel(session.Client, opts...),
+		ui.NewModel(ctx, session.Client, opts...),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)

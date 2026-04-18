@@ -64,10 +64,19 @@ type Model struct {
 	lastWheelTime time.Time
 }
 
-func NewModel(client *spotify.Client, opts ...ModelOption) Model {
+// NewModel constructs the root UI model. ctx is the app-level lifetime
+// plumbed from bootstrap.Run; every Spotify API call spawned by the UI
+// wraps it with a per-operation timeout so shutdown cancellation
+// cascades instead of leaking pending requests past tea.Program exit.
+// Panics on nil ctx — forgetting to pass one would silently downgrade
+// shutdown semantics.
+func NewModel(ctx context.Context, client *spotify.Client, opts ...ModelOption) Model {
+	if ctx == nil {
+		panic("ui.NewModel: ctx must not be nil")
+	}
 	home := newHomeView(0, 0)
 	m := Model{
-		rootCtx:    context.Background(), // overridden by WithRootContext
+		rootCtx:    ctx,
 		viewStack:  []view{home},
 		nowPlaying: newNowPlaying(client),
 		visualizer: newVisualizerModel(false),
@@ -76,10 +85,10 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 	for _, opt := range opts {
 		opt(&m)
 	}
-	// Propagate root ctx to sub-models after options have applied so
-	// their async ops (poll, image/lyrics fetch) see shutdown cancellation.
-	m.nowPlaying.ctx = m.rootCtx
-	m.visualizer.ctx = m.rootCtx
+	// Propagate root ctx to sub-models so their async ops (poll,
+	// image/lyrics fetch) see shutdown cancellation.
+	m.nowPlaying.ctx = ctx
+	m.visualizer.ctx = ctx
 	if m.vimMode {
 		home.vimMode = true
 	}
