@@ -6,6 +6,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // lazyList holds the shared state and logic for paginated list views.
@@ -119,6 +120,35 @@ func (l *lazyList) SetSize(width, height int) {
 func (l *lazyList) List() *list.Model {
 	return &l.list
 }
+
+// scrollUp moves the cursor one item up. Satisfies the scrollable
+// interface so the mouse-wheel dispatch in handleMouse doesn't need
+// to type-assert against concrete view types.
+func (l *lazyList) scrollUp() { l.list.CursorUp() }
+
+// scrollDown moves the cursor one item down.
+func (l *lazyList) scrollDown() { l.list.CursorDown() }
+
+// clickAt resolves a left-click against the zone-marked items on the
+// visible list. Selects the matched item and returns its URI; empty
+// return means the click missed every zoned row. Satisfies clickable.
+func (l *lazyList) clickAt(msg tea.MouseMsg) string {
+	for i, item := range l.list.Items() {
+		u, ok := item.(uriItem)
+		if !ok || u.URI() == "" {
+			continue
+		}
+		if zone.Get(u.URI()).InBounds(msg) {
+			l.list.Select(i)
+			return u.URI()
+		}
+	}
+	return ""
+}
+
+// SearchState reports whether the view is in filter-search mode.
+// Satisfies searchAware.
+func (l *lazyList) SearchState() (bool, string) { return l.searching, l.searchQuery }
 
 // openSearch enters search mode. Returns true if the caller should trigger
 // a fetch to load remaining items.

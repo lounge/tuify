@@ -7,7 +7,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
-	zone "github.com/lrstanley/bubblezone"
 )
 
 // Message handlers for non-key messages routed from Update. Each returns a
@@ -107,15 +106,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (handled bool, model tea.Model, cmd
 		if time.Since(m.lastWheelTime) < wheelDebounceWindow {
 			return true, m, nil
 		}
-		if l := m.currentList(); l != nil {
-			l.CursorUp()
-			m.lastWheelTime = time.Now()
-			return true, m, nil
-		}
-		if hv, ok := m.currentView().(*homeView); ok {
-			if hv.cursor > 0 {
-				hv.cursor--
-			}
+		if s, ok := m.currentView().(scrollable); ok {
+			s.scrollUp()
 			m.lastWheelTime = time.Now()
 			return true, m, nil
 		}
@@ -123,15 +115,8 @@ func (m Model) handleMouse(msg tea.MouseMsg) (handled bool, model tea.Model, cmd
 		if time.Since(m.lastWheelTime) < wheelDebounceWindow {
 			return true, m, nil
 		}
-		if l := m.currentList(); l != nil {
-			l.CursorDown()
-			m.lastWheelTime = time.Now()
-			return true, m, nil
-		}
-		if hv, ok := m.currentView().(*homeView); ok {
-			if hv.cursor < len(homeItems)-1 {
-				hv.cursor++
-			}
+		if s, ok := m.currentView().(scrollable); ok {
+			s.scrollDown()
 			m.lastWheelTime = time.Now()
 			return true, m, nil
 		}
@@ -141,36 +126,18 @@ func (m Model) handleMouse(msg tea.MouseMsg) (handled bool, model tea.Model, cmd
 	return false, m, nil
 }
 
-// handleMouseClick resolves a left-press against zones marked on the current
-// view's clickable items. Double-click within doubleClickWindow fires Enter.
-// Handles both list-backed views (tracks, playlists, etc.) and the home
-// view's menu tabs.
+// handleMouseClick resolves a left-press via the current view's clickable
+// implementation. Double-click within doubleClickWindow fires Enter.
 func (m Model) handleMouseClick(msg tea.MouseMsg) (handled bool, model tea.Model, cmd tea.Cmd) {
-	if l := m.currentList(); l != nil {
-		for i, item := range l.Items() {
-			u, ok := item.(uriItem)
-			if !ok || u.URI() == "" {
-				continue
-			}
-			if !zone.Get(u.URI()).InBounds(msg) {
-				continue
-			}
-			l.Select(i)
-			return m.registerClick(u.URI())
-		}
+	c, ok := m.currentView().(clickable)
+	if !ok {
 		return false, m, nil
 	}
-
-	if hv, ok := m.currentView().(*homeView); ok {
-		for i, item := range homeItems {
-			if !zone.Get(item.name).InBounds(msg) {
-				continue
-			}
-			hv.cursor = i
-			return m.registerClick(item.name)
-		}
+	id := c.clickAt(msg)
+	if id == "" {
+		return false, m, nil
 	}
-	return false, m, nil
+	return m.registerClick(id)
 }
 
 // registerClick records a click for double-click detection and fires

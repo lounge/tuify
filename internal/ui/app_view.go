@@ -44,12 +44,8 @@ func (m Model) View() string {
 	b.WriteString("\n")
 	var searchActive bool
 	var searchQuery string
-	if sv, ok := m.currentView().(*searchView); ok && sv.searching {
-		searchActive = true
-		searchQuery = sv.searchQuery
-	} else if sl := m.searchableList(); sl != nil && sl.searching {
-		searchActive = true
-		searchQuery = sl.searchQuery
+	if s, ok := m.currentView().(searchAware); ok {
+		searchActive, searchQuery = s.SearchState()
 	}
 	b.WriteString(m.nowPlaying.View(searchActive, searchQuery))
 

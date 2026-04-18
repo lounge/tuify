@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 const maxQueueURIs = 50
@@ -175,6 +176,39 @@ func (v *searchView) SetSize(width, height int) {
 func (v *searchView) List() *list.Model {
 	return &v.list
 }
+
+// scrollUp / scrollDown / clickAt / Back / SearchState satisfy the
+// capability interfaces in common.go so Model.Update doesn't have to
+// type-assert against *searchView.
+
+func (v *searchView) scrollUp()   { v.list.CursorUp() }
+func (v *searchView) scrollDown() { v.list.CursorDown() }
+
+func (v *searchView) clickAt(msg tea.MouseMsg) string {
+	for i, item := range v.list.Items() {
+		u, ok := item.(uriItem)
+		if !ok || u.URI() == "" {
+			continue
+		}
+		if zone.Get(u.URI()).InBounds(msg) {
+			v.list.Select(i)
+			return u.URI()
+		}
+	}
+	return ""
+}
+
+func (v *searchView) Back() (tea.Cmd, bool) {
+	if v.depth == 0 {
+		return nil, false
+	}
+	if v.goBack() {
+		return v.goBackFetchCmd(), true
+	}
+	return nil, false
+}
+
+func (v *searchView) SearchState() (bool, string) { return v.searching, v.searchQuery }
 
 func (v *searchView) SyncURI(uri string) tea.Cmd {
 	if !v.isPlayable() {

@@ -54,6 +54,36 @@ type enterable interface {
 	OnEnter(m *Model) tea.Cmd
 }
 
+// scrollable is implemented by views that respond to mouse-wheel
+// navigation. Semantics are view-specific (list cursor, home-tab
+// cursor, etc.) but the caller doesn't need to know.
+type scrollable interface {
+	scrollUp()
+	scrollDown()
+}
+
+// clickable is implemented by views that resolve a mouse click to a
+// zone-marked item. clickAt performs any required internal selection
+// (e.g. list.Select) and returns a stable id for double-click bookkeeping;
+// empty return means the click didn't land on a known zone.
+type clickable interface {
+	clickAt(msg tea.MouseMsg) string
+}
+
+// backable is implemented by views that consume "go back" internally
+// (e.g. drill-down retreat in search). When handled is false, the
+// caller should pop to the previous view instead.
+type backable interface {
+	Back() (cmd tea.Cmd, handled bool)
+}
+
+// searchAware is implemented by views that host a search-input mode
+// (dedicated search view, or any lazyList-based view with local filter).
+// The returned query drives the prompt shown in the now-playing bar.
+type searchAware interface {
+	SearchState() (active bool, query string)
+}
+
 // uriItem is implemented by list items that have a Spotify URI.
 type uriItem interface {
 	URI() string

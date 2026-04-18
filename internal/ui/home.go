@@ -55,6 +55,31 @@ func (v *homeView) selectedItem() homeItem {
 	return homeItems[v.cursor]
 }
 
+// scrollUp / scrollDown / clickAt satisfy scrollable + clickable so the
+// top-level mouse dispatch can treat homeView like any other view.
+
+func (v *homeView) scrollUp() {
+	if v.cursor > 0 {
+		v.cursor--
+	}
+}
+
+func (v *homeView) scrollDown() {
+	if v.cursor < len(homeItems)-1 {
+		v.cursor++
+	}
+}
+
+func (v *homeView) clickAt(msg tea.MouseMsg) string {
+	for i, item := range homeItems {
+		if zone.Get(item.name).InBounds(msg) {
+			v.cursor = i
+			return item.name
+		}
+	}
+	return ""
+}
+
 func (v *homeView) OnEnter(m *Model) tea.Cmd {
 	switch v.selectedItem().name {
 	case "Search":

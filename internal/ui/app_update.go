@@ -162,9 +162,9 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 		m.visualizer.active = false
 		return m, nil
 	}
-	if sv, ok := m.currentView().(*searchView); ok && sv.depth > 0 {
-		if sv.goBack() {
-			return m, sv.goBackFetchCmd()
+	if b, ok := m.currentView().(backable); ok {
+		if cmd, handled := b.Back(); handled {
+			return m, cmd
 		}
 	}
 	m.popView()
