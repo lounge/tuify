@@ -15,15 +15,40 @@ import (
 // user-overridden-device case.
 
 func (m Model) playQueue(uris []string) tea.Cmd {
+	wasShuffling := m.nowPlaying.shuffling
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
-		return c.PlayQueue(ctx, uris, id)
+		if err := c.PlayQueue(ctx, uris, id); err != nil {
+			return err
+		}
+		restoreShuffle(ctx, c, id, wasShuffling)
+		return nil
 	}, false)
 }
 
 func (m Model) playItem(itemURI, contextURI string) tea.Cmd {
+	wasShuffling := m.nowPlaying.shuffling
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
-		return c.Play(ctx, itemURI, contextURI, id)
+		if err := c.Play(ctx, itemURI, contextURI, id); err != nil {
+			return err
+		}
+		restoreShuffle(ctx, c, id, wasShuffling)
+		return nil
 	}, false)
+}
+
+// restoreShuffle re-applies the user's shuffle state after a manual track
+// selection. Spotify's PUT /v1/me/player/play with an explicit offset or
+// URI list turns shuffle off (unlike Next/Previous which preserve it), so
+// without this the shuffle indicator would disappear every time the user
+// clicked a track. Errors are logged, not surfaced — playback already
+// started successfully, and the next GetPlayerState poll will reconcile.
+func restoreShuffle(ctx context.Context, c *spotify.Client, deviceID string, wasShuffling bool) {
+	if !wasShuffling {
+		return
+	}
+	if err := c.Shuffle(ctx, true, deviceID); err != nil {
+		log.Printf("[playback] failed to restore shuffle state: %v", err)
+	}
 }
 
 func (m Model) togglePlayPause(wasPlaying bool) tea.Cmd {
