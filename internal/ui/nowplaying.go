@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"time"
@@ -47,6 +48,7 @@ const labelScrollInterval = 200 * time.Millisecond
 
 type nowPlayingModel struct {
 	client *spotify.Client
+	ctx    context.Context // app-level ctx, wrapped with per-op timeout
 	width  int
 
 	// Track metadata
@@ -113,6 +115,11 @@ func (m *nowPlayingModel) setDeviceOverride(overridden bool, reason string) {
 	}
 }
 
+// newNowPlaying creates a fresh nowPlayingModel. The ctx field is left
+// zero; NewModel sets it from Model.rootCtx after options apply. Anything
+// that triggers a ctx-using path (pollState, etc.) must go through
+// NewModel — direct construction is reserved for tests that don't
+// exercise those paths.
 func newNowPlaying(client *spotify.Client) *nowPlayingModel {
 	return &nowPlayingModel{
 		client:          client,

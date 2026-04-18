@@ -58,14 +58,14 @@ func (v *homeView) selectedItem() homeItem {
 func (v *homeView) OnEnter(m *Model) tea.Cmd {
 	switch v.selectedItem().name {
 	case "Search":
-		m.pushView(newSearchView(m.client, m.width, m.listHeight(), m.vimMode))
+		m.pushView(newSearchView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode))
 		return nil
 	case "Playlists":
-		pv := newPlaylistView(m.client, m.width, m.listHeight(), m.vimMode)
+		pv := newPlaylistView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode)
 		m.pushView(pv)
 		return pv.Init()
 	case "Podcasts":
-		pv := newPodcastView(m.client, m.width, m.listHeight(), m.vimMode)
+		pv := newPodcastView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode)
 		m.pushView(pv)
 		return pv.Init()
 	}

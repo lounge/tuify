@@ -289,7 +289,7 @@ func Run() error {
 		defer session.Cleanup()
 	}
 
-	var opts []ui.ModelOption
+	opts := []ui.ModelOption{ui.WithRootContext(ctx)}
 	if cfg.VimMode {
 		opts = append(opts, ui.WithVimMode())
 	}

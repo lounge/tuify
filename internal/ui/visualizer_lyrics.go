@@ -36,7 +36,7 @@ func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
 	m.lyrics.cancel = cancel
 	ch := m.lyrics.ch
 	go func() {

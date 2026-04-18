@@ -1,6 +1,10 @@
 package ui
 
-import "github.com/lounge/tuify/internal/audio"
+import (
+	"context"
+
+	"github.com/lounge/tuify/internal/audio"
+)
 
 // ModelOption configures optional Model features.
 type ModelOption func(*Model)
@@ -32,6 +36,19 @@ func WithAudioSource(src AudioSource) ModelOption {
 // WithVimMode enables vim-style keybindings (h/l for back/select, ctrl+d/u half-page, etc.).
 func WithVimMode() ModelOption {
 	return func(m *Model) { m.vimMode = true }
+}
+
+// WithRootContext sets the app-level context. All Spotify API calls
+// spawned by the UI wrap this with per-operation timeouts so pending
+// requests cancel when the context is cancelled (e.g. on app shutdown).
+// Panics on nil ctx — forgetting to plumb the root ctx would silently
+// downgrade shutdown semantics; failing loudly surfaces the bug at
+// startup instead of masking it.
+func WithRootContext(ctx context.Context) ModelOption {
+	if ctx == nil {
+		panic("ui.WithRootContext: ctx must not be nil")
+	}
+	return func(m *Model) { m.rootCtx = ctx }
 }
 
 // WithLibrespotInactive provides a channel that signals when librespot reports

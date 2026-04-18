@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -31,13 +30,14 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	prefix := v.prefix
 	depth := v.depth
 	epoch := v.epoch
+	parent := v.ctx
 
 	// depth > 0: fetch detail items for a selected container
 	if depth == 1 && prefix == prefixArtist {
 		artistID := v.selectedArtist.id
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Album, bool, error) {
-				return client.GetArtistAlbums(context.Background(), artistID, offset, limit)
+				return client.GetArtistAlbums(parent, artistID, offset, limit)
 			},
 			func(a spotify.Album) list.Item {
 				return albumItem{id: a.ID, uri: a.URI, name: a.Name, artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount}
@@ -49,7 +49,7 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 		albumName := v.selectedAlbum.name
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Track, bool, error) {
-				return client.GetAlbumTracks(context.Background(), albumID, offset, limit)
+				return client.GetAlbumTracks(parent, albumID, offset, limit)
 			},
 			func(t spotify.Track) list.Item {
 				return trackItem{uri: t.URI, name: t.Name, artist: t.Artist, album: albumName, duration: t.Duration}
@@ -60,7 +60,7 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 		showID := v.selectedShow.id
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Episode, bool, error) {
-				return client.GetShowEpisodes(context.Background(), showID, offset, limit)
+				return client.GetShowEpisodes(parent, showID, offset, limit)
 			},
 			func(e spotify.Episode) list.Item {
 				return episodeItem{uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration}
@@ -73,7 +73,7 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	case prefixEpisode:
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Episode, bool, error) {
-				return client.SearchEpisodes(context.Background(), term, offset, limit)
+				return client.SearchEpisodes(parent, term, offset, limit)
 			},
 			func(e spotify.Episode) list.Item {
 				return episodeItem{uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration}
@@ -82,7 +82,7 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	case prefixAlbum:
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Album, bool, error) {
-				return client.SearchAlbums(context.Background(), term, offset, limit)
+				return client.SearchAlbums(parent, term, offset, limit)
 			},
 			func(a spotify.Album) list.Item {
 				return albumItem{id: a.ID, uri: a.URI, name: a.Name, artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount}
@@ -91,7 +91,7 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	case prefixArtist:
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Artist, bool, error) {
-				return client.SearchArtists(context.Background(), term, offset, limit)
+				return client.SearchArtists(parent, term, offset, limit)
 			},
 			func(a spotify.Artist) list.Item {
 				return artistItem{id: a.ID, uri: a.URI, name: a.Name, genres: a.Genres}
@@ -100,7 +100,7 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	case prefixShow:
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Show, bool, error) {
-				return client.SearchShows(context.Background(), term, offset, limit)
+				return client.SearchShows(parent, term, offset, limit)
 			},
 			func(s spotify.Show) list.Item {
 				return podcastItem{id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes}
@@ -109,7 +109,7 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	default: // prefixTrack
 		return fetchCmd(epoch, term,
 			func() ([]spotify.Track, bool, error) {
-				return client.SearchTracks(context.Background(), term, offset, limit)
+				return client.SearchTracks(parent, term, offset, limit)
 			},
 			func(t spotify.Track) list.Item {
 				return trackItem{uri: t.URI, name: t.Name, artist: t.Artist, album: t.Album, duration: t.Duration}

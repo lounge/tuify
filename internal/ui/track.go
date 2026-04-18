@@ -33,14 +33,16 @@ type tracksLoadedMsg struct {
 
 type trackView struct {
 	lazyList
+	ctx          context.Context
 	client       *spotify.Client
 	playlistID   string
 	playlistName string
 }
 
-func newTrackView(client *spotify.Client, playlistID, playlistName string, width, height int, vimMode bool) *trackView {
+func newTrackView(ctx context.Context, client *spotify.Client, playlistID, playlistName string, width, height int, vimMode bool) *trackView {
 	return &trackView{
 		lazyList:     newLazyList(width, height, vimMode),
+		ctx:          ctx,
 		client:       client,
 		playlistID:   playlistID,
 		playlistName: playlistName,
@@ -55,8 +57,9 @@ func (v trackView) fetchMore() tea.Cmd {
 	offset := v.offset
 	client := v.client
 	playlistID := v.playlistID
+	parent := v.ctx
 	return func() tea.Msg {
-		tracks, hasMore, err := client.GetPlaylistTracks(context.Background(), playlistID, offset, 50)
+		tracks, hasMore, err := client.GetPlaylistTracks(parent, playlistID, offset, 50)
 		return tracksLoadedMsg{tracks: tracks, hasMore: hasMore, err: err}
 	}
 }

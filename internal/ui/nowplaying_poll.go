@@ -43,8 +43,9 @@ func (m nowPlayingModel) pollInterval() time.Duration {
 
 func (m nowPlayingModel) pollState() tea.Cmd {
 	client := m.client
+	parent := m.ctx
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 		state, err := client.GetPlayerState(ctx)
 		return playerStateMsg{state: state, err: err}

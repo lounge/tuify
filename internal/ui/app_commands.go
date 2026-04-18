@@ -115,7 +115,7 @@ func (m *Model) copyTrackLink() tea.Cmd {
 }
 
 func (m Model) transferDevice(dev spotify.Device) tea.Cmd {
-	return transferDeviceCmd(m.client, dev, m.deviceSelector.activeDeviceID, m.nowPlaying.progressMs, m.nowPlaying.playing)
+	return transferDeviceCmd(m.rootCtx, m.client, dev, m.deviceSelector.activeDeviceID, m.nowPlaying.progressMs, m.nowPlaying.playing)
 }
 
 // withDevice wraps a Spotify API call with device resolution. If the user has
@@ -124,10 +124,11 @@ func (m Model) transferDevice(dev spotify.Device) tea.Cmd {
 // is present but inactive (e.g. librespot idle after a pause).
 func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
 	client := m.client
+	parent := m.rootCtx
 	trackURI := m.nowPlaying.trackURI
 	contextURI := m.nowPlaying.contextURI
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 
 		// If the user manually switched to another device in Spotify,

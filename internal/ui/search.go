@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -17,6 +18,7 @@ const maxQueueURIs = 50
 // pagination in search_fetch.go, drill-down and playback in search_nav.go.
 type searchView struct {
 	list        list.Model
+	ctx         context.Context
 	client      *spotify.Client
 	searching   bool
 	searchQuery string // raw user input (e.g. "a:queen")
@@ -40,11 +42,12 @@ type searchView struct {
 	items []list.Item
 }
 
-func newSearchView(client *spotify.Client, width, height int, vimMode bool) *searchView {
+func newSearchView(ctx context.Context, client *spotify.Client, width, height int, vimMode bool) *searchView {
 	l := newList(width, height, vimMode)
 	l.SetItems(nil)
 	return &searchView{
 		list:      l,
+		ctx:       ctx,
 		client:    client,
 		searching: true,
 	}

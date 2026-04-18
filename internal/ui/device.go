@@ -164,18 +164,18 @@ func (d *deviceSelectorModel) view(width, height int) string {
 
 // Commands
 
-func fetchDevicesCmd(client *spotify.Client) tea.Cmd {
+func fetchDevicesCmd(parent context.Context, client *spotify.Client) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 		defer cancel()
 		devices, err := client.GetDevices(ctx)
 		return devicesLoadedMsg{devices: devices, err: err}
 	}
 }
 
-func transferDeviceCmd(client *spotify.Client, dev spotify.Device, currentDeviceID string, progressMs int, wasPlaying bool) tea.Cmd {
+func transferDeviceCmd(parent context.Context, client *spotify.Client, dev spotify.Device, currentDeviceID string, progressMs int, wasPlaying bool) tea.Cmd {
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 		if err := client.TransferPlayback(ctx, dev.ID, true); err != nil {
 			return transferDeviceMsg{err: err, deviceName: dev.Name}

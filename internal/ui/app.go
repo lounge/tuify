@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -31,6 +32,11 @@ const (
 )
 
 type Model struct {
+	// rootCtx is the app-level context passed down from bootstrap.Run.
+	// All Spotify API calls wrap it with a per-operation timeout rather
+	// than using context.Background, so on app shutdown pending requests
+	// cancel cleanly instead of lingering past tea.Program exit.
+	rootCtx             context.Context
 	viewStack           []view
 	nowPlaying          *nowPlayingModel
 	visualizer          *visualizerModel
@@ -61,6 +67,7 @@ type Model struct {
 func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 	home := newHomeView(0, 0)
 	m := Model{
+		rootCtx:    context.Background(), // overridden by WithRootContext
 		viewStack:  []view{home},
 		nowPlaying: newNowPlaying(client),
 		visualizer: newVisualizerModel(false),
@@ -69,6 +76,10 @@ func NewModel(client *spotify.Client, opts ...ModelOption) Model {
 	for _, opt := range opts {
 		opt(&m)
 	}
+	// Propagate root ctx to sub-models after options have applied so
+	// their async ops (poll, image/lyrics fetch) see shutdown cancellation.
+	m.nowPlaying.ctx = m.rootCtx
+	m.visualizer.ctx = m.rootCtx
 	if m.vimMode {
 		home.vimMode = true
 	}

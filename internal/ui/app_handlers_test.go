@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"strings"
 	"testing"
 
@@ -180,7 +181,7 @@ func TestRenderTrackLine_WideRunesStaySingleLine(t *testing.T) {
 // items (e.g. a lone loading status row) should report the click as
 // unhandled so the caller can decide what to do — NOT silently absorb it.
 func TestHandleMouseClick_ListWithNoURIItems_ReportsUnhandled(t *testing.T) {
-	tv := newTrackView(nil, "pid", "Test Playlist", 80, 20, false)
+	tv := newTrackView(context.Background(), nil, "pid", "Test Playlist", 80, 20, false)
 	tv.items = []list.Item{statusItem{text: "Loading…"}}
 	tv.list.SetItems(tv.items)
 	m := newTestModelWithClient("")

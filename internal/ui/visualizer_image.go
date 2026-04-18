@@ -34,7 +34,7 @@ func (m *visualizerModel) loadImage(imageURL string) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
 	m.images.cancel = cancel
 	url := imageURL
 	ch := m.images.ch

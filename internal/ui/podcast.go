@@ -29,12 +29,14 @@ type podcastsLoadedMsg struct {
 
 type podcastView struct {
 	lazyList
+	ctx    context.Context
 	client *spotify.Client
 }
 
-func newPodcastView(client *spotify.Client, width, height int, vimMode bool) *podcastView {
+func newPodcastView(ctx context.Context, client *spotify.Client, width, height int, vimMode bool) *podcastView {
 	return &podcastView{
 		lazyList: newLazyList(width, height, vimMode),
+		ctx:      ctx,
 		client:   client,
 	}
 }
@@ -46,8 +48,9 @@ func (v podcastView) Init() tea.Cmd {
 func (v podcastView) fetchMore() tea.Cmd {
 	offset := v.offset
 	client := v.client
+	parent := v.ctx
 	return func() tea.Msg {
-		shows, hasMore, err := client.GetSavedShows(context.Background(), offset, 50)
+		shows, hasMore, err := client.GetSavedShows(parent, offset, 50)
 		return podcastsLoadedMsg{shows: shows, hasMore: hasMore, err: err}
 	}
 }
@@ -76,7 +79,7 @@ func (v *podcastView) Update(msg tea.Msg) tea.Cmd {
 func (v *podcastView) OnEnter(m *Model) tea.Cmd {
 	selected := v.list.SelectedItem()
 	if pi, ok := selected.(podcastItem); ok {
-		ev := newEpisodeView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
+		ev := newEpisodeView(m.rootCtx, m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
 		m.pushView(ev)
 		return ev.Init()
 	}

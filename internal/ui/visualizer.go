@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"image"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 type vizTickMsg struct{}
 
 type visualizerModel struct {
+	ctx         context.Context // app-level ctx; wrapped with per-op timeout in fetch helpers
 	active      bool
 	trackID     string
 	isEpisode   bool
@@ -46,6 +48,10 @@ func newVisualizerModel(hasAudio bool) *visualizerModel {
 			visualizers.NewLyrics(),
 		}
 	}
+	// ctx is left zero; NewModel sets it from Model.rootCtx after options
+	// apply. Any code path that triggers loadImage or loadLyrics must go
+	// through NewModel — direct construction is for tests that don't
+	// exercise those paths.
 	return &visualizerModel{
 		vizList:     vizList,
 		images:      newAsyncLoader[fetchResult](),

@@ -32,14 +32,16 @@ type episodesLoadedMsg struct {
 
 type episodeView struct {
 	lazyList
+	ctx      context.Context
 	client   *spotify.Client
 	showID   string
 	showName string
 }
 
-func newEpisodeView(client *spotify.Client, showID, showName string, width, height int, vimMode bool) *episodeView {
+func newEpisodeView(ctx context.Context, client *spotify.Client, showID, showName string, width, height int, vimMode bool) *episodeView {
 	return &episodeView{
 		lazyList: newLazyList(width, height, vimMode),
+		ctx:      ctx,
 		client:   client,
 		showID:   showID,
 		showName: showName,
@@ -54,8 +56,9 @@ func (v episodeView) fetchMore() tea.Cmd {
 	offset := v.offset
 	client := v.client
 	showID := v.showID
+	parent := v.ctx
 	return func() tea.Msg {
-		episodes, hasMore, err := client.GetShowEpisodes(context.Background(), showID, offset, 50)
+		episodes, hasMore, err := client.GetShowEpisodes(parent, showID, offset, 50)
 		return episodesLoadedMsg{episodes: episodes, hasMore: hasMore, err: err}
 	}
 }

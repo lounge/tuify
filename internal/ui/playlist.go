@@ -32,12 +32,14 @@ type playlistsLoadedMsg struct {
 
 type playlistView struct {
 	lazyList
+	ctx    context.Context
 	client *spotify.Client
 }
 
-func newPlaylistView(client *spotify.Client, width, height int, vimMode bool) *playlistView {
+func newPlaylistView(ctx context.Context, client *spotify.Client, width, height int, vimMode bool) *playlistView {
 	return &playlistView{
 		lazyList: newLazyList(width, height, vimMode),
+		ctx:      ctx,
 		client:   client,
 	}
 }
@@ -49,12 +51,13 @@ func (v playlistView) Init() tea.Cmd {
 func (v playlistView) fetchMore() tea.Cmd {
 	offset := v.offset
 	client := v.client
+	parent := v.ctx
 	return func() tea.Msg {
 		var all []spotify.Playlist
 		totalFetched := 0
 		hasMore := true
 		for hasMore && len(all) < 20 {
-			playlists, pageSize, more, err := client.GetPlaylists(context.Background(), offset, 50)
+			playlists, pageSize, more, err := client.GetPlaylists(parent, offset, 50)
 			if err != nil {
 				return playlistsLoadedMsg{playlists: all, pageSize: totalFetched, hasMore: more, err: err}
 			}
@@ -91,7 +94,7 @@ func (v *playlistView) Update(msg tea.Msg) tea.Cmd {
 func (v *playlistView) OnEnter(m *Model) tea.Cmd {
 	selected := v.list.SelectedItem()
 	if pi, ok := selected.(playlistItem); ok {
-		tv := newTrackView(m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
+		tv := newTrackView(m.rootCtx, m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
 		m.pushView(tv)
 		return tv.Init()
 	}

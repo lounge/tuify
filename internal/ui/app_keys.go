@@ -216,7 +216,7 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		}
 		m.deviceSelector.open()
 		m.showDeviceSelector = true
-		return m, fetchDevicesCmd(m.client), true
+		return m, fetchDevicesCmd(m.rootCtx, m.client), true
 	case "m":
 		m.miniMode = !m.miniMode
 		return m, nil, true
