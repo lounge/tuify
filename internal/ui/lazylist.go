@@ -250,7 +250,12 @@ func (l *lazyList) applyFilter() {
 		case len(filtered) == 0:
 			displayed = []list.Item{statusItem{text: "No matching results"}}
 		case pending:
-			displayed = append(filtered, statusItem{text: "Loading more…", spinning: true})
+			// Build a fresh slice rather than append into filtered's
+			// backing array — appending to a slice you didn't own is the
+			// classic source of aliasing bugs even when it "works" today.
+			displayed = make([]list.Item, 0, len(filtered)+1)
+			displayed = append(displayed, filtered...)
+			displayed = append(displayed, statusItem{text: "Loading more…", spinning: true})
 		default:
 			displayed = filtered
 		}

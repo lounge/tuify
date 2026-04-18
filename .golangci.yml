@@ -6,6 +6,14 @@ linters:
     - ineffassign
     - unused
     - errcheck
+    # Additions past the minimal core set — each chosen for signal over noise:
+    # - gosec: common security footguns (weak crypto, insecure perms, etc).
+    # - misspell: catches typos in comments/strings. Zero false positives.
+    # - gocritic: opt-in bug-oriented style lints. Default checks are
+    #   conservative and mostly catch real mistakes, not stylistic taste.
+    - gosec
+    - misspell
+    - gocritic
 
 linters-settings:
   errcheck:
@@ -19,6 +27,28 @@ linters-settings:
       - fmt.Fprint
       - fmt.Fprintf
       - fmt.Fprintln
+
+  gosec:
+    # G115 (integer overflow conversion) fires on audio/graphics code
+    # everywhere PCM samples, volume levels, or image pixels are cast
+    # between fixed-width types. Those conversions are bounded by the
+    # domain (int16 PCM, 0–100 volume, uint8 RGB) and explicit clamping
+    # happens at the boundary, so the warnings are pure noise here.
+    excludes:
+      - G115
+      # G204 flags exec.Command with a non-literal path. Here the path
+      # comes from the user's own config.json (librespot_path) — not
+      # untrusted network input — so the warning is a false positive for
+      # a TUI that deliberately invokes a user-selected binary.
+      - G204
+
+  gocritic:
+    disabled-checks:
+      # singleCaseSwitch fires on `switch msg := msg.(type)` even when
+      # there's genuinely one case today — the type-switch form is
+      # idiomatic and forward-looking (easy to add cases). Rewriting to
+      # an if-ok assertion costs clarity for no real gain.
+      - singleCaseSwitch
 
 issues:
   max-issues-per-linter: 0

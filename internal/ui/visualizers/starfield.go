@@ -92,15 +92,13 @@ func (sf *Starfield) Advance() {
 		for len(sf.stars) < targetCount {
 			sf.stars = append(sf.stars, sf.newStar(false))
 		}
-	} else {
+	} else if len(sf.stars) > baseStars {
 		// No audio: gradually shed extra stars back to base count.
-		if len(sf.stars) > baseStars {
-			newLen := len(sf.stars) - 2
-			if newLen < baseStars {
-				newLen = baseStars
-			}
-			sf.stars = sf.stars[:newLen]
+		newLen := len(sf.stars) - 2
+		if newLen < baseStars {
+			newLen = baseStars
 		}
+		sf.stars = sf.stars[:newLen]
 	}
 
 	dt := 0.015 * speedMul

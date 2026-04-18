@@ -90,7 +90,8 @@ func (s *Spectrum) View(width, height int) string {
 			sat := 0.8
 			lum := 0.35 + amp*0.25
 
-			if cellLevel > 0 {
+			switch {
+			case cellLevel > 0:
 				// Bar fill.
 				blockIdx := int(cellLevel * 8)
 				if blockIdx > 7 {
@@ -104,13 +105,13 @@ func (s *Spectrum) View(width, height int) string {
 					buf.WriteString(upperBlocks[blockIdx])
 				}
 				buf.WriteString(ansiReset)
-			} else if cellFromBottom == peakRow && peak > 0.02 {
+			case cellFromBottom == peakRow && peak > 0.02:
 				// Peak hold indicator.
 				r, g, b := hslToRGB(hue, 0.9, 0.6)
 				writeAnsiFg(&buf, r, g, b)
 				buf.WriteString("▁")
 				buf.WriteString(ansiReset)
-			} else {
+			default:
 				buf.WriteRune(' ')
 			}
 		}

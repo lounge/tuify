@@ -118,13 +118,14 @@ var deviceOverlayStyle = overlayBoxStyle.Padding(1, 3)
 
 func (d *deviceSelectorModel) view(width, height int) string {
 	var body string
-	if d.loading {
+	switch {
+	case d.loading:
 		body = loadingSpinner.View() + " " + loadingStyle.Render("Loading devices…")
-	} else if d.err != nil {
+	case d.err != nil:
 		body = errorStyle.Render(d.err.Error())
-	} else if len(d.devices) == 0 {
+	case len(d.devices) == 0:
 		body = loadingStyle.Render("No devices found")
-	} else {
+	default:
 		// Find the longest display label for column alignment.
 		maxLabel := 0
 		for _, dev := range d.devices {

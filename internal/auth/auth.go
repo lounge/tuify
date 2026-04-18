@@ -224,6 +224,11 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 	server := &http.Server{
 		Addr:    addr,
 		Handler: mux,
+		// ReadHeaderTimeout guards against slow-header denial-of-service
+		// probes. The callback server only runs briefly during OAuth
+		// login and binds to 127.0.0.1, so the risk is low — but setting
+		// this is free and silences the linter warning.
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 
 	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {

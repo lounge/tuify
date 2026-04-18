@@ -156,17 +156,18 @@ func (v *searchView) rebuildList() {
 	prev := v.list.Index()
 	items := v.items
 	if len(items) == 0 {
-		if v.pending > 0 {
+		switch {
+		case v.pending > 0:
 			items = []list.Item{loadingStatusItem}
-		} else if v.searchErr != nil {
+		case v.searchErr != nil:
 			items = []list.Item{statusItem{
 				text:    fmt.Sprintf("Search failed: %v", v.searchErr),
 				desc:    "press Enter to retry",
 				isError: true,
 			}}
-		} else if v.query == "" && v.depth == 0 {
+		case v.query == "" && v.depth == 0:
 			items = nil
-		} else {
+		default:
 			items = []list.Item{statusItem{text: "No results"}}
 		}
 	}

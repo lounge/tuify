@@ -28,11 +28,12 @@ func (m Model) View() string {
 	var b strings.Builder
 	contentHeight := m.height - nowPlayingHeight
 
-	if m.showHelp {
+	switch {
+	case m.showHelp:
 		b.WriteString(m.helpView(contentHeight))
-	} else if m.visualizer.active {
+	case m.visualizer.active:
 		b.WriteString(m.visualizer.View(m.width, contentHeight))
-	} else {
+	default:
 		if crumbs := m.currentView().Breadcrumb(); crumbs != "" {
 			b.WriteString(breadcrumbStyle.Render(crumbs))
 			b.WriteString("\n")
