@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lounge/tuify/internal/ui/uri"
 )
 
 // Key dispatch lives here so app.go can stay focused on the Model and the
@@ -195,8 +196,8 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		if m.miniMode {
 			return m, nil, true
 		}
-		if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
-			cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
+		if m.nowPlaying.hasTrack && uri.IsPlayable(m.nowPlaying.trackURI) {
+			cmd := m.visualizer.toggle(uri.ID(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, uri.IsEpisode(m.nowPlaying.trackURI))
 			return m, cmd, true
 		}
 		return m, nil, true

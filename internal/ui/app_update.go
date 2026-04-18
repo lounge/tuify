@@ -8,6 +8,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lounge/tuify/internal/ui/uri"
 )
 
 func (m Model) waitForLibrespotInactive() tea.Cmd {
@@ -129,8 +130,8 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	// Re-init visualizer on track change and reload album art + lyrics
-	if m.nowPlaying.trackURI != prevURI && isPlayableURI(m.nowPlaying.trackURI) {
-		m.visualizer.onTrackChange(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
+	if m.nowPlaying.trackURI != prevURI && uri.IsPlayable(m.nowPlaying.trackURI) {
+		m.visualizer.onTrackChange(uri.ID(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.track, m.nowPlaying.artist, uri.IsEpisode(m.nowPlaying.trackURI))
 		m.visualizer.loadImage(m.nowPlaying.imageURL)
 		cmds = append(cmds, tea.SetWindowTitle(fmt.Sprintf("tuify — %s — %s", m.nowPlaying.track, m.nowPlaying.artist)))
 	} else if m.nowPlaying.imageURL != m.visualizer.imageURL {

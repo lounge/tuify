@@ -8,6 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
+	"github.com/lounge/tuify/internal/ui/uri"
 )
 
 const (
@@ -179,7 +180,7 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	prevShuffling := m.shuffling
 
 	// Cache episode progress before the URI changes.
-	if msg.state.TrackURI != prevURI && prevURI != "" && isEpisodeURI(prevURI) {
+	if msg.state.TrackURI != prevURI && prevURI != "" && uri.IsEpisode(prevURI) {
 		m.progressCache[prevURI] = m.progressMs
 	}
 
