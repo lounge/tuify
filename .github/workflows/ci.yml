@@ -34,7 +34,12 @@ jobs:
 
       - uses: golangci/golangci-lint-action@v6
         with:
-          version: latest
+          version: v1.64.8
+          # Build from source with the runner's Go toolchain so the
+          # linter's internal typechecker matches go.mod (1.26.1). The
+          # prebuilt binary release is compiled with Go 1.24 and chokes
+          # on 1.25/1.26-targeted stdlib + deps.
+          install-mode: goinstall
 
   test:
     strategy:
