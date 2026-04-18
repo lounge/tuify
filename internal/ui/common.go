@@ -51,8 +51,10 @@ type syncableView interface {
 }
 
 // enterable is implemented by views that handle the Enter key.
+// Returns a tea.Cmd that produces an intent message (see app_intents.go).
+// Views don't touch the Model directly — the shell interprets intents.
 type enterable interface {
-	OnEnter(m *Model) tea.Cmd
+	OnEnter() tea.Cmd
 }
 
 // scrollable is implemented by views that respond to mouse-wheel

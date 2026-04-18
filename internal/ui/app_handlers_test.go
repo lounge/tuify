@@ -193,3 +193,103 @@ func TestHandleMouseClick_ListWithNoURIItems_ReportsUnhandled(t *testing.T) {
 		t.Error("click on a list with no uriItems should report unhandled")
 	}
 }
+
+// Intent dispatch contract: views emit intents (see app_intents.go) and the
+// shell interprets them by constructing the target view or dispatching the
+// corresponding command. These tests pin that contract — adding a new intent
+// without wiring Model.Update to handle it will fail them.
+
+// newIntentTestModel constructs a Model adequate for intent-dispatch tests:
+// nowPlaying/visualizer defaulted, rootCtx set so view constructors don't
+// receive nil, and an empty viewStack caller seeds with a homeView.
+func newIntentTestModel() Model {
+	m := newTestModelWithClient("")
+	m.rootCtx = context.Background()
+	m.visualizer = newVisualizerModel(false)
+	return m
+}
+
+func TestUpdate_OpenSearchIntent_PushesSearchView(t *testing.T) {
+	m := newIntentTestModel()
+	before := len(m.viewStack)
+
+	updated, _ := m.Update(openSearchIntent{})
+	after := updated.(Model)
+
+	if got := len(after.viewStack); got != before+1 {
+		t.Fatalf("viewStack grew by %d, want 1", got-before)
+	}
+	if _, ok := after.currentView().(*searchView); !ok {
+		t.Errorf("top of viewStack = %T, want *searchView", after.currentView())
+	}
+}
+
+func TestUpdate_OpenTracksIntent_CarriesPlaylistInfo(t *testing.T) {
+	m := newIntentTestModel()
+
+	updated, cmd := m.Update(openTracksIntent{playlistID: "pid-123", playlistName: "Roadtrip"})
+	after := updated.(Model)
+
+	tv, ok := after.currentView().(*trackView)
+	if !ok {
+		t.Fatalf("top of viewStack = %T, want *trackView", after.currentView())
+	}
+	if tv.playlistID != "pid-123" {
+		t.Errorf("playlistID: got %q, want %q", tv.playlistID, "pid-123")
+	}
+	if tv.playlistName != "Roadtrip" {
+		t.Errorf("playlistName: got %q, want %q", tv.playlistName, "Roadtrip")
+	}
+	if cmd == nil {
+		t.Error("expected Init cmd from the new trackView, got nil")
+	}
+}
+
+func TestUpdate_OpenEpisodesIntent_CarriesShowInfo(t *testing.T) {
+	m := newIntentTestModel()
+
+	updated, cmd := m.Update(openEpisodesIntent{showID: "sid-456", showName: "Daily News"})
+	after := updated.(Model)
+
+	ev, ok := after.currentView().(*episodeView)
+	if !ok {
+		t.Fatalf("top of viewStack = %T, want *episodeView", after.currentView())
+	}
+	if ev.showID != "sid-456" {
+		t.Errorf("showID: got %q, want %q", ev.showID, "sid-456")
+	}
+	if ev.showName != "Daily News" {
+		t.Errorf("showName: got %q, want %q", ev.showName, "Daily News")
+	}
+	if cmd == nil {
+		t.Error("expected Init cmd from the new episodeView, got nil")
+	}
+}
+
+// playItemIntent and playQueueIntent get dispatched through m.playItem /
+// m.playQueue, which build a device-resolving Cmd. The cmd hits the Spotify
+// API when executed, so the test asserts only that a Cmd is returned —
+// proving the intent was recognised and dispatched.
+func TestUpdate_PlayItemIntent_ReturnsCmd(t *testing.T) {
+	m := newIntentTestModel()
+	before := len(m.viewStack)
+
+	updated, cmd := m.Update(playItemIntent{itemURI: "spotify:track:abc", contextURI: "spotify:playlist:xyz"})
+	after := updated.(Model)
+
+	if cmd == nil {
+		t.Error("playItemIntent should dispatch a playback cmd, got nil")
+	}
+	if got := len(after.viewStack); got != before {
+		t.Errorf("viewStack changed by %d; play intents should not navigate", got-before)
+	}
+}
+
+func TestUpdate_PlayQueueIntent_ReturnsCmd(t *testing.T) {
+	m := newIntentTestModel()
+
+	_, cmd := m.Update(playQueueIntent{uris: []string{"spotify:track:a", "spotify:track:b"}})
+	if cmd == nil {
+		t.Error("playQueueIntent should dispatch a playback cmd, got nil")
+	}
+}

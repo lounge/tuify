@@ -76,12 +76,10 @@ func (v *podcastView) Update(msg tea.Msg) tea.Cmd {
 	return v.updateList(msg, v.fetchMore)
 }
 
-func (v *podcastView) OnEnter(m *Model) tea.Cmd {
+func (v *podcastView) OnEnter() tea.Cmd {
 	selected := v.list.SelectedItem()
 	if pi, ok := selected.(podcastItem); ok {
-		ev := newEpisodeView(m.rootCtx, m.client, pi.id, pi.name, m.width, m.listHeight(), m.vimMode)
-		m.pushView(ev)
-		return ev.Init()
+		return emitIntent(openEpisodesIntent{showID: pi.id, showName: pi.name})
 	}
 	if si, ok := selected.(statusItem); ok && si.isError {
 		return v.retryLoad()

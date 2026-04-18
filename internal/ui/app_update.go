@@ -93,6 +93,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.nowPlaying.deviceName = msg.deviceName
 		return m, m.nowPlaying.SetSpinningInfo("Switching to " + msg.deviceName)
+
+	// Intent messages emitted by views (see app_intents.go). The shell
+	// interprets each intent by constructing the target view or
+	// dispatching the corresponding command, keeping views free of any
+	// direct *Model dependency.
+	case openSearchIntent:
+		m.pushView(newSearchView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode))
+		return m, nil
+	case openPlaylistsIntent:
+		pv := newPlaylistView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode)
+		m.pushView(pv)
+		return m, pv.Init()
+	case openPodcastsIntent:
+		pv := newPodcastView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode)
+		m.pushView(pv)
+		return m, pv.Init()
+	case openTracksIntent:
+		tv := newTrackView(m.rootCtx, m.client, msg.playlistID, msg.playlistName, m.width, m.listHeight(), m.vimMode)
+		m.pushView(tv)
+		return m, tv.Init()
+	case openEpisodesIntent:
+		ev := newEpisodeView(m.rootCtx, m.client, msg.showID, msg.showName, m.width, m.listHeight(), m.vimMode)
+		m.pushView(ev)
+		return m, ev.Init()
+	case playItemIntent:
+		return m, m.playItem(msg.itemURI, msg.contextURI)
+	case playQueueIntent:
+		return m, m.playQueue(msg.uris)
 	}
 
 	return m.handleStateUpdate(msg)
@@ -172,7 +200,7 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	if e, ok := m.currentView().(enterable); ok {
-		return m, e.OnEnter(&m)
+		return m, e.OnEnter()
 	}
 	return m, nil
 }

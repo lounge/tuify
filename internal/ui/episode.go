@@ -90,10 +90,13 @@ func (v *episodeView) Update(msg tea.Msg) tea.Cmd {
 	return v.updateList(msg, v.fetchMore)
 }
 
-func (v *episodeView) OnEnter(m *Model) tea.Cmd {
+func (v *episodeView) OnEnter() tea.Cmd {
 	selected := v.list.SelectedItem()
 	if ei, ok := selected.(episodeItem); ok {
-		return m.playItem(ei.uri, "spotify:show:"+v.showID)
+		return emitIntent(playItemIntent{
+			itemURI:    ei.uri,
+			contextURI: "spotify:show:" + v.showID,
+		})
 	}
 	if si, ok := selected.(statusItem); ok && si.isError {
 		return v.retryLoad()

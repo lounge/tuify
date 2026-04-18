@@ -80,19 +80,14 @@ func (v *homeView) clickAt(msg tea.MouseMsg) string {
 	return ""
 }
 
-func (v *homeView) OnEnter(m *Model) tea.Cmd {
+func (v *homeView) OnEnter() tea.Cmd {
 	switch v.selectedItem().name {
 	case "Search":
-		m.pushView(newSearchView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode))
-		return nil
+		return emitIntent(openSearchIntent{})
 	case "Playlists":
-		pv := newPlaylistView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode)
-		m.pushView(pv)
-		return pv.Init()
+		return emitIntent(openPlaylistsIntent{})
 	case "Podcasts":
-		pv := newPodcastView(m.rootCtx, m.client, m.width, m.listHeight(), m.vimMode)
-		m.pushView(pv)
-		return pv.Init()
+		return emitIntent(openPodcastsIntent{})
 	}
 	return nil
 }

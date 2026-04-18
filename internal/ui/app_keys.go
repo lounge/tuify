@@ -83,7 +83,7 @@ func (m Model) handleSearchInput(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 				if !sv.isPlayable() {
 					return sv.drillDown(item)
 				}
-				return sv.playSelected(&m, item)
+				return sv.playSelected(item)
 			},
 			onChange: func() tea.Cmd {
 				sv.debounceSeq++
@@ -111,7 +111,7 @@ func (m Model) handleSearchInput(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			close: func() { sl.closeSearch() },
 			play: func(item list.Item) tea.Cmd {
 				if e, ok := m.currentView().(enterable); ok {
-					return e.OnEnter(&m)
+					return e.OnEnter()
 				}
 				return nil
 			},

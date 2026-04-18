@@ -101,34 +101,33 @@ func (v *searchView) goBack() bool {
 	return true
 }
 
-func (v *searchView) OnEnter(m *Model) tea.Cmd {
+func (v *searchView) OnEnter() tea.Cmd {
 	selected := v.list.SelectedItem()
 	if si, ok := selected.(statusItem); ok && si.isError {
 		return v.retry()
 	}
 	if v.isPlayable() {
-		return v.playSelected(m, selected)
+		return v.playSelected(selected)
 	}
+	// Drill-down is internal to searchView (depth change, no new view
+	// pushed), so it stays a direct call rather than an intent.
 	return v.drillDown(selected)
 }
 
-func (v *searchView) playSelected(m *Model, item list.Item) tea.Cmd {
+func (v *searchView) playSelected(item list.Item) tea.Cmd {
 	ctx := v.contextURI()
-	if ctx != "" {
-		if ti, ok := item.(trackItem); ok {
-			return m.playItem(ti.uri, ctx)
-		}
-		if ei, ok := item.(episodeItem); ok {
-			return m.playItem(ei.uri, ctx)
-		}
-	}
+	var itemURI string
 	if ti, ok := item.(trackItem); ok {
-		return m.playQueue(v.queueFrom(ti.uri))
+		itemURI = ti.uri
+	} else if ei, ok := item.(episodeItem); ok {
+		itemURI = ei.uri
+	} else {
+		return nil
 	}
-	if ei, ok := item.(episodeItem); ok {
-		return m.playQueue(v.queueFrom(ei.uri))
+	if ctx != "" {
+		return emitIntent(playItemIntent{itemURI: itemURI, contextURI: ctx})
 	}
-	return nil
+	return emitIntent(playQueueIntent{uris: v.queueFrom(itemURI)})
 }
 
 // isPlayable returns true if the current depth shows playable items (tracks or episodes).
