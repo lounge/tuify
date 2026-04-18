@@ -12,13 +12,13 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/auth"
 	"github.com/lounge/tuify/internal/config"
 	"github.com/lounge/tuify/internal/librespot"
 	"github.com/lounge/tuify/internal/spotify"
 	"github.com/lounge/tuify/internal/ui"
+	zone "github.com/lrstanley/bubblezone"
 	sp "github.com/zmb3/spotify/v2"
 )
 
@@ -125,9 +125,9 @@ func ResolveRuntime(cfg *config.Config) RuntimeConfig {
 
 // AuthSession holds the result of authentication.
 type AuthSession struct {
-	Client     *spotify.Client
-	Cleanup    func()
-	SaveErrCh  <-chan error // emits token-persistence failures
+	Client    *spotify.Client
+	Cleanup   func()
+	SaveErrCh <-chan error // emits token-persistence failures
 }
 
 // Authenticate connects to Spotify and returns a ready-to-use session.
@@ -237,7 +237,7 @@ func StartLibrespot(ctx context.Context, rc RuntimeConfig, client *spotify.Clien
 		}
 		return nil, fmt.Errorf("librespot failed to start: %w", err)
 	}
-	cleanups = append(cleanups, func() { librespotProc.Stop() })
+	cleanups = append(cleanups, func() { _ = librespotProc.Stop() })
 
 	// Only expose the audio source and inactive channel to the UI once we
 	// know librespot is actually running; otherwise the UI would poll a

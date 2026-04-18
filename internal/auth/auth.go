@@ -257,7 +257,7 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
-		server.Shutdown(ctx)
+		_ = server.Shutdown(ctx) // best-effort; login handler already returned
 	}()
 
 	authURL := a.AuthURL(state,
@@ -341,5 +341,7 @@ func openBrowser(url string) {
 		log.Printf("[auth] failed to open browser: %v", err)
 		return
 	}
-	go cmd.Wait()
+	// Reap the browser-launcher process so it doesn't linger as a zombie.
+	// We don't care about its exit status.
+	go func() { _ = cmd.Wait() }()
 }

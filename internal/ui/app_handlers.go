@@ -6,8 +6,8 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
 	"github.com/lounge/tuify/internal/spotify"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 // Message handlers for non-key messages routed from Update. Each returns a

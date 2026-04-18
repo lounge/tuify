@@ -319,7 +319,7 @@ func TestPipeReader_Latest_ConcurrentSetVolume(t *testing.T) {
 	done := make(chan struct{}, 2)
 
 	go func() {
-		for v := 1; !stop.Load(); v = (v%100) + 1 {
+		for v := 1; !stop.Load(); v = (v % 100) + 1 {
 			pr.SetVolumePercent(v)
 		}
 		done <- struct{}{}

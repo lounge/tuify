@@ -289,7 +289,10 @@ type otoPlayer struct {
 	p *oto.Player
 }
 
-func (o *otoPlayer) Close() error    { return o.p.Close() }
+// Close satisfies the player interface. oto/v3 handles player cleanup
+// internally (the Close method is deprecated and a no-op since v3.4),
+// so we don't forward the call.
+func (o *otoPlayer) Close() error    { return nil }
 func (o *otoPlayer) IsPlaying() bool { return o.p.IsPlaying() }
 
 // oto.NewContext is a process-wide singleton — it must only be called once.

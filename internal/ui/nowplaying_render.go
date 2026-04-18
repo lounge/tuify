@@ -85,7 +85,6 @@ func (m nowPlayingModel) renderTrackLine() string {
 		// Not enough room; drop the device and use all remaining width
 		// for the track/artist label.
 		devicePlain = ""
-		trailingW = 0
 		labelBudget = innerWidth - prefixW
 	}
 

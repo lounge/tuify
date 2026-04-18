@@ -1,0 +1,32 @@
+linters:
+  disable-all: true
+  enable:
+    - govet
+    - staticcheck
+    - ineffassign
+    - unused
+    - errcheck
+
+linters-settings:
+  errcheck:
+    # Stdlib calls whose errors are almost always OK to ignore in this
+    # codebase (file close on read-only handle, discarded reader input, etc).
+    # Revisit if any of these start masking real bugs.
+    exclude-functions:
+      - (io.Closer).Close
+      - (*os.File).Close
+      - (*bufio.Reader).ReadString
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # Tests routinely ignore write/encode errors on httptest responses
+    # and throwaway setup calls. Real bugs there surface as test
+    # failures, not silent error swallowing.
+    - path: _test\.go
+      linters:
+        - errcheck
