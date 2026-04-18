@@ -52,12 +52,13 @@ type nowPlayingModel struct {
 	imageURL   string
 
 	// Playback state
-	playing    bool
-	shuffling  bool
-	hasTrack   bool
-	progressMs int
-	durationMs int
-	deviceName string
+	playing       bool
+	shuffling     bool
+	hasTrack      bool
+	progressMs    int
+	durationMs    int
+	deviceName    string
+	volumePercent int // active device volume 0–100; 100 when no data
 
 	// Pending optimistic updates awaiting API confirmation
 	seekPending      bool
@@ -107,6 +108,7 @@ func newNowPlaying(client *spotify.Client) *nowPlayingModel {
 		client:          client,
 		preferredDevice: client.PreferredDevice,
 		progressCache:   make(map[string]int),
+		volumePercent:   100,
 	}
 }
 
@@ -172,6 +174,7 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 		}
 	}
 	m.deviceName = msg.state.DeviceName
+	m.volumePercent = msg.state.VolumePercent
 	m.hasTrack = true
 
 	// Track changed — pending play/pause is stale, accept fresh state.

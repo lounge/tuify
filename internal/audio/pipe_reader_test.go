@@ -208,3 +208,138 @@ func TestPipeReader_ProgressMsAdvances(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 }
+
+// seedFreshFrame stores a FrequencyData with a fresh timestamp so Latest()
+// returns it without running the full pipe/FFT pipeline.
+func seedFreshFrame(pr *PipeReader, fd *FrequencyData) {
+	pr.latest.Store(fd)
+	pr.lastUpdate.Store(time.Now().UnixNano())
+}
+
+func TestPipeReader_Latest_VolumeGainAt50Percent(t *testing.T) {
+	pr := NewPipeReader()
+	pr.NewPlayer = newNoopPlayer
+	pr.SetVolumePercent(50)
+
+	base := &FrequencyData{
+		Peak: 0.3,
+		Bass: 0.2,
+		Mid:  0.1,
+		High: 0.05,
+	}
+	base.Bands[0] = 0.25
+	base.Bands[10] = 0.4
+	seedFreshFrame(pr, base)
+
+	got := pr.Latest()
+	if got == nil {
+		t.Fatal("Latest returned nil")
+	}
+	// At 50% volume, gain = 100/50 = 2.0 — each band doubles.
+	if math.Abs(float64(got.Peak)-0.6) > 1e-5 {
+		t.Errorf("Peak: got %f, want 0.6", got.Peak)
+	}
+	if math.Abs(float64(got.Bass)-0.4) > 1e-5 {
+		t.Errorf("Bass: got %f, want 0.4", got.Bass)
+	}
+	if math.Abs(float64(got.Bands[0])-0.5) > 1e-5 {
+		t.Errorf("Bands[0]: got %f, want 0.5", got.Bands[0])
+	}
+	if math.Abs(float64(got.Bands[10])-0.8) > 1e-5 {
+		t.Errorf("Bands[10]: got %f, want 0.8", got.Bands[10])
+	}
+	// Stored frame should be unchanged (Latest returns a gain-adjusted copy).
+	if math.Abs(float64(base.Peak)-0.3) > 1e-5 {
+		t.Errorf("source frame mutated: Peak = %f, want 0.3", base.Peak)
+	}
+}
+
+func TestPipeReader_Latest_VolumeGainCapsAt4x(t *testing.T) {
+	pr := NewPipeReader()
+	pr.NewPlayer = newNoopPlayer
+	pr.SetVolumePercent(10) // 100/10 = 10x uncapped, must clamp to 4x
+
+	base := &FrequencyData{Peak: 0.1, Bass: 0.2, Mid: 0.3, High: 0.05}
+	base.Bands[0] = 0.15
+	base.Bands[5] = 0.3 // 0.3 * 4 = 1.2, should clamp at 1.0
+	seedFreshFrame(pr, base)
+
+	got := pr.Latest()
+	if got == nil {
+		t.Fatal("Latest returned nil")
+	}
+	// Gain should be exactly 4x, not 10x.
+	if math.Abs(float64(got.Peak)-0.4) > 1e-5 {
+		t.Errorf("Peak with gain cap: got %f, want 0.4 (0.1 * 4)", got.Peak)
+	}
+	// Bass at 0.2 * 4 = 0.8, under the 1.0 clamp.
+	if math.Abs(float64(got.Bass)-0.8) > 1e-5 {
+		t.Errorf("Bass with gain cap: got %f, want 0.8", got.Bass)
+	}
+	// Mid at 0.3 * 4 = 1.2, must clamp to 1.0.
+	if got.Mid != 1.0 {
+		t.Errorf("Mid clamp: got %f, want 1.0", got.Mid)
+	}
+	// Bands[5] at 0.3 * 4 = 1.2, must clamp to 1.0.
+	if got.Bands[5] != 1.0 {
+		t.Errorf("Bands[5] clamp: got %f, want 1.0", got.Bands[5])
+	}
+}
+
+func TestPipeReader_Latest_Unity_NoCopy(t *testing.T) {
+	// At 100% volume there's no gain to apply; Latest should return the
+	// stored pointer directly (short-circuit path).
+	pr := NewPipeReader()
+	pr.NewPlayer = newNoopPlayer
+	pr.SetVolumePercent(100)
+
+	base := &FrequencyData{Peak: 0.42}
+	seedFreshFrame(pr, base)
+
+	got := pr.Latest()
+	if got != base {
+		t.Errorf("at 100%% volume Latest should return stored pointer; got new copy")
+	}
+}
+
+// TestPipeReader_Latest_ConcurrentSetVolume verifies the race detector is
+// happy with SetVolumePercent firing from one goroutine while Latest runs
+// from another. Run with `go test -race`.
+func TestPipeReader_Latest_ConcurrentSetVolume(t *testing.T) {
+	pr := NewPipeReader()
+	pr.NewPlayer = newNoopPlayer
+
+	base := &FrequencyData{Peak: 0.5, Bass: 0.3, Mid: 0.2, High: 0.1}
+	for i := range base.Bands {
+		base.Bands[i] = 0.25
+	}
+	seedFreshFrame(pr, base)
+
+	var stop atomic.Bool
+	done := make(chan struct{}, 2)
+
+	go func() {
+		for v := 1; !stop.Load(); v = (v%100) + 1 {
+			pr.SetVolumePercent(v)
+		}
+		done <- struct{}{}
+	}()
+
+	go func() {
+		for !stop.Load() {
+			if fd := pr.Latest(); fd != nil {
+				// Touch fields so the race detector sees the read.
+				_ = fd.Peak + fd.Bass + fd.Mid + fd.High
+			}
+			// Also refresh the timestamp occasionally so Latest keeps
+			// returning non-nil.
+			pr.lastUpdate.Store(time.Now().UnixNano())
+		}
+		done <- struct{}{}
+	}()
+
+	time.Sleep(200 * time.Millisecond)
+	stop.Store(true)
+	<-done
+	<-done
+}

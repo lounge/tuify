@@ -97,16 +97,17 @@ type Device struct {
 // empty when no item is playing; callers typically treat a nil *PlayerState
 // from GetPlayerState as "nothing is playing".
 type PlayerState struct {
-	Playing    bool
-	Shuffling  bool
-	TrackName  string
-	ArtistName string // podcast shows use the show name here
-	TrackURI   string
-	ContextURI string // playlist/album/show URI the track is being played from
-	ImageURL   string // mid-size cover image URL
-	ProgressMs int    // playback position in milliseconds
-	DurationMs int    // total track length in milliseconds
-	DeviceName string
+	Playing       bool
+	Shuffling     bool
+	TrackName     string
+	ArtistName    string // podcast shows use the show name here
+	TrackURI      string
+	ContextURI    string // playlist/album/show URI the track is being played from
+	ImageURL      string // mid-size cover image URL
+	ProgressMs    int    // playback position in milliseconds
+	DurationMs    int    // total track length in milliseconds
+	DeviceName    string
+	VolumePercent int // 0–100; active device's volume (100 if device reports none)
 }
 
 type rawArtistRef struct {
@@ -351,7 +352,8 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		Shuffling  bool `json:"shuffle_state"`
 		ProgressMs int  `json:"progress_ms"`
 		Device     *struct {
-			Name string `json:"name"`
+			Name          string `json:"name"`
+			VolumePercent *int   `json:"volume_percent"` // nil when device reports no volume
 		} `json:"device"`
 		Context *struct {
 			URI string `json:"uri"`
@@ -383,15 +385,19 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		return nil, nil
 	}
 	ps := &PlayerState{
-		Playing:    state.Playing,
-		Shuffling:  state.Shuffling,
-		TrackName:  state.Item.Name,
-		TrackURI:   state.Item.URI,
-		ProgressMs: state.ProgressMs,
-		DurationMs: state.Item.DurationMs,
+		Playing:       state.Playing,
+		Shuffling:     state.Shuffling,
+		TrackName:     state.Item.Name,
+		TrackURI:      state.Item.URI,
+		ProgressMs:    state.ProgressMs,
+		DurationMs:    state.Item.DurationMs,
+		VolumePercent: 100,
 	}
 	if state.Device != nil {
 		ps.DeviceName = state.Device.Name
+		if state.Device.VolumePercent != nil {
+			ps.VolumePercent = *state.Device.VolumePercent
+		}
 	}
 	if state.Context != nil {
 		ps.ContextURI = state.Context.URI

@@ -11,6 +11,13 @@ type AudioSource interface {
 	Latest() *audio.FrequencyData
 }
 
+// volumeConsumer is an optional AudioSource capability. When the source
+// implements it, the UI pushes the current Spotify device volume so the
+// source can compensate FFT output for softvol-scaled PCM.
+type volumeConsumer interface {
+	SetVolumePercent(int)
+}
+
 // WithAudioSource sets the audio source for real-time visualizer data
 // and enables the audio-reactive visualizers.
 func WithAudioSource(src AudioSource) ModelOption {

@@ -65,7 +65,7 @@ func TestArgs_PipeBackend(t *testing.T) {
 	assertContains(t, args, "--bitrate", "160")
 	assertContains(t, args, "--username", "user1")
 	assertContains(t, args, "--initial-volume", "60")
-	assertContains(t, args, "--volume-ctrl", "fixed")
+	assertContains(t, args, "--volume-ctrl", "linear")
 	assertHasFlag(t, args, "--disable-audio-cache")
 
 	// --device should NOT be present for pipe backend.

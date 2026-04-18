@@ -173,18 +173,43 @@ func fetchDevicesCmd(client *spotify.Client) tea.Cmd {
 	}
 }
 
-func transferDeviceCmd(client *spotify.Client, dev spotify.Device, currentDeviceID string) tea.Cmd {
+func transferDeviceCmd(client *spotify.Client, dev spotify.Device, currentDeviceID string, progressMs int, wasPlaying bool) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		// Pause librespot before transferring away so it stops local audio.
-		// Only needed for the preferred device; other devices stop via Connect.
-		if currentDeviceID != "" && dev.Name != client.PreferredDevice {
-			if err := client.Pause(ctx, currentDeviceID); err != nil {
-				log.Printf("[device] pre-transfer pause failed: %v", err)
+		if err := client.TransferPlayback(ctx, dev.ID, true); err != nil {
+			return transferDeviceMsg{err: err, deviceName: dev.Name}
+		}
+
+		// Spotify's server reports position_ms=0 for the librespot pipe
+		// backend, so after transferring away the target starts from the
+		// beginning. Seek the target to the progress we tracked locally.
+		// Only needed when leaving the preferred (librespot) device.
+		if currentDeviceID != "" && dev.Name != client.PreferredDevice && progressMs > 0 {
+			// Small delay so the new device is fully active before we
+			// seek — Spotify 404s seeks at devices that aren't yet ready.
+			select {
+			case <-time.After(400 * time.Millisecond):
+			case <-ctx.Done():
+				return transferDeviceMsg{deviceName: dev.Name}
+			}
+			// Re-check ctx after the sleep: if it expired (e.g. sleep ran
+			// to completion just as the 10s timeout hit) we'd otherwise
+			// call Seek/Pause against a dead ctx and silently log errors.
+			if ctx.Err() != nil {
+				return transferDeviceMsg{deviceName: dev.Name}
+			}
+			if err := client.Seek(ctx, progressMs, dev.ID); err != nil {
+				log.Printf("[device] post-transfer seek to %dms failed: %v", progressMs, err)
+			}
+			if !wasPlaying {
+				// We forced play=true on the transfer to ensure the seek
+				// lands on an active device; restore the paused state.
+				if err := client.Pause(ctx, dev.ID); err != nil {
+					log.Printf("[device] post-transfer re-pause failed: %v", err)
+				}
 			}
 		}
-		err := client.TransferPlayback(ctx, dev.ID, true)
-		return transferDeviceMsg{err: err, deviceName: dev.Name}
+		return transferDeviceMsg{deviceName: dev.Name}
 	}
 }

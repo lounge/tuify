@@ -17,6 +17,13 @@ type PipeReader struct {
 	latest     atomic.Pointer[FrequencyData]
 	lastUpdate atomic.Int64 // unix nanos of last frame
 
+	// volumePercent is the Spotify Connect device volume (1–100). When the
+	// user turns volume down, librespot's softvol scales the PCM before
+	// piping, so the FFT sees a quieter signal and visualizers dim. Latest()
+	// compensates by applying the inverse gain (capped at maxVolumeGain) to
+	// the returned frequency bands, keeping visualizers bright at low volumes.
+	volumePercent atomic.Int32
+
 	mu       sync.Mutex
 	cancelFn func() // cancels the current read goroutine
 	done     chan struct{}
@@ -26,11 +33,36 @@ type PipeReader struct {
 	NewPlayer playerFactory
 }
 
+// maxVolumeGain caps the inverse-volume gain so very low volumes don't
+// amplify background noise / FFT bin quantization into full-scale bands.
+// 4x means volumes below 25% stop getting brighter.
+const maxVolumeGain = 4.0
+
 // NewPipeReader creates a PipeReader ready to accept pipes via Start().
 func NewPipeReader() *PipeReader {
-	return &PipeReader{
+	pr := &PipeReader{
 		NewPlayer: defaultPlayerFactory,
 	}
+	pr.volumePercent.Store(100)
+	return pr
+}
+
+// SetVolumePercent records the current Spotify device volume (0–100) so
+// Latest() can compensate the FFT bands for it. Safe to call from any
+// goroutine; applies to the next Latest() read. Out-of-range values are
+// clamped and logged so upstream data quality issues surface in the log.
+func (pr *PipeReader) SetVolumePercent(v int) {
+	clamped := v
+	if clamped < 0 {
+		clamped = 0
+	}
+	if clamped > 100 {
+		clamped = 100
+	}
+	if clamped != v {
+		log.Printf("[pipe-reader] volume %d out of range, clamped to %d", v, clamped)
+	}
+	pr.volumePercent.Store(int32(clamped))
 }
 
 // Start begins reading PCM from pipe, playing audio and running FFT analysis.
@@ -66,12 +98,54 @@ func (pr *PipeReader) Start(pipe io.ReadCloser) {
 // Latest returns the most recent FrequencyData, or nil if no fresh data.
 // Returns nil if the last frame is older than 150ms (e.g., paused or between restarts).
 // Thread-safe; called from the Bubble Tea goroutine.
+//
+// Bands are compensated by the inverse of the current device volume so
+// visualizers stay bright at low playback volume (librespot's softvol
+// scales the PCM before piping). Compensation is capped at maxVolumeGain.
 func (pr *PipeReader) Latest() *FrequencyData {
 	last := pr.lastUpdate.Load()
 	if last == 0 || time.Since(time.Unix(0, last)) > 150*time.Millisecond {
 		return nil
 	}
-	return pr.latest.Load()
+	fd := pr.latest.Load()
+	if fd == nil {
+		return nil
+	}
+	gain := pr.volumeGain()
+	if gain == 1.0 {
+		return fd
+	}
+	out := *fd
+	for i := range out.Bands {
+		out.Bands[i] = clampUnit(out.Bands[i] * gain)
+	}
+	out.Peak = clampUnit(out.Peak * gain)
+	out.Bass = clampUnit(out.Bass * gain)
+	out.Mid = clampUnit(out.Mid * gain)
+	out.High = clampUnit(out.High * gain)
+	return &out
+}
+
+func (pr *PipeReader) volumeGain() float32 {
+	v := pr.volumePercent.Load()
+	if v >= 100 || v <= 0 {
+		return 1.0
+	}
+	gain := 100.0 / float32(v)
+	if gain > maxVolumeGain {
+		gain = maxVolumeGain
+	}
+	return gain
+}
+
+func clampUnit(v float32) float32 {
+	if v > 1.0 {
+		return 1.0
+	}
+	if v < 0 {
+		return 0
+	}
+	return v
 }
 
 // Stop cancels any active read loop. Safe to call multiple times.

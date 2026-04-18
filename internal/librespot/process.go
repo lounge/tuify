@@ -83,7 +83,11 @@ func (p *Process) args() []string {
 	args = append(args,
 		"--bitrate", strconv.Itoa(p.config.Bitrate),
 		"--initial-volume", "60",
-		"--volume-ctrl", "fixed",
+		// Linear softvol: PCM amplitude scales 1:1 with the slider, so the
+		// inverse gain applied in audio.PipeReader.Latest() mathematically
+		// restores the pre-volume FFT bands. "log" is more natural for
+		// listening but compresses the signal too hard for visualizers.
+		"--volume-ctrl", "linear",
 		"--disable-audio-cache",
 	)
 	if p.config.Username != "" {

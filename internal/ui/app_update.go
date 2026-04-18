@@ -96,9 +96,18 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Update now-playing
 	prevURI := m.nowPlaying.trackURI
+	prevVolume := m.nowPlaying.volumePercent
 	cmd := m.nowPlaying.Update(msg)
 	if cmd != nil {
 		cmds = append(cmds, cmd)
+	}
+
+	// Push volume changes to the audio source so it can compensate the
+	// FFT output for librespot's softvol-scaled PCM.
+	if m.nowPlaying.volumePercent != prevVolume && m.visualizer.audioSrc != nil {
+		if vc, ok := m.visualizer.audioSrc.(volumeConsumer); ok {
+			vc.SetVolumePercent(m.nowPlaying.volumePercent)
+		}
 	}
 
 	// Clear transfer lock once the poller confirms the target device is active,

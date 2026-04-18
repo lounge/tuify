@@ -90,7 +90,7 @@ func (m *Model) copyTrackLink() tea.Cmd {
 }
 
 func (m Model) transferDevice(dev spotify.Device) tea.Cmd {
-	return transferDeviceCmd(m.client, dev, m.deviceSelector.activeDeviceID)
+	return transferDeviceCmd(m.client, dev, m.deviceSelector.activeDeviceID, m.nowPlaying.progressMs, m.nowPlaying.playing)
 }
 
 // withDevice wraps a Spotify API call with device resolution. If the user has
