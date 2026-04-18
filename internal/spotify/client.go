@@ -16,6 +16,9 @@ import (
 	sp "github.com/zmb3/spotify/v2"
 )
 
+// Client wraps the zmb3 Spotify SDK with the higher-level operations tuify
+// needs (playlists, search, player control, device selection). Safe for
+// concurrent use by multiple goroutines.
 type Client struct {
 	sp              *sp.Client
 	httpClient      *http.Client
@@ -28,6 +31,7 @@ type Client struct {
 	DeviceOverridden atomic.Bool
 }
 
+// Playlist is a user-owned Spotify playlist.
 type Playlist struct {
 	ID         string
 	Name       string
@@ -35,24 +39,27 @@ type Playlist struct {
 	TrackCount int
 }
 
+// Track is a single playable audio track.
 type Track struct {
 	ID       string
 	URI      string
 	Name     string
-	Artist   string
+	Artist   string // first artist only; collaborations use the primary artist
 	Album    string
 	Duration time.Duration
 }
 
+// Album is a Spotify album or single.
 type Album struct {
 	ID          string
 	URI         string
 	Name        string
-	Artist      string
-	ReleaseDate string
+	Artist      string // primary artist
+	ReleaseDate string // YYYY, YYYY-MM, or YYYY-MM-DD depending on precision
 	TrackCount  int
 }
 
+// Artist is a Spotify artist entity.
 type Artist struct {
 	ID     string
 	URI    string
@@ -60,6 +67,7 @@ type Artist struct {
 	Genres []string
 }
 
+// Show is a podcast show.
 type Show struct {
 	ID            string
 	URI           string
@@ -67,6 +75,7 @@ type Show struct {
 	TotalEpisodes int
 }
 
+// Episode is a single podcast episode.
 type Episode struct {
 	ID          string
 	URI         string
@@ -75,6 +84,7 @@ type Episode struct {
 	Duration    time.Duration
 }
 
+// Device is a Spotify Connect playback target.
 type Device struct {
 	ID     string
 	Name   string
@@ -83,16 +93,19 @@ type Device struct {
 	Volume int // 0–100
 }
 
+// PlayerState is a snapshot of the user's current playback. TrackURI is
+// empty when no item is playing; callers typically treat a nil *PlayerState
+// from GetPlayerState as "nothing is playing".
 type PlayerState struct {
 	Playing    bool
 	Shuffling  bool
 	TrackName  string
-	ArtistName string
+	ArtistName string // podcast shows use the show name here
 	TrackURI   string
-	ContextURI string
-	ImageURL   string
-	ProgressMs int
-	DurationMs int
+	ContextURI string // playlist/album/show URI the track is being played from
+	ImageURL   string // mid-size cover image URL
+	ProgressMs int    // playback position in milliseconds
+	DurationMs int    // total track length in milliseconds
 	DeviceName string
 }
 
@@ -160,10 +173,17 @@ func hasMore(offset, count, total int) bool {
 	return offset+count < total
 }
 
+// New constructs a Client. spClient handles SDK-level calls (playback
+// control, devices); httpClient is used for raw REST calls that the SDK
+// doesn't expose and must be the same auth-wrapped client so both paths
+// share token refresh.
 func New(spClient *sp.Client, httpClient *http.Client) *Client {
 	return &Client{sp: spClient, httpClient: httpClient}
 }
 
+// FetchUserID caches the authenticated user's ID on the client so later
+// calls (e.g. GetPlaylists) can filter by ownership without an extra
+// round trip. Safe to skip; dependent methods degrade gracefully.
 func (c *Client) FetchUserID(ctx context.Context) error {
 	var me struct {
 		ID string `json:"id"`
@@ -213,6 +233,8 @@ func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) (playlists
 	return result, len(page.Items), hasMore(page.Offset, len(page.Items), page.Total), nil
 }
 
+// GetPlaylistTracks returns tracks from a playlist, starting at offset.
+// The bool indicates whether more pages are available.
 func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit int) ([]Track, bool, error) {
 	url := fmt.Sprintf("https://api.spotify.com/v1/playlists/%s/items?limit=%d&offset=%d", id, limit, offset)
 	var page struct {
@@ -234,6 +256,7 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit
 	return convertTracks(raw), hasMore(page.Offset, len(page.Items), page.Total), nil
 }
 
+// GetSavedShows returns the user's followed podcast shows.
 func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, bool, error) {
 	url := fmt.Sprintf("https://api.spotify.com/v1/me/shows?limit=%d&offset=%d", limit, offset)
 	var p struct {
@@ -253,6 +276,7 @@ func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, 
 	return convertShows(raw), hasMore(p.Offset, len(p.Items), p.Total), nil
 }
 
+// GetShowEpisodes returns episodes for a given podcast show.
 func (c *Client) GetShowEpisodes(ctx context.Context, showID string, offset, limit int) ([]Episode, bool, error) {
 	url := fmt.Sprintf("https://api.spotify.com/v1/shows/%s/episodes?limit=%d&offset=%d", showID, limit, offset)
 	var p page[rawEpisode]
@@ -262,26 +286,33 @@ func (c *Client) GetShowEpisodes(ctx context.Context, showID string, offset, lim
 	return convertEpisodes(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
 }
 
+// SearchTracks runs a track search against the Spotify catalog.
 func (c *Client) SearchTracks(ctx context.Context, query string, offset, limit int) ([]Track, bool, error) {
 	return search(ctx, c, query, "track", "tracks", offset, limit, convertTracks)
 }
 
+// SearchEpisodes runs a podcast-episode search against the Spotify catalog.
 func (c *Client) SearchEpisodes(ctx context.Context, query string, offset, limit int) ([]Episode, bool, error) {
 	return search(ctx, c, query, "episode", "episodes", offset, limit, convertEpisodes)
 }
 
+// SearchAlbums runs an album search against the Spotify catalog.
 func (c *Client) SearchAlbums(ctx context.Context, query string, offset, limit int) ([]Album, bool, error) {
 	return search(ctx, c, query, "album", "albums", offset, limit, convertAlbums)
 }
 
+// SearchArtists runs an artist search against the Spotify catalog.
 func (c *Client) SearchArtists(ctx context.Context, query string, offset, limit int) ([]Artist, bool, error) {
 	return search(ctx, c, query, "artist", "artists", offset, limit, convertArtists)
 }
 
+// SearchShows runs a podcast-show search against the Spotify catalog.
 func (c *Client) SearchShows(ctx context.Context, query string, offset, limit int) ([]Show, bool, error) {
 	return search(ctx, c, query, "show", "shows", offset, limit, convertShows)
 }
 
+// GetArtistAlbums returns albums and singles by the given artist.
+// Compilation and appears-on releases are excluded.
 func (c *Client) GetArtistAlbums(ctx context.Context, artistID string, offset, limit int) ([]Album, bool, error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/artists/%s/albums?include_groups=album,single&limit=%d&offset=%d",
 		artistID, limit, offset)
@@ -292,6 +323,7 @@ func (c *Client) GetArtistAlbums(ctx context.Context, artistID string, offset, l
 	return convertAlbums(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
 }
 
+// GetAlbumTracks returns tracks from the given album in track order.
 func (c *Client) GetAlbumTracks(ctx context.Context, albumID string, offset, limit int) ([]Track, bool, error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/albums/%s/tracks?limit=%d&offset=%d",
 		albumID, limit, offset)
@@ -302,6 +334,10 @@ func (c *Client) GetAlbumTracks(ctx context.Context, albumID string, offset, lim
 	return convertTracks(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
 }
 
+// GetPlayerState fetches the user's current playback state. Returns
+// (nil, nil) when nothing is playing (HTTP 204) or when the active item
+// is not a track/episode — callers should treat a nil *PlayerState as
+// "no playback" rather than an error.
 func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 	body, status, err := c.doWithRetry(ctx, "https://api.spotify.com/v1/me/player?additional_types=track,episode")
 	if status == http.StatusNoContent {
@@ -375,6 +411,9 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 	return ps, nil
 }
 
+// Play starts playback of itemURI. If contextURI is set (playlist/album/
+// show), the item plays in the context of that container so Next/Previous
+// navigate within it; otherwise only the single item is queued.
 func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string) error {
 	opts := playOpts(deviceID)
 	if contextURI != "" {
@@ -387,6 +426,9 @@ func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string)
 	return c.sp.PlayOpt(ctx, opts)
 }
 
+// PlayQueue starts playback of an explicit list of track URIs in order.
+// The first URI becomes the current item. Use Play when the items belong
+// to a Spotify-side context (playlist/album) you want preserved.
 func (c *Client) PlayQueue(ctx context.Context, uris []string, deviceID string) error {
 	opts := playOpts(deviceID)
 	for _, u := range uris {
@@ -398,14 +440,18 @@ func (c *Client) PlayQueue(ctx context.Context, uris []string, deviceID string) 
 	return c.sp.PlayOpt(ctx, opts)
 }
 
+// Resume resumes paused playback on the specified device.
 func (c *Client) Resume(ctx context.Context, deviceID string) error {
 	return c.sp.PlayOpt(ctx, playOpts(deviceID))
 }
 
+// Pause pauses playback on the specified device.
 func (c *Client) Pause(ctx context.Context, deviceID string) error {
 	return c.sp.PauseOpt(ctx, playOpts(deviceID))
 }
 
+// Stop pauses and seeks to the start of the current track. Spotify has no
+// true "stop" — this is the closest approximation.
 func (c *Client) Stop(ctx context.Context, deviceID string) error {
 	opts := playOpts(deviceID)
 	if err := c.sp.PauseOpt(ctx, opts); err != nil {
@@ -414,22 +460,30 @@ func (c *Client) Stop(ctx context.Context, deviceID string) error {
 	return c.sp.SeekOpt(ctx, 0, opts)
 }
 
+// Next skips to the next item in the current playback context.
 func (c *Client) Next(ctx context.Context, deviceID string) error {
 	return c.sp.NextOpt(ctx, playOpts(deviceID))
 }
 
+// Previous skips to the previous item, or restarts the current one if
+// playback has advanced past the start (Spotify's native behavior).
 func (c *Client) Previous(ctx context.Context, deviceID string) error {
 	return c.sp.PreviousOpt(ctx, playOpts(deviceID))
 }
 
+// Shuffle enables or disables shuffle mode on the specified device.
 func (c *Client) Shuffle(ctx context.Context, state bool, deviceID string) error {
 	return c.sp.ShuffleOpt(ctx, state, playOpts(deviceID))
 }
 
+// Seek jumps to positionMs within the current track.
 func (c *Client) Seek(ctx context.Context, positionMs int, deviceID string) error {
 	return c.sp.SeekOpt(ctx, positionMs, playOpts(deviceID))
 }
 
+// TransferPlayback moves active playback to the given device. If play is
+// true, playback resumes on the target; otherwise the target is primed
+// but left in its current paused/playing state.
 func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play bool) error {
 	return c.sp.TransferPlayback(ctx, sp.ID(deviceID), play)
 }
