@@ -19,6 +19,12 @@ func (m nowPlayingModel) progressTick() tea.Cmd {
 	})
 }
 
+func (m nowPlayingModel) labelScrollTick() tea.Cmd {
+	return tea.Tick(labelScrollInterval, func(t time.Time) tea.Msg {
+		return labelScrollMsg(t)
+	})
+}
+
 func (m nowPlayingModel) pollInterval() time.Duration {
 	if !m.hasTrack {
 		return 10 * time.Second

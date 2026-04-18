@@ -112,7 +112,11 @@ func TestMiniModeView_VeryNarrowTerminal(t *testing.T) {
 	}
 }
 
-func TestMiniModeView_Truncation(t *testing.T) {
+// When the label doesn't fit, mini mode marquee-scrolls it rather than
+// truncating with "…". Pin that the output stays single-line and fits the
+// terminal width, since a wrapped mini line would break zone coordinates
+// and push the UI off-screen.
+func TestMiniModeView_LongLabelFitsAndScrolls(t *testing.T) {
 	np := &nowPlayingModel{
 		hasTrack:   true,
 		playing:    true,
@@ -122,8 +126,16 @@ func TestMiniModeView_Truncation(t *testing.T) {
 		durationMs: 60000,
 	}
 	m := newTestModel(50, np)
-	result := m.miniModeView()
-	if !strings.Contains(result, "…") {
-		t.Error("expected truncation ellipsis in narrow output")
+	first := m.miniModeView()
+	if strings.Contains(first, "\n") {
+		t.Fatalf("miniModeView wrapped: %q", first)
+	}
+
+	// Advance the marquee and render again — the visible window should
+	// shift, proving the label is scrolling rather than statically truncated.
+	np.labelScrollOffset = 5
+	second := m.miniModeView()
+	if second == first {
+		t.Error("miniModeView output unchanged after advancing labelScrollOffset; marquee not active")
 	}
 }

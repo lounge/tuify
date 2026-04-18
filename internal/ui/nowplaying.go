@@ -33,10 +33,15 @@ type playerStateMsg struct {
 type (
 	nowPlayingTickMsg time.Time
 	progressTickMsg   time.Time
+	labelScrollMsg    time.Time
 	clearStatusMsg    struct{}
 	delayedPollMsg    struct{}
 	episodeResumeMsg  struct{ posMs int }
 )
+
+// labelScrollInterval sets the marquee tick rate. 200ms gives a readable
+// left-to-right drift without redraw churn.
+const labelScrollInterval = 200 * time.Millisecond
 
 // Model
 
@@ -77,6 +82,11 @@ type nowPlayingModel struct {
 	preferredDevice  string
 	deviceOverridden bool
 
+	// Marquee scroll offset for the "track — artist" label when it doesn't
+	// fit in the available width. Measured in display cells and advances
+	// once per labelScrollInterval. Resets to 0 on every track change.
+	labelScrollOffset int
+
 	// Status display (errors and info messages)
 	statusMsg     string
 	statusIsError bool
@@ -115,7 +125,7 @@ func newNowPlaying(client *spotify.Client) *nowPlayingModel {
 // Lifecycle
 
 func (m nowPlayingModel) Init() tea.Cmd {
-	return tea.Batch(m.pollState(), m.tick(), m.progressTick())
+	return tea.Batch(m.pollState(), m.tick(), m.progressTick(), m.labelScrollTick())
 }
 
 func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
@@ -126,6 +136,17 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 		return tea.Batch(m.pollState(), m.tick())
 	case progressTickMsg:
 		return m.handleProgressTick()
+	case labelScrollMsg:
+		// Advance the marquee and wrap within the composed stream width
+		// so the offset stays bounded. Keeps the offset in [0, streamW)
+		// forever — no int overflow concern on long sessions and no
+		// reliance on modulo normalization downstream.
+		if w := m.labelStreamWidth(); w > 0 {
+			m.labelScrollOffset = (m.labelScrollOffset + 1) % w
+		} else {
+			m.labelScrollOffset = 0
+		}
+		return m.labelScrollTick()
 	case delayedPollMsg:
 		return m.pollState()
 	case clearStatusMsg:
@@ -209,6 +230,7 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	var resumeCmd tea.Cmd
 	if m.trackURI != prevURI {
 		m.resumeUntilMs = 0
+		m.labelScrollOffset = 0 // restart the marquee for the new track
 		if cached, ok := m.progressCache[m.trackURI]; ok && m.progressMs < episodeResumeThresholdMs && cached > m.progressMs {
 			m.progressMs = cached
 			m.resumeUntilMs = cached

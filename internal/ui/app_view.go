@@ -136,30 +136,12 @@ func (m Model) miniModeView() string {
 	tsLen := lipgloss.Width(timestamps)
 	innerWidth := m.width - nowPlayingPadding
 
-	// Track — Artist label, truncated to fit.
-	track := np.track
-	artist := " — " + np.artist
+	// Track — Artist label. Fits: static two-tone. Doesn't fit: marquee.
 	labelBudget := innerWidth - iconLen - tsLen - 8 // 4 spaces + 4 min bar
 	if labelBudget < 1 {
 		labelBudget = 1
 	}
-	labelRunes := []rune(track + artist)
-	if len(labelRunes) > labelBudget {
-		truncated := string(labelRunes[:labelBudget-1]) + "…"
-		trackRunes := []rune(track)
-		if labelBudget-1 <= len(trackRunes) {
-			track = string(trackRunes[:labelBudget-1]) + "…"
-			artist = ""
-		} else {
-			artist = string([]rune(truncated)[len(trackRunes):])
-		}
-	}
-	var labelStr string
-	if artist != "" {
-		labelStr = nowPlayingTrackStyle.Render(track) + nowPlayingArtistStyle.Render(artist)
-	} else {
-		labelStr = nowPlayingTrackStyle.Render(track)
-	}
+	labelStr := np.renderLabel(labelBudget)
 	labelLen := lipgloss.Width(labelStr)
 
 	// Progress bar fills remaining space.

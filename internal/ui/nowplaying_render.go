@@ -89,31 +89,9 @@ func (m nowPlayingModel) renderTrackLine() string {
 		labelBudget = innerWidth - prefixW
 	}
 
-	track, artist, sep := m.track, m.artist, " — "
-	// Use display-cell widths (not rune counts) so wide runes — CJK,
-	// emoji, etc. — don't slip past the budget and wrap the line.
-	if runewidth.StringWidth(track+sep+artist) > labelBudget && labelBudget > 1 {
-		trackSepW := runewidth.StringWidth(track + sep)
-		if trackSepW >= labelBudget {
-			// Label bigger than budget even without artist — truncate track.
-			track = runewidth.Truncate(track, labelBudget, "…")
-			artist, sep = "", ""
-		} else {
-			artistBudget := labelBudget - trackSepW
-			if artistBudget > 1 {
-				artist = runewidth.Truncate(artist, artistBudget, "…")
-			} else {
-				artist, sep = "", ""
-			}
-		}
-	}
-
 	left := nowPlayingIconStyle.Render(icon) + " " +
 		nowPlayingIconStyle.Render(shufflePrefix) +
-		nowPlayingTrackStyle.Render(track)
-	if artist != "" {
-		left += nowPlayingArtistStyle.Render(sep + artist)
-	}
+		m.renderLabel(labelBudget)
 
 	if devicePlain == "" {
 		return left
@@ -124,6 +102,36 @@ func (m nowPlayingModel) renderTrackLine() string {
 		return left
 	}
 	return left + strings.Repeat(" ", gap) + device
+}
+
+// labelStreamWidth returns the display width of the full marquee stream
+// (track + separator + artist + marqueeGap). Used by the label-scroll
+// tick handler to bound labelScrollOffset within [0, streamW).
+func (m nowPlayingModel) labelStreamWidth() int {
+	return runewidth.StringWidth(m.track + " — " + m.artist + marqueeGap)
+}
+
+// renderLabel returns the styled "track — artist" label, fitted to
+// budget display cells. Fits: two-tone static render. Doesn't fit:
+// marquee-scrolls at the current labelScrollOffset with matching colors.
+// Very small budgets: degrade to a single truncated track segment so the
+// caller still sees something meaningful.
+func (m nowPlayingModel) renderLabel(budget int) string {
+	if budget <= 0 {
+		return ""
+	}
+	sep := " — "
+	label := m.track + sep + m.artist
+	labelW := runewidth.StringWidth(label)
+	switch {
+	case labelW <= budget:
+		return nowPlayingTrackStyle.Render(m.track) +
+			nowPlayingArtistStyle.Render(sep+m.artist)
+	case budget < 4:
+		return nowPlayingTrackStyle.Render(runewidth.Truncate(m.track, budget, "…"))
+	default:
+		return marqueeWindow(m.track, sep+m.artist, m.labelScrollOffset, budget)
+	}
 }
 
 // renderGradient renders the now-playing area with a purple background that
@@ -157,4 +165,79 @@ func (m nowPlayingModel) renderGradient(lines []string) string {
 	}
 
 	return b.String()
+}
+
+// marqueeGap is appended to the tail before looping so the start of the
+// next repeat is visually separated from the end of the current one.
+const marqueeGap = "   •   "
+
+// marqueeWindow returns a width-cell styled slice of the "track + tail"
+// stream starting at the given cell offset. Precondition: width must be
+// no larger than streamW (track + tail + marqueeGap), otherwise the
+// doubled stream we slice from won't cover the requested window. Callers
+// should gate this with a "doesn't fit" check (see renderLabel).
+//
+// Runes from the track segment are rendered with nowPlayingTrackStyle;
+// everything else (tail + gap)
+// with nowPlayingArtistStyle, matching the static two-tone layout. Wraps
+// around so output is always exactly width cells.
+//
+// Styling is determined by the cell position where each rune begins; a
+// multi-cell rune that straddles the track/tail boundary takes the style
+// of its starting half. In practice the boundary is " — ", so this is
+// only visible on CJK titles, and the flicker is imperceptible.
+func marqueeWindow(track, tail string, offset, width int) string {
+	if width <= 0 {
+		return ""
+	}
+	stream := track + tail + marqueeGap
+	streamW := runewidth.StringWidth(stream)
+	if streamW == 0 {
+		return strings.Repeat(" ", width)
+	}
+	trackW := runewidth.StringWidth(track)
+	offset = ((offset % streamW) + streamW) % streamW
+
+	// Visible slice of the doubled stream starting at offset, width cells.
+	doubled := stream + stream
+	visible := runewidth.Truncate(runewidth.TruncateLeft(doubled, offset, ""), width, "")
+
+	var out strings.Builder
+	var seg strings.Builder
+	currentIsTrack := false
+	cellInStream := offset % streamW
+	haveSeg := false
+
+	flush := func() {
+		if !haveSeg {
+			return
+		}
+		if currentIsTrack {
+			out.WriteString(nowPlayingTrackStyle.Render(seg.String()))
+		} else {
+			out.WriteString(nowPlayingArtistStyle.Render(seg.String()))
+		}
+		seg.Reset()
+		haveSeg = false
+	}
+
+	emitted := 0
+	for _, r := range visible {
+		rw := runewidth.RuneWidth(r)
+		isTrack := cellInStream < trackW
+		if haveSeg && isTrack != currentIsTrack {
+			flush()
+		}
+		seg.WriteRune(r)
+		currentIsTrack = isTrack
+		haveSeg = true
+		cellInStream = (cellInStream + rw) % streamW
+		emitted += rw
+	}
+	flush()
+
+	if emitted < width {
+		out.WriteString(nowPlayingArtistStyle.Render(strings.Repeat(" ", width-emitted)))
+	}
+	return out.String()
 }
