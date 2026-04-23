@@ -29,6 +29,13 @@ type LibrespotInactiveMsg struct{}
 // no way to connect that to a fixable cause (permissions, disk full, etc.).
 type TokenSaveErrMsg struct{ Err error }
 
+// TokenRevokedMsg is delivered when Spotify rejects the refresh token as
+// permanently invalid (user revoked app access, expiry from inactivity,
+// etc.). Every API call will fail from this point on, so the UI shuts
+// down cleanly — bootstrap.Run() then prints a re-login message to
+// stderr and exits.
+type TokenRevokedMsg struct{}
+
 // searchCtx captures the parts that differ between API search and local filter search.
 type searchCtx struct {
 	query    *string

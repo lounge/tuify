@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,6 +24,23 @@ import (
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
 	"golang.org/x/oauth2"
 )
+
+// ErrTokenRevoked wraps errors returned by the OAuth2 library when the
+// stored refresh token is no longer valid (user-initiated app revocation,
+// long inactivity, password reset, etc.). Detectable via errors.Is so
+// callers can distinguish a permanent failure from transient network
+// blips and react accordingly (e.g. delete the stale token, exit).
+var ErrTokenRevoked = errors.New("spotify refresh token revoked")
+
+// isRevokedError detects the "invalid_grant" response Spotify returns
+// when a refresh token is permanently dead. The oauth2 library surfaces
+// it as a *RetrieveError whose String contains "invalid_grant".
+func isRevokedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "invalid_grant")
+}
 
 // savingTokenSource wraps a TokenSource and persists the token to disk
 // whenever it is refreshed, so refreshed tokens survive app restarts.
@@ -37,6 +55,12 @@ type savingTokenSource struct {
 	// warnings; without this signal a refresh failure is silent and the user
 	// only notices on the next app restart when they're forced to re-login.
 	saveErrCh chan error
+
+	// revokedCh fires at most once when the refresh token is detected as
+	// permanently invalid. Buffered(1) + sync.Once so repeated refresh
+	// attempts don't spam the channel. Consumers shut the app down.
+	revokedCh   chan struct{}
+	revokedOnce sync.Once
 }
 
 func (s *savingTokenSource) Token() (*oauth2.Token, error) {
@@ -46,6 +70,10 @@ func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 		log.Printf("[auth] Token() took %v (err=%v)", elapsed.Round(time.Millisecond), err)
 	}
 	if err != nil {
+		if isRevokedError(err) {
+			s.signalRevoked()
+			return nil, fmt.Errorf("%w: %w", ErrTokenRevoked, err)
+		}
 		return nil, err
 	}
 	s.mu.Lock()
@@ -58,6 +86,28 @@ func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 	}
 	s.mu.Unlock()
 	return tok, nil
+}
+
+// signalRevoked deletes the stale token file (so the next launch runs
+// the login flow cleanly) and fires revokedCh exactly once. Any further
+// refresh attempts in-flight just no-op here.
+func (s *savingTokenSource) signalRevoked() {
+	s.revokedOnce.Do(func() {
+		if dir, err := config.Dir(); err == nil {
+			path := filepath.Join(dir, "token.json")
+			if rmErr := os.Remove(path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+				log.Printf("[auth] delete stale token: %v", rmErr)
+			} else {
+				log.Printf("[auth] deleted revoked token at %s", path)
+			}
+		}
+		if s.revokedCh != nil {
+			select {
+			case s.revokedCh <- struct{}{}:
+			default:
+			}
+		}
+	})
 }
 
 // notifySaveErr pushes a save failure onto the channel without blocking.
@@ -109,6 +159,11 @@ func (s *savingTokenSource) startProactiveRefresh(ctx context.Context) {
 			newTok, err := s.Token()
 			if err != nil {
 				log.Printf("[auth] proactive token refresh failed: %v", err)
+				if errors.Is(err, ErrTokenRevoked) {
+					// Permanent failure — shell is already being told
+					// to shut down via revokedCh; stop looping.
+					return
+				}
 				select {
 				case <-ctx.Done():
 					return
@@ -138,11 +193,15 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 // NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
 // and persists them to disk on each refresh. The returned cleanup function
 // stops the proactive-refresh goroutine; callers must invoke it on shutdown.
-// saveErrCh emits persistence failures so the caller can surface them to
-// the user (e.g. a status banner); it is buffered and lossy on full.
+// saveErrCh emits persistence failures (buffered, lossy on full) so the
+// caller can surface them to the user. revokedCh fires exactly once if
+// Spotify rejects the refresh token as permanently invalid ("invalid_grant"
+// — user revoked the app, token expired from inactivity, etc.); the stale
+// token file is deleted before the signal so the next launch runs login
+// cleanly.
 // ctx is the parent lifetime: when it is cancelled, the proactive-refresh
 // goroutine exits and in-flight oauth2 refresh requests are cancelled too.
-func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, <-chan error, func(), error) {
+func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, <-chan error, <-chan struct{}, func(), error) {
 	// Provide a timeout-configured client for oauth2 token refresh requests.
 	// Without this, token refreshes use http.DefaultClient (no timeouts) and
 	// a hanging refresh blocks ALL API calls behind the oauth2 mutex.
@@ -165,10 +224,16 @@ func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *o
 	base := a.Client(oauthCtx, token)
 	t, ok := base.Transport.(*oauth2.Transport)
 	if !ok || t == nil {
-		return nil, nil, nil, fmt.Errorf("unexpected transport type from spotify authenticator")
+		return nil, nil, nil, nil, fmt.Errorf("unexpected transport type from spotify authenticator")
 	}
 	saveErrCh := make(chan error, 4)
-	ts := &savingTokenSource{base: t.Source, last: token, saveErrCh: saveErrCh}
+	revokedCh := make(chan struct{}, 1)
+	ts := &savingTokenSource{
+		base:      t.Source,
+		last:      token,
+		saveErrCh: saveErrCh,
+		revokedCh: revokedCh,
+	}
 	// Trigger a refresh now so the token is fresh before any polls start.
 	if freshTok, err := ts.Token(); err != nil {
 		log.Printf("[auth] startup token refresh failed: %v", err)
@@ -194,7 +259,7 @@ func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *o
 			Source: ts,
 			Base:   transport,
 		},
-	}, saveErrCh, cleanup, nil
+	}, saveErrCh, revokedCh, cleanup, nil
 }
 
 // Login runs the interactive PKCE flow: spins up a local callback server,

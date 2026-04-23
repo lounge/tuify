@@ -46,3 +46,10 @@ func WithLibrespotInactive(ch <-chan struct{}) ModelOption {
 func WithTokenSaveErrors(ch <-chan error) ModelOption {
 	return func(m *Model) { m.tokenSaveErrCh = ch }
 }
+
+// WithTokenRevoked provides a channel that fires once if Spotify rejects
+// the refresh token as permanently invalid. A receive triggers a clean
+// TUI shutdown (bootstrap.Run then prints a re-login message on stderr).
+func WithTokenRevoked(ch <-chan struct{}) ModelOption {
+	return func(m *Model) { m.tokenRevokedCh = ch }
+}

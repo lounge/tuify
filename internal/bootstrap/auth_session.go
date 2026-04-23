@@ -14,7 +14,8 @@ import (
 type AuthSession struct {
 	Client    *spotify.Client
 	Cleanup   func()
-	SaveErrCh <-chan error // emits token-persistence failures
+	SaveErrCh <-chan error    // emits token-persistence failures
+	RevokedCh <-chan struct{} // fires once if the refresh token is permanently invalid
 }
 
 // Authenticate connects to Spotify and returns a ready-to-use session.
@@ -40,7 +41,7 @@ func Authenticate(ctx context.Context, rc RuntimeConfig) (*AuthSession, error) {
 		}
 	}
 
-	httpClient, saveErrCh, cleanup, err := auth.NewSavingClient(ctx, authenticator, token)
+	httpClient, saveErrCh, revokedCh, cleanup, err := auth.NewSavingClient(ctx, authenticator, token)
 	if err != nil {
 		return nil, err
 	}
@@ -51,5 +52,10 @@ func Authenticate(ctx context.Context, rc RuntimeConfig) (*AuthSession, error) {
 		fmt.Fprintf(os.Stderr, "Warning: could not fetch user ID: %v\n", err)
 	}
 
-	return &AuthSession{Client: client, Cleanup: cleanup, SaveErrCh: saveErrCh}, nil
+	return &AuthSession{
+		Client:    client,
+		Cleanup:   cleanup,
+		SaveErrCh: saveErrCh,
+		RevokedCh: revokedCh,
+	}, nil
 }

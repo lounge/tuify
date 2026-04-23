@@ -29,6 +29,16 @@ func (m Model) waitForTokenSaveErr() tea.Cmd {
 	}
 }
 
+func (m Model) waitForTokenRevoked() tea.Cmd {
+	ch := m.tokenRevokedCh
+	return func() tea.Msg {
+		if _, ok := <-ch; !ok {
+			return nil
+		}
+		return TokenRevokedMsg{}
+	}
+}
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -66,6 +76,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.nowPlaying.SetError("Token save failed: "+msg.Err.Error()),
 			m.waitForTokenSaveErr(),
 		)
+	case TokenRevokedMsg:
+		// Refresh token permanently invalid — every API call will fail.
+		// Exit the TUI; bootstrap.Run prints the re-login message on stderr.
+		return m, tea.Quit
 	case spinner.TickMsg:
 		// Advance the global loading spinner and reschedule. Every frame
 		// that references loadingSpinner.View() — list status rows, device

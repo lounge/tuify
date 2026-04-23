@@ -51,6 +51,7 @@ type Model struct {
 	miniMode            bool
 	librespotInactiveCh <-chan struct{}
 	tokenSaveErrCh      <-chan error
+	tokenRevokedCh      <-chan struct{}
 
 	// Click state for double-click detection. When a left click lands on a
 	// zoned item, we record the item URI and timestamp; a second click on
@@ -107,6 +108,9 @@ func (m Model) Init() tea.Cmd {
 	}
 	if m.tokenSaveErrCh != nil {
 		cmds = append(cmds, m.waitForTokenSaveErr())
+	}
+	if m.tokenRevokedCh != nil {
+		cmds = append(cmds, m.waitForTokenRevoked())
 	}
 	return tea.Batch(cmds...)
 }
