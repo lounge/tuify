@@ -128,12 +128,11 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 	trackURI := m.nowPlaying.trackURI
 	contextURI := m.nowPlaying.contextURI
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
-		defer cancel()
-
 		// If the user manually switched to another device in Spotify,
 		// target whatever device is currently active instead of re-claiming.
 		if client.DeviceOverridden.Load() {
+			ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+			defer cancel()
 			log.Printf("[withDevice] DeviceOverridden=true, finding active device")
 			deviceID, _, _, err := client.FindDevice(ctx, true)
 			if err != nil {
@@ -148,7 +147,9 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 			return playbackResultMsg{err: nil, seek: seek}
 		}
 
-		deviceID, active, preferred, err := client.FindDevice(ctx, false)
+		findCtx, findCancel := context.WithTimeout(parent, 10*time.Second)
+		deviceID, active, preferred, err := client.FindDevice(findCtx, false)
+		findCancel()
 		if err != nil {
 			log.Printf("[withDevice] FindDevice failed: %v", err)
 			return playbackResultMsg{err: err, seek: seek}
@@ -158,17 +159,24 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 		// inactive (e.g. librespot idle). If the preferred device is missing
 		// from the API response entirely (flaky API), don't transfer to a
 		// fallback device — that would steal playback from the actual player.
+		// The re-establishment uses its own short budget so fn below gets a
+		// fresh deadline regardless of how long device wake-up takes.
 		if !active && preferred {
+			reCtx, reCancel := context.WithTimeout(parent, 5*time.Second)
 			var transferErr error
 			if contextURI != "" && trackURI != "" {
-				transferErr = client.Play(ctx, trackURI, contextURI, deviceID)
+				transferErr = client.Play(reCtx, trackURI, contextURI, deviceID)
 			} else {
-				transferErr = client.TransferPlayback(ctx, deviceID, true)
+				transferErr = client.TransferPlayback(reCtx, deviceID, true)
 			}
+			reCancel()
 			if transferErr != nil {
 				log.Printf("[playback] device re-establishment failed: %v", transferErr)
 			}
 		}
-		return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
+
+		fnCtx, fnCancel := context.WithTimeout(parent, 10*time.Second)
+		defer fnCancel()
+		return playbackResultMsg{err: fn(fnCtx, client, deviceID), seek: seek}
 	}
 }
