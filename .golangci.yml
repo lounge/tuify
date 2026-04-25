@@ -1,11 +1,13 @@
+version: "2"
+
 linters:
-  disable-all: true
+  default: none
   enable:
-    - govet
-    - staticcheck
-    - ineffassign
-    - unused
     - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
     # Additions past the minimal core set — each chosen for signal over noise:
     # - gosec: common security footguns (weak crypto, insecure perms, etc).
     # - misspell: catches typos in comments/strings. Zero false positives.
@@ -15,48 +17,72 @@ linters:
     - misspell
     - gocritic
 
-linters-settings:
-  errcheck:
-    # Stdlib calls whose errors are almost always OK to ignore in this
-    # codebase (file close on read-only handle, discarded reader input, etc).
-    # Revisit if any of these start masking real bugs.
-    exclude-functions:
-      - (io.Closer).Close
-      - (*os.File).Close
-      - (*bufio.Reader).ReadString
-      - fmt.Fprint
-      - fmt.Fprintf
-      - fmt.Fprintln
+  settings:
+    errcheck:
+      # Stdlib calls whose errors are almost always OK to ignore in this
+      # codebase (file close on read-only handle, discarded reader input, etc).
+      # Revisit if any of these start masking real bugs.
+      exclude-functions:
+        - (io.Closer).Close
+        - (*os.File).Close
+        - (*bufio.Reader).ReadString
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
 
-  gosec:
-    # G115 (integer overflow conversion) fires on audio/graphics code
-    # everywhere PCM samples, volume levels, or image pixels are cast
-    # between fixed-width types. Those conversions are bounded by the
-    # domain (int16 PCM, 0–100 volume, uint8 RGB) and explicit clamping
-    # happens at the boundary, so the warnings are pure noise here.
-    excludes:
-      - G115
+    gosec:
+      # G115 (integer overflow conversion) fires on audio/graphics code
+      # everywhere PCM samples, volume levels, or image pixels are cast
+      # between fixed-width types. Those conversions are bounded by the
+      # domain (int16 PCM, 0–100 volume, uint8 RGB) and explicit clamping
+      # happens at the boundary, so the warnings are pure noise here.
+      #
       # G204 flags exec.Command with a non-literal path. Here the path
       # comes from the user's own config.json (librespot_path) — not
       # untrusted network input — so the warning is a false positive for
       # a TUI that deliberately invokes a user-selected binary.
-      - G204
+      #
+      # G117 (integer overflow), G118 (context.Cancel not called), and
+      # other gosec rules added after v1.x are intentionally excluded for
+      # parity with the pre-migration baseline. Re-evaluate one-by-one if
+      # we want to opt in.
+      excludes:
+        - G115
+        - G204
+        - G117
+        - G118
 
-  gocritic:
-    disabled-checks:
-      # singleCaseSwitch fires on `switch msg := msg.(type)` even when
-      # there's genuinely one case today — the type-switch form is
-      # idiomatic and forward-looking (easy to add cases). Rewriting to
-      # an if-ok assertion costs clarity for no real gain.
-      - singleCaseSwitch
+    gocritic:
+      disabled-checks:
+        # singleCaseSwitch fires on `switch msg := msg.(type)` even when
+        # there's genuinely one case today — the type-switch form is
+        # idiomatic and forward-looking (easy to add cases). Rewriting to
+        # an if-ok assertion costs clarity for no real gain.
+        - singleCaseSwitch
+
+    staticcheck:
+      # In v2, the `staticcheck` linter bundles what used to be the
+      # separate `gosimple` (S1xxx), `stylecheck` (ST1xxx), and quickfix
+      # (QF1xxx) linters. Restricting to SA* preserves v1 behaviour;
+      # broaden later if we want to opt into the style/simplify checks.
+      checks:
+        - SA*
+
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      # Tests routinely ignore write/encode errors on httptest responses
+      # and throwaway setup calls. Real bugs there surface as test
+      # failures, not silent error swallowing.
+      - path: _test\.go
+        linters:
+          - errcheck
 
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
-  exclude-rules:
-    # Tests routinely ignore write/encode errors on httptest responses
-    # and throwaway setup calls. Real bugs there surface as test
-    # failures, not silent error swallowing.
-    - path: _test\.go
-      linters:
-        - errcheck

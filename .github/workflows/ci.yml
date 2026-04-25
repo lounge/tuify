@@ -32,13 +32,13 @@ jobs:
       - name: go vet
         run: go vet ./...
 
-      - uses: golangci/golangci-lint-action@v6
+      - uses: golangci/golangci-lint-action@v8
         with:
-          version: v1.64.8
+          version: v2.11.4
           # Build from source with the runner's Go toolchain so the
-          # linter's internal typechecker matches go.mod (1.26.1). The
-          # prebuilt binary release is compiled with Go 1.24 and chokes
-          # on 1.25/1.26-targeted stdlib + deps.
+          # linter's internal typechecker matches go.mod (1.26.1).
+          # Prebuilt releases lag the latest Go and have historically
+          # choked on stdlib/deps targeting the runner's toolchain.
           install-mode: goinstall
 
   test:
