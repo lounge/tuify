@@ -11,6 +11,7 @@ import (
 
 	"github.com/lounge/tuify/internal/config"
 	"github.com/lounge/tuify/internal/librespot"
+	"github.com/lounge/tuify/internal/theme"
 )
 
 // RuntimeConfig holds the resolved configuration with defaults applied.
@@ -56,6 +57,7 @@ func LoadOrSetupConfig(r io.Reader, w io.Writer) (*config.Config, error) {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if cfg != nil {
+		backfillThemeDefaults(cfg)
 		return cfg, nil
 	}
 
@@ -66,6 +68,23 @@ func LoadOrSetupConfig(r io.Reader, w io.Writer) (*config.Config, error) {
 		w = os.Stdout
 	}
 	return runSetup(r, w)
+}
+
+// backfillThemeDefaults writes theme.Default() into cfg and persists it
+// when the user has no theme block. Pre-theme-feature configs would
+// otherwise never see the role list. Partial themes (any role set) are
+// honored as-is. A re-save error doesn't abort startup — the in-memory
+// cfg still drives this run; we'll retry on the next launch.
+func backfillThemeDefaults(cfg *config.Config) {
+	if cfg.Theme != (theme.Theme{}) {
+		return
+	}
+	cfg.Theme = theme.Default()
+	if err := config.Save(cfg); err != nil {
+		log.Printf("[config] failed to write theme defaults: %v", err)
+		return
+	}
+	log.Printf("[config] backfilled theme defaults into config.json")
 }
 
 func runSetup(r io.Reader, w io.Writer) (*config.Config, error) {
@@ -86,7 +105,13 @@ func runSetup(r io.Reader, w io.Writer) (*config.Config, error) {
 		return nil, fmt.Errorf("client ID is required")
 	}
 
-	cfg := &config.Config{ClientID: clientID}
+	cfg := &config.Config{
+		ClientID: clientID,
+		// Seed the theme block with current defaults so a freshly-written
+		// config.json shows every overridable role with its current value.
+		// Users can edit hex codes in place without consulting docs.
+		Theme: theme.Default(),
+	}
 	if err := config.Save(cfg); err != nil {
 		return nil, fmt.Errorf("saving config: %w", err)
 	}

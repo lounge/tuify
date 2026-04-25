@@ -171,6 +171,53 @@ All configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`)
 | `client_id` | `""` | Spotify Developer App Client ID |
 | `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
 | `vim_mode` | `false` | Enable vim-style keybindings |
+| `appearance` | `""` (auto) | Force `"dark"` or `"light"` palette. Empty/omitted uses terminal-background autodetection. |
+| `theme` | _(see below)_ | Per-role color overrides (light + dark) |
+
+### Theme
+
+The `theme` block lets you override every UI color. Each role takes a
+`{light, dark}` hex pair, so the override picks up automatically based on
+the terminal's background. First-time setup writes the current defaults
+into `config.json`, so opening the file shows you the full set ready to
+edit. Removing a role (or setting either hex to `""`) falls back to the
+built-in default for that mode. Each color must be `#RGB` or `#RRGGBB` —
+invalid values are rejected at startup with a clear error.
+
+What each role drives:
+
+| Role | Where you see it |
+|------|------------------|
+| `primary` | Selected list item, now-playing track title, active home tab background, search prefix, progress bar gradient start, spinner |
+| `secondary` | Now-playing play/pause icon, search input text, overlay box borders, active-device icon |
+| `muted` | Breadcrumb, device list secondary text, inactive device names |
+| `subtle` | Overlay box content, help descriptions, selected list descriptions, loading text, progress bar timestamps |
+| `dim` | Empty progress bar track, dimmed list descriptions |
+| `error` | Error rows in lists, error banners in the now-playing area |
+| `text` | List item titles, status line, help command names, dialog titles |
+| `text_dim` | List item descriptions, dimmed list titles |
+| `tip` | End glyph of the progress bar gradient (●) |
+| `on_primary` | Text rendered on top of a `primary` background (active home tab label) |
+| `gradient_start` / `gradient_end` | Top and bottom of the now-playing area background gradient |
+
+```jsonc
+{
+  "theme": {
+    "primary":        { "light": "#874BFD", "dark": "#58f796" },
+    "secondary":      { "light": "#6232CC", "dark": "#b48eff" },
+    "muted":          { "light": "#9B9B9B", "dark": "#626262" },
+    "subtle":         { "light": "#6C6C6C", "dark": "#8a8a8a" },
+    "dim":            { "light": "#BCBCBC", "dark": "#444444" },
+    "error":          { "light": "#FF0000", "dark": "#ff0087" },
+    "text":           { "light": "#1a1a1a", "dark": "#dddddd" },
+    "text_dim":       { "light": "#A49FA5", "dark": "#777777" },
+    "tip":            { "light": "#D4A017", "dark": "#FFD866" },
+    "on_primary":     { "light": "#000000", "dark": "#000000" },
+    "gradient_start": { "light": "#e4d4f7", "dark": "#110a24" },
+    "gradient_end":   { "light": "#f8f5fc", "dark": "#040208" }
+  }
+}
+```
 
 ## Logs
 

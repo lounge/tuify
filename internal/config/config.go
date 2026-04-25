@@ -1,25 +1,33 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/lounge/tuify/internal/theme"
 )
 
 const DefaultRedirectURL = "http://127.0.0.1:4444/callback"
 
 type Config struct {
-	ClientID        string `json:"client_id"`
-	EnableLibrespot bool   `json:"enable_librespot,omitempty"`
-	LibrespotPath   string `json:"librespot_path,omitempty"`
-	DeviceName      string `json:"device_name,omitempty"`
-	Bitrate         int    `json:"bitrate,omitempty"`
-	SpotifyUsername string `json:"spotify_username,omitempty"`
-	RedirectURL     string `json:"redirect_url,omitempty"`
-	AudioBackend    string `json:"audio_backend,omitempty"`
-	VimMode         bool   `json:"vim_mode,omitempty"`
+	ClientID        string      `json:"client_id"`
+	EnableLibrespot bool        `json:"enable_librespot,omitempty"`
+	LibrespotPath   string      `json:"librespot_path,omitempty"`
+	DeviceName      string      `json:"device_name,omitempty"`
+	Bitrate         int         `json:"bitrate,omitempty"`
+	SpotifyUsername string      `json:"spotify_username,omitempty"`
+	RedirectURL     string      `json:"redirect_url,omitempty"`
+	AudioBackend    string      `json:"audio_backend,omitempty"`
+	VimMode         bool        `json:"vim_mode,omitempty"`
+	// Appearance forces dark or light palette selection. Empty (omitted)
+	// uses lipgloss's terminal-background autodetection. Valid: "", "dark",
+	// "light".
+	Appearance string      `json:"appearance,omitempty"`
+	Theme      theme.Theme `json:"theme,omitempty"`
 }
 
 // Dir returns the tuify config directory. Honors $XDG_CONFIG_HOME, otherwise
@@ -46,6 +54,14 @@ func (c *Config) Validate() error {
 	if c.ClientID == "" {
 		return fmt.Errorf("client_id is required")
 	}
+	switch c.Appearance {
+	case "", "dark", "light":
+	default:
+		return fmt.Errorf(`invalid appearance %q: must be "dark", "light", or empty for auto`, c.Appearance)
+	}
+	if err := theme.Validate(c.Theme); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -54,16 +70,23 @@ func Load() (*Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(dir, "config.json"))
+	path := filepath.Join(dir, "config.json")
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
 		return nil, err
 	}
+	// DisallowUnknownFields surfaces typo'd keys as errors instead of
+	// silently dropping them. Without it, a mistyped field name (a missing
+	// letter, swapped order, etc.) would leave the user puzzling over why
+	// their setting "doesn't work" while the value never reached the code.
+	dec := json.NewDecoder(bytes.NewReader(data))
+	dec.DisallowUnknownFields()
 	var cfg Config
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return nil, err
+	if err := dec.Decode(&cfg); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 	return &cfg, nil
 }

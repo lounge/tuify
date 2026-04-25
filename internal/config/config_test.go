@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lounge/tuify/internal/theme"
 )
 
 func TestDir_XDGOverride(t *testing.T) {
@@ -151,9 +153,89 @@ func TestSave_OmitsEmptyFields(t *testing.T) {
 
 	// omitempty fields should not appear
 	s := string(data)
-	for _, field := range []string{"enable_librespot", "librespot_path", "device_name", "bitrate", "vim_mode"} {
+	for _, field := range []string{"enable_librespot", "librespot_path", "device_name", "bitrate", "vim_mode", "appearance"} {
 		if strings.Contains(s, field) {
 			t.Errorf("expected %q to be omitted from JSON, got: %s", field, s)
 		}
+	}
+}
+
+func TestValidate_AppearanceValues(t *testing.T) {
+	cases := []struct {
+		appearance string
+		ok         bool
+	}{
+		{"", true},
+		{"dark", true},
+		{"light", true},
+		{"Dark", false}, // case-sensitive
+		{"system", false},
+		{"auto", false},
+		{"invalid", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.appearance, func(t *testing.T) {
+			cfg := &Config{ClientID: "id", Appearance: tc.appearance}
+			err := cfg.Validate()
+			if tc.ok && err != nil {
+				t.Errorf("Validate(%q): unexpected error: %v", tc.appearance, err)
+			}
+			if !tc.ok {
+				if err == nil {
+					t.Fatalf("Validate(%q): expected error, got nil", tc.appearance)
+				}
+				if !strings.Contains(err.Error(), "appearance") {
+					t.Errorf("error should mention 'appearance', got: %v", err)
+				}
+				if !strings.Contains(err.Error(), tc.appearance) {
+					t.Errorf("error should quote the bad value %q, got: %v", tc.appearance, err)
+				}
+			}
+		})
+	}
+}
+
+func TestValidate_RejectsBadTheme(t *testing.T) {
+	cfg := &Config{
+		ClientID: "id",
+		Theme: theme.Theme{
+			Primary: theme.Variant{Light: "not-a-color"},
+		},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid theme color")
+	}
+	// Validate should delegate to theme.Validate, surfacing the JSON path.
+	if !strings.Contains(err.Error(), "theme.primary.light") {
+		t.Errorf("error should name JSON path, got: %v", err)
+	}
+}
+
+func TestLoad_RejectsUnknownFields(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	dir := filepath.Join(tmp, "tuify")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// "vim_mod" mimics a realistic user typo (truncated "vim_mode") —
+	// silently ignored without DisallowUnknownFields. With it, Load must
+	// surface the unknown key.
+	bad := []byte(`{"client_id":"abc","vim_mod":true}`)
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), bad, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected error for unknown field, got nil")
+	}
+	if !strings.Contains(err.Error(), "vim_mod") {
+		t.Errorf("error should name the offending key, got: %v", err)
+	}
+	// Path of the offending file should be wrapped in for clarity.
+	if !strings.Contains(err.Error(), "config.json") {
+		t.Errorf("error should include the file path, got: %v", err)
 	}
 }

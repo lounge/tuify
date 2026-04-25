@@ -7,115 +7,134 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/theme"
 	zone "github.com/lrstanley/bubblezone"
 )
 
 const homeTabWidth = 20
 
-// Color palette — adaptive for light and dark terminals.
+// Package-level style vars. They are populated by RebuildStyles, which
+// must run after theme.Apply has reassigned the palette — lipgloss
+// captures color values at style construction time, so styles built
+// before Apply would render with stale defaults.
 var (
-	colorPrimary   = lipgloss.AdaptiveColor{Light: "#874BFD", Dark: "#58f796"}
-	colorSecondary = lipgloss.AdaptiveColor{Light: "#6232CC", Dark: "#b48eff"}
-	colorMuted     = lipgloss.AdaptiveColor{Light: "#9B9B9B", Dark: "#626262"}
-	colorSubtle    = lipgloss.AdaptiveColor{Light: "#6C6C6C", Dark: "#8a8a8a"}
-	colorDim       = lipgloss.AdaptiveColor{Light: "#BCBCBC", Dark: "#444444"}
-	colorError     = lipgloss.AdaptiveColor{Light: "#FF0000", Dark: "#ff0087"}
-	colorText      = lipgloss.AdaptiveColor{Light: "#1a1a1a", Dark: "#dddddd"}
-	colorTextDim   = lipgloss.AdaptiveColor{Light: "#A49FA5", Dark: "#777777"}
-	colorTip       = lipgloss.AdaptiveColor{Light: "#D4A017", Dark: "#FFD866"}
+	// Shared list item styles
+	selectedStyle lipgloss.Style
+	normalStyle   lipgloss.Style
+
+	// Breadcrumb
+	breadcrumbStyle lipgloss.Style
+
+	// Now-playing bar
+	nowPlayingTrackStyle  lipgloss.Style
+	nowPlayingArtistStyle lipgloss.Style
+	nowPlayingIconStyle   lipgloss.Style
+	progressEmptyStyle    lipgloss.Style
+	progressTimeStyle     lipgloss.Style
+
+	// Home tabs
+	homeTabActive   lipgloss.Style
+	homeTabInactive lipgloss.Style
+
+	// Shared
+	errorStyle         lipgloss.Style
+	loadingStyle       lipgloss.Style
+	searchInputStyle   lipgloss.Style
+	searchPrefixStyle  lipgloss.Style
+	overlayBoxStyle    lipgloss.Style
+	helpCmdStyle       lipgloss.Style
+	helpDescStyle      lipgloss.Style
+	searchHintBoxStyle lipgloss.Style
+	helpOverlayStyle   lipgloss.Style
 )
 
-// Shared list item styles
-var (
+// RebuildStyles (re)constructs every package-level style from the current
+// theme palette. Call once at startup after theme.Apply, before any UI
+// rendering begins. Safe to call again if the theme is ever changed at
+// runtime.
+func RebuildStyles() {
 	selectedStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, false, false, true).
-			BorderForeground(colorPrimary).
-			Foreground(colorPrimary).
-			Padding(0, 0, 0, 1)
+		Border(lipgloss.NormalBorder(), false, false, false, true).
+		BorderForeground(theme.Primary).
+		Foreground(theme.Primary).
+		Padding(0, 0, 0, 1)
 
 	normalStyle = lipgloss.NewStyle().
-			Padding(0, 0, 0, 2)
-)
+		Padding(0, 0, 0, 2)
 
-// Breadcrumb
-var breadcrumbStyle = lipgloss.NewStyle().
-	Foreground(colorMuted).
-	MarginLeft(2).
-	MarginBottom(1)
+	breadcrumbStyle = lipgloss.NewStyle().
+		Foreground(theme.Muted).
+		MarginLeft(2).
+		MarginBottom(1)
 
-// Now-playing bar
-var (
 	nowPlayingTrackStyle = lipgloss.NewStyle().
-				Foreground(colorPrimary).
-				Bold(true)
+		Foreground(theme.Primary).
+		Bold(true)
 
 	nowPlayingArtistStyle = lipgloss.NewStyle().
-				Foreground(colorText)
+		Foreground(theme.Text)
 
 	nowPlayingIconStyle = lipgloss.NewStyle().
-				Foreground(colorSecondary)
+		Foreground(theme.Secondary)
 
-	progressEmptyStyle = lipgloss.NewStyle().Foreground(colorDim)
-	progressTimeStyle  = lipgloss.NewStyle().Foreground(colorSubtle)
-)
+	progressEmptyStyle = lipgloss.NewStyle().Foreground(theme.Dim)
+	progressTimeStyle = lipgloss.NewStyle().Foreground(theme.Subtle)
 
-// Now-playing gradient background — adaptive for light and dark terminals.
-var (
-	colorGradientStart = lipgloss.AdaptiveColor{Light: "#e4d4f7", Dark: "#110a24"}
-	colorGradientEnd   = lipgloss.AdaptiveColor{Light: "#f8f5fc", Dark: "#040208"}
-)
-
-// Home tabs
-var (
 	homeTabActive = lipgloss.NewStyle().
-			Background(colorPrimary).
-			Foreground(lipgloss.Color("#000000")).
-			Width(homeTabWidth).
-			Align(lipgloss.Center).
-			Padding(1, 3)
+		Background(theme.Primary).
+		Foreground(theme.OnPrimary).
+		Width(homeTabWidth).
+		Align(lipgloss.Center).
+		Padding(1, 3)
 
 	homeTabInactive = lipgloss.NewStyle().
-			Foreground(colorPrimary).
-			Width(homeTabWidth).
-			Align(lipgloss.Center).
-			Padding(1, 3)
-)
+		Foreground(theme.Primary).
+		Width(homeTabWidth).
+		Align(lipgloss.Center).
+		Padding(1, 3)
 
-// Shared
-var (
 	errorStyle = lipgloss.NewStyle().
-			Foreground(colorError)
+		Foreground(theme.Error)
 
 	loadingStyle = lipgloss.NewStyle().
-			Foreground(colorSubtle)
+		Foreground(theme.Subtle)
 
 	searchInputStyle = lipgloss.NewStyle().
-				Foreground(colorSecondary)
+		Foreground(theme.Secondary)
 
 	searchPrefixStyle = lipgloss.NewStyle().
-				Foreground(colorPrimary).
-				Bold(true)
+		Foreground(theme.Primary).
+		Bold(true)
 
 	overlayBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(colorSecondary).
-			Foreground(colorSubtle)
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(theme.Secondary).
+		Foreground(theme.Subtle)
 
-	helpCmdStyle  = lipgloss.NewStyle().Foreground(colorText)
-	helpDescStyle = lipgloss.NewStyle().Foreground(colorSubtle)
+	helpCmdStyle = lipgloss.NewStyle().Foreground(theme.Text)
+	helpDescStyle = lipgloss.NewStyle().Foreground(theme.Subtle)
 
 	searchHintBoxStyle = overlayBoxStyle.Padding(1, 2)
-	helpOverlayStyle   = overlayBoxStyle.Padding(1, 3)
-)
+	helpOverlayStyle = overlayBoxStyle.Padding(1, 3)
+
+	rebuildSpinnerStyle()
+}
+
+// init seeds the styles with the default palette so anything that reads
+// them before bootstrap (e.g. tests that don't go through Run) still gets
+// usable values. bootstrap calls RebuildStyles again after theme.Apply.
+func init() {
+	RebuildStyles()
+}
 
 func newListDelegate() list.DefaultDelegate {
 	d := list.NewDefaultDelegate()
-	d.Styles.NormalTitle = normalStyle.Foreground(colorText)
-	d.Styles.NormalDesc = d.Styles.NormalTitle.Foreground(colorTextDim)
+	d.Styles.NormalTitle = normalStyle.Foreground(theme.Text)
+	d.Styles.NormalDesc = d.Styles.NormalTitle.Foreground(theme.TextDim)
 	d.Styles.SelectedTitle = selectedStyle
-	d.Styles.SelectedDesc = selectedStyle.Foreground(colorSubtle)
-	d.Styles.DimmedTitle = normalStyle.Foreground(colorTextDim)
-	d.Styles.DimmedDesc = d.Styles.DimmedTitle.Foreground(colorDim)
+	d.Styles.SelectedDesc = selectedStyle.Foreground(theme.Subtle)
+	d.Styles.DimmedTitle = normalStyle.Foreground(theme.TextDim)
+	d.Styles.DimmedDesc = d.Styles.DimmedTitle.Foreground(theme.Dim)
 	return d
 }
 

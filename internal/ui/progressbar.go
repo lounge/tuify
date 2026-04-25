@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/theme"
 	"github.com/lucasb-eyer/go-colorful"
 )
 
@@ -47,8 +48,8 @@ func renderProgressBar(width, progressMs, durationMs int) string {
 
 	filledStr := renderGradientFill(
 		filled,
-		resolveHex(colorPrimary),
-		resolveHex(colorTip),
+		resolveHex(theme.Primary),
+		resolveHex(theme.Tip),
 	)
 	bar := filledStr + progressEmptyStyle.Render(strings.Repeat("─", empty))
 
@@ -68,7 +69,7 @@ func renderMiniBar(barWidth, progressMs, durationMs int) string {
 	}
 	empty := barWidth - filled
 
-	filledStr := renderGradientFill(filled, resolveHex(colorPrimary), resolveHex(colorTip))
+	filledStr := renderGradientFill(filled, resolveHex(theme.Primary), resolveHex(theme.Tip))
 	return filledStr + progressEmptyStyle.Render(strings.Repeat("─", empty))
 }
 

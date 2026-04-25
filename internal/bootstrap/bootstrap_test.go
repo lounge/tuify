@@ -9,6 +9,7 @@ import (
 
 	"github.com/lounge/tuify/internal/config"
 	"github.com/lounge/tuify/internal/spotify"
+	"github.com/lounge/tuify/internal/theme"
 )
 
 // --- LoadOrSetupConfig tests ---
@@ -223,5 +224,81 @@ func TestStartLibrespot_ErrorOnBinaryMissing(t *testing.T) {
 	}
 	if svc != nil {
 		t.Error("expected nil services on error")
+	}
+}
+
+// --- backfillThemeDefaults tests ---
+
+func TestBackfillThemeDefaults_FillsEmptyThemeAndPersists(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	// Pre-theme-feature config: client_id only, no theme block.
+	dir := filepath.Join(tmp, "tuify")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	pre := []byte(`{"client_id":"abc","enable_librespot":true}`)
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, pre, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := LoadOrSetupConfig(nil, nil)
+	if err != nil {
+		t.Fatalf("LoadOrSetupConfig: %v", err)
+	}
+
+	// In-memory cfg must have the defaults populated.
+	want := theme.Default()
+	if got.Theme != want {
+		t.Errorf("in-memory theme not populated\n got: %+v\nwant: %+v", got.Theme, want)
+	}
+	if got.ClientID != "abc" {
+		t.Errorf("ClientID lost: got %q", got.ClientID)
+	}
+	if !got.EnableLibrespot {
+		t.Error("EnableLibrespot lost")
+	}
+
+	// File on disk must now contain the theme block. Reload through Load
+	// to verify the persisted form parses cleanly with DisallowUnknownFields.
+	loaded, err := config.Load()
+	if err != nil {
+		t.Fatalf("reload after backfill: %v", err)
+	}
+	if loaded.Theme != want {
+		t.Errorf("persisted theme mismatch\n got: %+v\nwant: %+v", loaded.Theme, want)
+	}
+}
+
+func TestBackfillThemeDefaults_LeavesPartialThemeAlone(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	dir := filepath.Join(tmp, "tuify")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	// User overrode just primary.dark — must not be overwritten by backfill.
+	pre := []byte(`{"client_id":"abc","theme":{"primary":{"dark":"#ff0000"}}}`)
+	configPath := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(configPath, pre, 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	got, err := LoadOrSetupConfig(nil, nil)
+	if err != nil {
+		t.Fatalf("LoadOrSetupConfig: %v", err)
+	}
+
+	if got.Theme.Primary.Dark != "#ff0000" {
+		t.Errorf("user override clobbered: got %+v", got.Theme.Primary)
+	}
+	// Other roles stay zero-valued — Apply will fall back to package
+	// defaults at startup. Filling them here would erase the distinction
+	// between "user provided some keys" and "first launch".
+	if got.Theme.Secondary != (theme.Variant{}) {
+		t.Errorf("partial theme over-filled: Secondary = %+v", got.Theme.Secondary)
 	}
 }

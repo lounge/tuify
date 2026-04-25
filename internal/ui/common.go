@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/theme"
 )
 
 // loadingSpinner is a single spinner instance shared by every "loading" UI
@@ -22,8 +23,16 @@ var loadingSpinner = newLoadingSpinner()
 func newLoadingSpinner() spinner.Model {
 	s := spinner.New()
 	s.Spinner = spinner.MiniDot
-	s.Style = lipgloss.NewStyle().Foreground(colorPrimary)
+	s.Style = lipgloss.NewStyle().Foreground(theme.Primary)
 	return s
+}
+
+// rebuildSpinnerStyle refreshes loadingSpinner's style from the current
+// theme palette. The spinner is constructed once at package init, so its
+// Style is otherwise frozen with the default palette; RebuildStyles in
+// styles.go calls this after theme.Apply runs.
+func rebuildSpinnerStyle() {
+	loadingSpinner.Style = lipgloss.NewStyle().Foreground(theme.Primary)
 }
 
 // view is the interface all navigable views must implement.
@@ -121,7 +130,7 @@ func (i statusItem) Title() string {
 // both render the same line; without this helper the two call sites
 // drift out of sync as styling tweaks land.
 func renderStatusLine(msg string, spinning, isError bool) string {
-	style := lipgloss.NewStyle().Foreground(colorText)
+	style := lipgloss.NewStyle().Foreground(theme.Text)
 	if isError {
 		style = errorStyle
 	}

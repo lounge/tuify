@@ -7,7 +7,9 @@ import (
 	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/config"
+	"github.com/lounge/tuify/internal/theme"
 	"github.com/lounge/tuify/internal/ui"
 	zone "github.com/lrstanley/bubblezone"
 )
@@ -36,6 +38,23 @@ func Run() error {
 	if err := cfg.Validate(); err != nil {
 		return fmt.Errorf("config error: %w", err)
 	}
+
+	// Force or autodetect terminal background mode before any rendering.
+	// AdaptiveColor lookups read this at render time, so it has to land
+	// before the first View() call. Empty cfg.Appearance leaves lipgloss
+	// in autodetect mode.
+	switch cfg.Appearance {
+	case "dark":
+		lipgloss.SetHasDarkBackground(true)
+	case "light":
+		lipgloss.SetHasDarkBackground(false)
+	}
+
+	// Apply theme overrides before any UI rendering. ui.RebuildStyles
+	// reconstructs every package-level lipgloss.Style with the new palette
+	// (lipgloss captures colors by value at style construction time).
+	theme.Apply(cfg.Theme)
+	ui.RebuildStyles()
 
 	rc := ResolveRuntime(cfg)
 

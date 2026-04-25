@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/theme"
 	"github.com/lucasb-eyer/go-colorful"
 	runewidth "github.com/mattn/go-runewidth"
 )
@@ -136,8 +137,8 @@ func (m nowPlayingModel) renderLabel(budget int) string {
 // renderGradient renders the now-playing area with a purple background that
 // fades from top to bottom.
 func (m nowPlayingModel) renderGradient(lines []string) string {
-	startC, _ := colorful.Hex(resolveHex(colorGradientStart))
-	endC, _ := colorful.Hex(resolveHex(colorGradientEnd))
+	startC, _ := colorful.Hex(resolveHex(theme.GradientStart))
+	endC, _ := colorful.Hex(resolveHex(theme.GradientEnd))
 
 	// Render the entire block through lipgloss for correct width/wrapping,
 	// then apply per-line gradient to the visual output.

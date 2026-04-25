@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
+	"github.com/lounge/tuify/internal/theme"
 )
 
 // Messages
@@ -136,16 +137,16 @@ func (d *deviceSelectorModel) view(width, height int) string {
 		}
 		var lines []string
 		for i, dev := range d.devices {
-			nameStyle := lipgloss.NewStyle().Foreground(colorText)
-			typeStyle := lipgloss.NewStyle().Foreground(colorMuted)
+			nameStyle := lipgloss.NewStyle().Foreground(theme.Text)
+			typeStyle := lipgloss.NewStyle().Foreground(theme.Muted)
 			if dev.ID == d.activeDeviceID {
-				nameStyle = nameStyle.Foreground(colorMuted)
+				nameStyle = nameStyle.Foreground(theme.Muted)
 			} else if i == d.cursor {
-				nameStyle = nameStyle.Foreground(colorPrimary).Bold(true)
+				nameStyle = nameStyle.Foreground(theme.Primary).Bold(true)
 			}
 			var icon string
 			if dev.ID == d.activeDeviceID {
-				icon = lipgloss.NewStyle().Foreground(colorSecondary).Render("◉") + " "
+				icon = lipgloss.NewStyle().Foreground(theme.Secondary).Render("◉") + " "
 			} else {
 				icon = "  "
 			}
@@ -157,7 +158,7 @@ func (d *deviceSelectorModel) view(width, height int) string {
 		body = strings.Join(lines, "\n")
 	}
 
-	title := lipgloss.NewStyle().Foreground(colorText).Bold(true).Render("Select Device")
+	title := lipgloss.NewStyle().Foreground(theme.Text).Bold(true).Render("Select Device")
 	content := title + "\n\n" + body
 	box := deviceOverlayStyle.Render(content)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)
