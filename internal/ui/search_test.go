@@ -246,7 +246,7 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 
 func TestSearchView_RebuildList_NoViewPanic(t *testing.T) {
 	v := newSearchView(context.Background(), nil, 80, 10, false)
-	
+
 	items := make([]list.Item, 1000)
 	for i := range items {
 		items[i] = trackItem{name: "Track", uri: "u"}
@@ -254,7 +254,7 @@ func TestSearchView_RebuildList_NoViewPanic(t *testing.T) {
 	v.items = items
 	v.rebuildList()
 	v.list.Select(900)
-	
+
 	v.items = nil
 	v.query = "something"
 	v.pending = 0
@@ -270,7 +270,7 @@ func TestSearchView_RebuildList_NoViewPanic(t *testing.T) {
 
 func TestSearchView_Debounce_NoViewPanic(t *testing.T) {
 	v := newSearchView(context.Background(), nil, 80, 10, false)
-	
+
 	items := make([]list.Item, 1000)
 	for i := range items {
 		items[i] = trackItem{name: "Track", uri: "u"}
