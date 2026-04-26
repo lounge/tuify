@@ -181,8 +181,7 @@ The `theme` block lets you override every UI color. Each role takes a
 the terminal's background. First-time setup writes the current defaults
 into `config.json`, so opening the file shows you the full set ready to
 edit. Removing a role (or setting either hex to `""`) falls back to the
-built-in default for that mode. Each color must be `#RGB` or `#RRGGBB` —
-invalid values are rejected at startup with a clear error.
+built-in default for that mode. Each color must be `#RGB` or `#RRGGBB`.
 
 What each role drives:
 
@@ -251,6 +250,7 @@ golangci-lint run ./...   # matches CI; catches formatting + lint issues
 | `internal/lyrics` | Genius.com lyrics scraping |
 | `internal/auth` | OAuth2 PKCE authentication |
 | `internal/config` | Configuration management |
+| `internal/theme` | Color palette + user theme overrides applied at startup |
 | `internal/testutil` | Test-only helpers shared across packages (HTTP stubbing) |
 
 ## TODO
