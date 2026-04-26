@@ -190,7 +190,18 @@ func (l *lazyList) findByURI(uri string) (int, bool) {
 
 // selectByURI selects the item matching uri, or sets syncURI for deferred
 // resolution. Returns true if the caller should fetch more data.
+//
+// Important: findByURI returns an index into l.items (the full backing
+// slice), but l.list.Select operates on the bubbles list's currently-
+// visible items. During filter mode (l.searching == true) those two
+// slices diverge — selecting by an l.items index would set Paginator.Page
+// past the visible-list bounds and panic on the next render. So while
+// filtering we just queue the URI for later resolution.
 func (l *lazyList) selectByURI(uri string) bool {
+	if l.searching {
+		l.syncURI = uri
+		return false
+	}
 	if i, ok := l.findByURI(uri); ok {
 		l.list.Select(i)
 		l.syncURI = ""
@@ -205,9 +216,11 @@ func (l *lazyList) selectByURI(uri string) bool {
 }
 
 // resolveSync tries to select the pending syncURI after new items are loaded.
-// Returns true if the caller should fetch more data.
+// Returns true if the caller should fetch more data. Skipped while
+// filtering for the same reason as selectByURI: the bubbles list shows a
+// subset of l.items and a stale index would panic on render.
 func (l *lazyList) resolveSync() bool {
-	if l.syncURI == "" {
+	if l.syncURI == "" || l.searching {
 		return false
 	}
 	if i, ok := l.findByURI(l.syncURI); ok {

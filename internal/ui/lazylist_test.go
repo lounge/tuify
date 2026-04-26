@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -364,5 +365,93 @@ func TestLazyList_ApplyFilter_ShrinkThenGrow_NoViewPanic(t *testing.T) {
 
 	if got := len(ll.list.Items()); got != 2 {
 		t.Fatalf("expected 2 filtered items after append, got %d", got)
+	}
+}
+
+// TestLazyList_SelectByURI_DuringSearch_NoPanic guards against a panic
+// where selectByURI would Select an l.items index against bubbles' (much
+// smaller) filtered m.items, leaving Paginator.Page past the visible-list
+// bounds. Symptom: `slice bounds out of range [N:M]` from list.populatedView
+// at render time. The fix queues syncURI while searching instead of
+// touching the bubbles list.
+func TestLazyList_SelectByURI_DuringSearch_NoPanic(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = false
+
+	// 1000 items split into two name groups so a query reliably filters
+	// the bubbles list down to a small subset. The sync target ("now-playing")
+	// lives in group B at a high index — invisible under the "alpha" filter.
+	items := make([]list.Item, 1000)
+	for i := range items {
+		if i < 100 {
+			items[i] = trackItem{name: fmt.Sprintf("alpha %d", i), uri: fmt.Sprintf("a%d", i)}
+		} else {
+			items[i] = trackItem{name: fmt.Sprintf("beta %d", i), uri: fmt.Sprintf("b%d", i)}
+		}
+	}
+	items[900] = trackItem{name: "beta now-playing", uri: "now-playing"}
+	ll.items = items
+	ll.list.SetItems(items)
+
+	ll.searching = true
+	ll.searchQuery = "alpha"
+	ll.applyFilter()
+
+	if got := len(ll.list.Items()); got >= 200 {
+		t.Fatalf("filter did not shrink bubbles list as expected: %d", got)
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("selectByURI/View panicked under filter: %v", r)
+		}
+	}()
+
+	ll.selectByURI("now-playing")
+	_ = ll.list.View()
+
+	if ll.syncURI != "now-playing" {
+		t.Errorf("expected syncURI to be queued, got %q", ll.syncURI)
+	}
+}
+
+// TestLazyList_ResolveSync_DuringSearch_Skips covers the same bug on the
+// resolveSync path, which is the one called from loaded-msg handlers.
+func TestLazyList_ResolveSync_DuringSearch_Skips(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = false
+
+	items := make([]list.Item, 1000)
+	for i := range items {
+		if i < 100 {
+			items[i] = trackItem{name: fmt.Sprintf("alpha %d", i), uri: fmt.Sprintf("a%d", i)}
+		} else {
+			items[i] = trackItem{name: fmt.Sprintf("beta %d", i), uri: fmt.Sprintf("b%d", i)}
+		}
+	}
+	items[900] = trackItem{name: "beta now-playing", uri: "now-playing"}
+	ll.items = items
+	ll.list.SetItems(items)
+
+	ll.searching = true
+	ll.searchQuery = "alpha"
+	ll.syncURI = "now-playing"
+	ll.applyFilter()
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Fatalf("resolveSync/View panicked under filter: %v", r)
+		}
+	}()
+
+	if got := ll.resolveSync(); got {
+		t.Errorf("resolveSync should not request fetch while searching, got true")
+	}
+	_ = ll.list.View()
+
+	if ll.syncURI != "now-playing" {
+		t.Errorf("syncURI must remain queued for resolution after search closes, got %q", ll.syncURI)
 	}
 }
