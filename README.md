@@ -255,8 +255,6 @@ golangci-lint run ./...   # matches CI; catches formatting + lint issues
 
 ## TODO
 
-- Waveform visualizer — classic waveform using raw PCM
-- Maybe themes? Probably not :)
 - Make it work when connected to external devices (Sonos) - doesn't work for some stupid reason... (https://github.com/spotify/web-api/issues/1337).
 
 ## License
