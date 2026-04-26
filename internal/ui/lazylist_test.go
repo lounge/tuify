@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -364,5 +365,46 @@ func TestLazyList_ApplyFilter_ShrinkThenGrow_NoViewPanic(t *testing.T) {
 
 	if got := len(ll.list.Items()); got != 2 {
 		t.Fatalf("expected 2 filtered items after append, got %d", got)
+	}
+}
+
+func TestLazyList_SetItemsResetCursor_ClampsPageAndCursor(t *testing.T) {
+	items := make([]list.Item, 100)
+	for i := range items {
+		items[i] = trackItem{name: fmt.Sprintf("Track %d", i), uri: fmt.Sprintf("u%d", i)}
+	}
+
+	l := list.New(items, list.NewDefaultDelegate(), 80, 10) // 5 items per page (10 height / 2 per item)
+	l.SetFilteringEnabled(false)
+	
+	ll := &lazyList{
+		list:  l,
+		items: items,
+	}
+
+	// Move to page 10 (index 50)
+	ll.list.Select(50)
+	if ll.list.Paginator.Page == 0 {
+		t.Fatalf("expected to be on a non-zero page, check delegate height/perPage logic")
+	}
+
+	// Shrink list to 2 items. 
+	// Without the fix, bubbles would try to restore index 50 on a 2-item list and panic in View().
+	newItems := []list.Item{
+		trackItem{name: "New 1", uri: "n1"},
+		trackItem{name: "New 2", uri: "n2"},
+	}
+	
+	// This should not panic
+	ll.setItemsResetCursor(newItems)
+
+	// Verify it didn't panic and clamped correctly
+	_ = ll.list.View()
+
+	if ll.list.Index() != 0 {
+		t.Errorf("expected index 0, got %d", ll.list.Index())
+	}
+	if ll.list.Paginator.Page != 0 {
+		t.Errorf("expected page 0, got %d", ll.list.Paginator.Page)
 	}
 }
