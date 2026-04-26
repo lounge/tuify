@@ -376,7 +376,7 @@ func TestLazyList_SetItemsResetCursor_ClampsPageAndCursor(t *testing.T) {
 
 	l := list.New(items, list.NewDefaultDelegate(), 80, 10) // 5 items per page (10 height / 2 per item)
 	l.SetFilteringEnabled(false)
-	
+
 	ll := &lazyList{
 		list:  l,
 		items: items,
@@ -388,13 +388,13 @@ func TestLazyList_SetItemsResetCursor_ClampsPageAndCursor(t *testing.T) {
 		t.Fatalf("expected to be on a non-zero page, check delegate height/perPage logic")
 	}
 
-	// Shrink list to 2 items. 
+	// Shrink list to 2 items.
 	// Without the fix, bubbles would try to restore index 50 on a 2-item list and panic in View().
 	newItems := []list.Item{
 		trackItem{name: "New 1", uri: "n1"},
 		trackItem{name: "New 2", uri: "n2"},
 	}
-	
+
 	// This should not panic
 	ll.setItemsResetCursor(newItems)
 
