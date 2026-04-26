@@ -274,7 +274,9 @@ func (l *lazyList) setItemsResetCursor(items []list.Item) {
 	if u, ok := l.list.SelectedItem().(uriItem); ok {
 		selectedURI = u.URI()
 	}
-	l.list.ResetSelected()
+	// Force reset both cursor and page before setting new items
+	l.list.Select(0)
+	l.list.Paginator.Page = 0
 	l.list.SetItems(items)
 	if selectedURI == "" {
 		return
