@@ -27,7 +27,7 @@ type Config struct {
 	// uses lipgloss's terminal-background autodetection. Valid: "", "dark",
 	// "light".
 	Appearance string      `json:"appearance,omitempty"`
-	Theme      theme.Theme `json:"theme,omitempty"`
+	Theme      theme.Theme `json:"theme,omitzero"`
 }
 
 // Dir returns the tuify config directory. Honors $XDG_CONFIG_HOME, otherwise

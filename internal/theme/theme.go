@@ -43,20 +43,22 @@ type Variant struct {
 }
 
 // Theme is the user-overridable palette. Zero-valued entries preserve
-// package defaults.
+// package defaults. omitzero (Go 1.24+) is used on the outer struct
+// fields because omitempty is a no-op on struct values — it would emit
+// the role even when fully empty.
 type Theme struct {
-	Primary       Variant `json:"primary,omitempty"`
-	Secondary     Variant `json:"secondary,omitempty"`
-	Muted         Variant `json:"muted,omitempty"`
-	Subtle        Variant `json:"subtle,omitempty"`
-	Dim           Variant `json:"dim,omitempty"`
-	Error         Variant `json:"error,omitempty"`
-	Text          Variant `json:"text,omitempty"`
-	TextDim       Variant `json:"text_dim,omitempty"`
-	Tip           Variant `json:"tip,omitempty"`
-	OnPrimary     Variant `json:"on_primary,omitempty"`
-	GradientStart Variant `json:"gradient_start,omitempty"`
-	GradientEnd   Variant `json:"gradient_end,omitempty"`
+	Primary       Variant `json:"primary,omitzero"`
+	Secondary     Variant `json:"secondary,omitzero"`
+	Muted         Variant `json:"muted,omitzero"`
+	Subtle        Variant `json:"subtle,omitzero"`
+	Dim           Variant `json:"dim,omitzero"`
+	Error         Variant `json:"error,omitzero"`
+	Text          Variant `json:"text,omitzero"`
+	TextDim       Variant `json:"text_dim,omitzero"`
+	Tip           Variant `json:"tip,omitzero"`
+	OnPrimary     Variant `json:"on_primary,omitzero"`
+	GradientStart Variant `json:"gradient_start,omitzero"`
+	GradientEnd   Variant `json:"gradient_end,omitzero"`
 }
 
 // Default returns a Theme populated with the current palette defaults.

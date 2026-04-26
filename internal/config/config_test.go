@@ -153,7 +153,7 @@ func TestSave_OmitsEmptyFields(t *testing.T) {
 
 	// omitempty fields should not appear
 	s := string(data)
-	for _, field := range []string{"enable_librespot", "librespot_path", "device_name", "bitrate", "vim_mode", "appearance"} {
+	for _, field := range []string{"enable_librespot", "librespot_path", "device_name", "bitrate", "vim_mode", "appearance", "theme"} {
 		if strings.Contains(s, field) {
 			t.Errorf("expected %q to be omitted from JSON, got: %s", field, s)
 		}
