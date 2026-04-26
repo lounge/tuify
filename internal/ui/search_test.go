@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -240,5 +241,52 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("%s: Breadcrumb() = %q, want %q", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestSearchView_RebuildList_NoViewPanic(t *testing.T) {
+	v := newSearchView(context.Background(), nil, 80, 10, false)
+	
+	items := make([]list.Item, 1000)
+	for i := range items {
+		items[i] = trackItem{name: "Track", uri: "u"}
+	}
+	v.items = items
+	v.rebuildList()
+	v.list.Select(900)
+	
+	v.items = nil
+	v.query = "something"
+	v.pending = 0
+	v.rebuildList()
+
+	// Force render
+	_ = v.list.View()
+
+	if v.list.Paginator.Page != 0 {
+		t.Errorf("expected page to be reset to 0, got %d", v.list.Paginator.Page)
+	}
+}
+
+func TestSearchView_Debounce_NoViewPanic(t *testing.T) {
+	v := newSearchView(context.Background(), nil, 80, 10, false)
+	
+	items := make([]list.Item, 1000)
+	for i := range items {
+		items[i] = trackItem{name: "Track", uri: "u"}
+	}
+	v.items = items
+	v.rebuildList()
+	v.list.Select(900)
+
+	v.epoch++
+	v.items = nil
+	v.setItems([]list.Item{loadingStatusItem})
+
+	// Force render
+	_ = v.list.View()
+
+	if v.list.Paginator.Page != 0 {
+		t.Errorf("expected page to be reset to 0, got %d", v.list.Paginator.Page)
 	}
 }

@@ -142,7 +142,7 @@ func (v *searchView) goBackFetchCmd() tea.Cmd {
 func (v *searchView) retry() tea.Cmd {
 	v.searchErr = nil
 	v.pending = 1
-	v.list.SetItems([]list.Item{loadingStatusItem})
+	v.setItems([]list.Item{loadingStatusItem})
 	term := v.query
 	if v.depth > 0 {
 		term = ""
@@ -172,7 +172,7 @@ func (v *searchView) rebuildList() {
 		}
 	}
 
-	v.list.SetItems(items)
+	v.setItems(items)
 	if prev < len(items) {
 		v.list.Select(prev)
 	}

@@ -79,7 +79,7 @@ func (v *searchView) resetToDepth0() {
 	v.selectedArtist = selectedRef{}
 	v.selectedAlbum = selectedRef{}
 	v.selectedShow = selectedRef{}
-	v.list.SetItems(nil)
+	v.setItems(nil)
 }
 
 // resetPagination clears pagination state for a new depth level.
@@ -97,7 +97,19 @@ func (v *searchView) resetPagination() {
 func (v *searchView) startLoading() {
 	v.resetPagination()
 	v.pending = 1
-	v.list.SetItems([]list.Item{loadingStatusItem})
+	v.setItems([]list.Item{loadingStatusItem})
+}
+
+// setItems updates the inner list while ensuring its internal cursor and
+// page state are safe for the new items. Bubbles' list.Model can panic on
+// render if the page/cursor was left at a high index after a SetItems call
+// that significantly shrunk the list.
+func (v *searchView) setItems(items []list.Item) {
+	// Force reset both cursor and page before setting new items to avoid
+	// rendering an out-of-bounds page before we can fix up the index.
+	v.list.Select(0)
+	v.list.Paginator.Page = 0
+	v.list.SetItems(items)
 }
 
 func (v searchView) debounce() tea.Cmd {
@@ -129,7 +141,7 @@ func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 		v.selectedArtist = selectedRef{}
 		v.selectedAlbum = selectedRef{}
 		v.selectedShow = selectedRef{}
-		v.list.SetItems([]list.Item{loadingStatusItem})
+		v.setItems([]list.Item{loadingStatusItem})
 		return v.fetchResults(term, 0, 10)
 
 	case searchResultMsg:

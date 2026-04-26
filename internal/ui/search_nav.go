@@ -94,9 +94,9 @@ func (v *searchView) goBack() bool {
 	// Re-commit the original search
 	if v.query != "" {
 		v.pending = 1
-		v.list.SetItems([]list.Item{loadingStatusItem})
+		v.setItems([]list.Item{loadingStatusItem})
 	} else {
-		v.list.SetItems(nil)
+		v.setItems(nil)
 	}
 	return true
 }

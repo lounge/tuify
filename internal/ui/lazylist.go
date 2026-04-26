@@ -165,17 +165,7 @@ func (l *lazyList) openSearch() bool {
 func (l *lazyList) closeSearch() {
 	l.searching = false
 	l.searchQuery = ""
-	selected := l.list.SelectedItem()
-	l.list.SetItems(l.items)
-	if u, ok := selected.(uriItem); ok {
-		if i, found := l.findByURI(u.URI()); found {
-			l.list.Select(i)
-			return
-		}
-	}
-	if l.list.Index() >= len(l.items) {
-		l.list.ResetSelected()
-	}
+	l.setItemsResetCursor(l.items)
 }
 
 // findByURI locates an item by URI. Items must implement URI() string.
