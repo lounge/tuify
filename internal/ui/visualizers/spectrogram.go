@@ -27,10 +27,12 @@ import (
 // time, and it doesn't create boundary transitions between rendering modes.
 
 const (
-	// spectroMaxWidth sizes the ring buffer. Far wider than any realistic
-	// terminal so the history never truncates when the user resizes down.
-	// Memory cost: 512 * 64 * 4 bytes = 128 KB per spectrogram instance.
-	spectroMaxWidth = 512
+	// spectroMaxWidth sizes the ring buffer. Each terminal column consumes
+	// two ring slots (left/right time step per char), so a value of N
+	// supports terminals up to N/2 columns wide before the right side
+	// truncates. 1024 covers any realistic ultrawide terminal (up to 512
+	// cols). Memory cost: 1024 * 64 * 4 bytes = 256 KB per instance.
+	spectroMaxWidth = 1024
 
 	// spectroDecay fades old frames when there's no audio so the image
 	// keeps scrolling instead of freezing. A frozen spectrogram reads as
