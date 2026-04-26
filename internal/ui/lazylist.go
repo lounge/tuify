@@ -264,11 +264,13 @@ func (l *lazyList) applyFilter() {
 }
 
 // setItemsResetCursor replaces items, preserving the selected item by URI
-// when possible. Bubbles' list.Model restores the old cursor position via
-// Page*PerPage+cursor after SetItems, which can leave Page*PerPage past the
-// end of the new items slice and panic on the next render. Resetting the
-// cursor to 0 before SetItems makes the paginator's restored index safe, and
-// we then re-select the previous item by URI if it's still visible.
+// when possible. Bubbles' list.Model restores the old position via
+// Page*PerPage+cursor after SetItems, which can leave the restored index
+// past the end of the new items slice and panic on the next render.
+// Calling ResetSelected() before SetItems zeroes both Paginator.Page and
+// the cursor (it's defined as Select(0)), so the restored index is always
+// in-bounds; we then re-select the previous item by URI if it's still
+// visible.
 func (l *lazyList) setItemsResetCursor(items []list.Item) {
 	var selectedURI string
 	if u, ok := l.list.SelectedItem().(uriItem); ok {
