@@ -3,6 +3,7 @@ package spotify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,14 +14,15 @@ import (
 	"github.com/lounge/tuify/internal/testutil"
 )
 
-// newTestClient creates a Client backed by a test HTTP server.
-// The handler receives all requests. The returned cleanup function must be deferred.
-// Lives here (alongside Client, doWithRetry, apiGet, truncateForLog) and is
-// shared with every other *_test.go in the package.
+// newTestClient creates a Client backed by a test HTTP server. Goes
+// through New so the rate-limit gate is wired up the same way as in
+// production. The handler receives all requests. The returned cleanup
+// function must be deferred. Shared with every other *_test.go in the
+// package.
 func newTestClient(handler http.HandlerFunc) (*Client, func()) {
 	srv := httptest.NewServer(handler)
 	transport := &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}
-	c := &Client{httpClient: &http.Client{Transport: transport}}
+	c := New(nil, &http.Client{Transport: transport})
 	return c, srv.Close
 }
 
@@ -101,6 +103,44 @@ func TestDoWithRetry_429_LongRetryAfter(t *testing.T) {
 	_, _, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
 	if err == nil {
 		t.Fatal("expected error for long retry-after")
+	}
+}
+
+// Once the rateLimitTransport has armed a cooldown, subsequent doWithRetry
+// calls must short-circuit at the transport (no network) and surface a
+// structured *APIError with status 429 — not a wrapped url.Error.
+func TestDoWithRetry_TransportShortCircuitTranslatesToAPIError(t *testing.T) {
+	var hits atomic.Int32
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		w.Header().Set("Retry-After", "60")
+		w.WriteHeader(http.StatusTooManyRequests)
+	})
+	defer cleanup()
+
+	// First call arms the cooldown.
+	if _, _, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test"); err == nil {
+		t.Fatal("first call: expected error from 429")
+	}
+	armed := hits.Load()
+
+	// Second call must short-circuit at the transport.
+	_, status, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
+	if err == nil {
+		t.Fatal("second call: expected error from cooldown short-circuit")
+	}
+	if status != http.StatusTooManyRequests {
+		t.Errorf("status: got %d want 429", status)
+	}
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) {
+		t.Fatalf("expected *APIError translation, got %T: %v", err, err)
+	}
+	if apiErr.Status != http.StatusTooManyRequests {
+		t.Errorf("APIError.Status: got %d want 429", apiErr.Status)
+	}
+	if hits.Load() != armed {
+		t.Errorf("second call hit the network (hits %d → %d); transport short-circuit failed", armed, hits.Load())
 	}
 }
 

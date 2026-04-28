@@ -27,8 +27,9 @@ const (
 // Messages
 
 type playerStateMsg struct {
-	state *spotify.PlayerState
-	err   error
+	state   *spotify.PlayerState
+	err     error
+	skipped bool // true when the poll short-circuited (e.g. rate-limit cooldown)
 }
 
 type (
@@ -165,6 +166,9 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
+	if msg.skipped {
+		return nil
+	}
 	if msg.err != nil {
 		log.Printf("[poll] GetPlayerState error: %v", msg.err)
 		return nil

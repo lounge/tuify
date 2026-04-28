@@ -3,6 +3,7 @@ package spotify
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -26,6 +27,7 @@ import (
 type Client struct {
 	sp              *sp.Client
 	httpClient      *http.Client
+	rl              *rateLimitTransport
 	userID          string
 	PreferredDevice string // if set, FindDevice prefers this device name
 
@@ -39,8 +41,31 @@ type Client struct {
 // control, devices); httpClient is used for raw REST calls that the SDK
 // doesn't expose and must be the same auth-wrapped client so both paths
 // share token refresh.
+//
+// New installs a shared rate-limit gate on httpClient.Transport so SDK
+// and raw paths honor the same cooldown when Spotify returns 429.
 func New(spClient *sp.Client, httpClient *http.Client) *Client {
-	return &Client{sp: spClient, httpClient: httpClient}
+	rl := newRateLimitTransport(httpClient.Transport)
+	httpClient.Transport = rl
+	return &Client{sp: spClient, httpClient: httpClient, rl: rl}
+}
+
+// RateLimitWait reports the remaining cooldown imposed by Spotify, or zero
+// when not rate limited. Callers (e.g. the now-playing poll loop) use this
+// to skip API calls and reschedule themselves past the cooldown instead of
+// hammering the gate.
+func (c *Client) RateLimitWait() time.Duration {
+	if c.rl == nil {
+		return 0
+	}
+	return c.rl.wait()
+}
+
+// IsRateLimited reports whether the client is currently in a rate-limit
+// cooldown. Equivalent to RateLimitWait() > 0; provided for readability at
+// call sites that don't need the duration.
+func (c *Client) IsRateLimited() bool {
+	return c.RateLimitWait() > 0
 }
 
 // FetchUserID caches the authenticated user's ID on the client so later
@@ -70,11 +95,11 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("Spotify API %d: %s", e.Status, e.Body)
 }
 
-// doWithRetry performs a GET request with 429 retry logic. Returns the
-// response body, status code, and an error for non-2xx responses. The
-// error is an *APIError for HTTP-level failures; callers that need to
-// treat a specific status as non-error (e.g. 204) should check for it
-// via errors.As before propagating.
+// doWithRetry performs a GET request with inline 429 retry for short
+// Retry-After throttles. Long throttles and missing-Retry-After 429s arm
+// the shared rateLimitTransport cooldown instead, so subsequent calls
+// short-circuit before hitting the network. Returns an *APIError for
+// non-2xx responses; callers can errors.As to inspect the status.
 func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
 	for attempts := 0; attempts < 3; attempts++ {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
@@ -83,6 +108,16 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		}
 		resp, err := c.httpClient.Do(req)
 		if err != nil {
+			// Translate transport short-circuits into an APIError so callers
+			// see the same shape as a real 429 from Spotify.
+			var rle *RateLimitedError
+			if errors.As(err, &rle) {
+				return nil, http.StatusTooManyRequests, &APIError{
+					Status: http.StatusTooManyRequests,
+					Body:   []byte(rle.Error()),
+					URL:    url,
+				}
+			}
 			return nil, 0, err
 		}
 		body, err := io.ReadAll(resp.Body)
@@ -91,14 +126,17 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 			return nil, 0, err
 		}
 		if resp.StatusCode == http.StatusTooManyRequests {
+			// If the transport just armed a cooldown for this 429 (long or
+			// missing Retry-After), don't retry inline — the next attempt
+			// would short-circuit anyway.
+			if c.IsRateLimited() {
+				return nil, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), URL: url}
+			}
 			wait := 0
 			if s := resp.Header.Get("Retry-After"); s != "" {
 				if n, err := strconv.Atoi(s); err == nil {
 					wait = n
 				}
-			}
-			if wait > 10 {
-				return nil, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), URL: url}
 			}
 			select {
 			case <-time.After(time.Duration(wait) * time.Second):
