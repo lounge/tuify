@@ -46,6 +46,7 @@ var (
 	helpDescStyle      lipgloss.Style
 	searchHintBoxStyle lipgloss.Style
 	helpOverlayStyle   lipgloss.Style
+	deviceOverlayStyle lipgloss.Style
 )
 
 // RebuildStyles (re)constructs every package-level style from the current
@@ -116,6 +117,7 @@ func RebuildStyles() {
 
 	searchHintBoxStyle = overlayBoxStyle.Padding(1, 2)
 	helpOverlayStyle = overlayBoxStyle.Padding(1, 3)
+	deviceOverlayStyle = overlayBoxStyle.Padding(1, 3)
 
 	rebuildSpinnerStyle()
 }

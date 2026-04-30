@@ -115,8 +115,6 @@ func (d *deviceSelectorModel) selected() (spotify.Device, bool) {
 
 // View
 
-var deviceOverlayStyle = overlayBoxStyle.Padding(1, 3)
-
 func (d *deviceSelectorModel) view(width, height int) string {
 	var body string
 	switch {
