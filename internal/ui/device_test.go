@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -230,6 +231,102 @@ func TestHandleLoaded_Error(t *testing.T) {
 	}
 	if d.loading {
 		t.Error("loading should be false after error")
+	}
+}
+
+// TestView_RendersActiveIconForActiveDevice asserts the ◉ glyph appears
+// in the rendered view when one device is flagged Active. Regression
+// guard for the recent border bug — same root cause (a style assigned
+// before RebuildStyles ran) would have dropped the icon's color too.
+func TestView_RendersActiveIconForActiveDevice(t *testing.T) {
+	d := deviceSelectorModel{}
+	d.open()
+	d.handleLoaded(devicesLoadedMsg{devices: twoDevices()})
+
+	out := d.view(80, 20)
+	if !strings.Contains(out, "◉") {
+		t.Fatalf("rendered view should contain active-device icon ◉; got:\n%s", out)
+	}
+}
+
+// TestInjectExternalDevice_PrependsWhenMissing covers the Sonos case:
+// /me/player reports a device name that /me/player/devices omits. The
+// synthetic row must be at the head (so it sits at the top of the
+// picker independent of handleLoaded's sort), Active (so it gets the ◉
+// + skip-cursor treatment), Type "External" (renders as "external" via
+// the existing lowercased-type column), and carry the externalDeviceID
+// sentinel (so any selection attempt short-circuits before issuing a
+// 404-bound transfer).
+func TestInjectExternalDevice_PrependsWhenMissing(t *testing.T) {
+	msg := devicesLoadedMsg{devices: []spotify.Device{
+		{ID: "tuify", Name: "tuify", Type: "Speaker"},
+	}}
+	out := injectExternalDevice(msg, "Living Room (Sonos)")
+
+	if len(out.devices) != 2 {
+		t.Fatalf("device count: got %d, want 2", len(out.devices))
+	}
+	got := out.devices[0]
+	if got.Name != "Living Room (Sonos)" {
+		t.Errorf("synthetic device name: got %q, want %q", got.Name, "Living Room (Sonos)")
+	}
+	if got.ID != externalDeviceID {
+		t.Errorf("synthetic device ID: got %q, want %q", got.ID, externalDeviceID)
+	}
+	if !got.Active {
+		t.Error("synthetic device must be Active so the picker pins/marks it")
+	}
+	if got.Type != "External" {
+		t.Errorf("synthetic device Type: got %q, want %q", got.Type, "External")
+	}
+}
+
+// TestInjectExternalDevice_NoOpWhenAlreadyListed prevents a duplicate
+// row when the real device-list endpoint already includes the active
+// device — common when playing on the laptop or any Spotify-app target.
+func TestInjectExternalDevice_NoOpWhenAlreadyListed(t *testing.T) {
+	msg := devicesLoadedMsg{devices: twoDevices()}
+	out := injectExternalDevice(msg, "lounge M2")
+
+	if len(out.devices) != len(msg.devices) {
+		t.Errorf("device count changed: got %d, want %d", len(out.devices), len(msg.devices))
+	}
+}
+
+// TestInjectExternalDevice_NoOpOnError keeps an error response intact —
+// we don't want to mask a fetch failure with a synthetic row.
+func TestInjectExternalDevice_NoOpOnError(t *testing.T) {
+	msg := devicesLoadedMsg{err: errTest}
+	out := injectExternalDevice(msg, "Sonos")
+
+	if len(out.devices) != 0 || out.err != errTest {
+		t.Errorf("error message should pass through unchanged; got devices=%d err=%v", len(out.devices), out.err)
+	}
+}
+
+// TestSelected_RejectsExternalDevice ensures the synthetic row is never
+// returned by selected() — would otherwise let a user trigger a transfer
+// against the externalDeviceID sentinel and 404 against Spotify.
+func TestSelected_RejectsExternalDevice(t *testing.T) {
+	devs := []spotify.Device{
+		{ID: "tuify", Name: "tuify", Type: "Speaker"},
+	}
+	msg := injectExternalDevice(devicesLoadedMsg{devices: devs}, "Sonos")
+
+	d := deviceSelectorModel{}
+	d.open()
+	d.handleLoaded(msg)
+
+	// Force the cursor onto the external row regardless of where
+	// handleLoaded placed it, then assert selected() rejects it.
+	for i, dev := range d.devices {
+		if dev.ID == externalDeviceID {
+			d.cursor = i
+			break
+		}
+	}
+	if _, ok := d.selected(); ok {
+		t.Error("selected() must reject the external (non-transferable) row")
 	}
 }
 

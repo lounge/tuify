@@ -89,6 +89,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		loadingSpinner, cmd = loadingSpinner.Update(msg)
 		return m, cmd
 	case devicesLoadedMsg:
+		msg = injectExternalDevice(msg, m.nowPlaying.deviceName)
 		m.deviceSelector.handleLoaded(msg)
 		return m, nil
 	case transferDeviceMsg:

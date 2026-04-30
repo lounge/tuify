@@ -13,11 +13,46 @@ import (
 	"github.com/lounge/tuify/internal/theme"
 )
 
+// externalDeviceID is the sentinel ID used for the synthetic row added
+// when playback is on a Spotify Connect endpoint that /me/player/devices
+// omits (e.g. Sonos). Marking the row Active funnels it through the
+// existing "skip active" cursor/select logic so the user can't try to
+// transfer to a device whose real ID we don't have — that would 404.
+const externalDeviceID = "__external__"
+
 // Messages
 
 type devicesLoadedMsg struct {
 	devices []spotify.Device
 	err     error
+}
+
+// injectExternalDevice prepends a synthetic Active row for playingName
+// when /me/player/devices doesn't include the device that /me/player
+// reports as currently active. The two endpoints disagree for Sonos and
+// similar external Connect endpoints; the now-playing endpoint sees
+// them, the device-list endpoint doesn't. The synthetic row is rendered
+// like any other active device but is non-selectable (see
+// externalDeviceID). Inserted at the head so the row sits where the
+// user expects (top of the picker) regardless of any future change to
+// handleLoaded's sort.
+func injectExternalDevice(msg devicesLoadedMsg, playingName string) devicesLoadedMsg {
+	if msg.err != nil || playingName == "" {
+		return msg
+	}
+	for _, d := range msg.devices {
+		if d.Name == playingName {
+			return msg
+		}
+	}
+	external := spotify.Device{
+		ID:     externalDeviceID,
+		Name:   playingName,
+		Type:   "External",
+		Active: true,
+	}
+	msg.devices = append([]spotify.Device{external}, msg.devices...)
+	return msg
 }
 
 type transferDeviceMsg struct {
