@@ -10,7 +10,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
 
 ![Tuify screenshot](img/recording_2.gif)
-![Tuify visualizers](img/visualizers_2.gif)
+![Tuify visualizers](img/visualizers_4.gif)
 
 ## Features
 
