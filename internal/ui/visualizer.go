@@ -7,6 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/ui/visualizers"
 )
 
@@ -25,7 +26,13 @@ type visualizerModel struct {
 	lyrics      asyncLoader[lyricsFetchResult]
 	lyricsCache boundedCache[string, cachedLyrics]
 	audioSrc    AudioSource
+	audioSeenAt time.Time // sticky flag for "audio was flowing recently"
 }
+
+// audioStickyWindow keeps audioFlowing() true for this long after the
+// last non-nil Latest(), so cycle decisions stay stable across the
+// 150ms FFT-staleness threshold and through brief frame-arrival jitter.
+const audioStickyWindow = 3 * time.Second
 
 func newVisualizerModel(hasAudio bool) *visualizerModel {
 	var vizList []visualizers.Visualizer
@@ -74,8 +81,12 @@ func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track
 	m.active = true
 	m.drainImages()
 	m.drainLyrics()
+	m.refreshAudioSeen()
 	if trackID != m.trackID {
 		m.initTrack(trackID, durationMs, track, artist, isEpisode)
+	}
+	if m.shouldSkip(m.vizIdx) {
+		m.cycle(1)
 	}
 	m.loadImage(imageURL)
 	return m.tick()
@@ -90,11 +101,10 @@ func (m *visualizerModel) tick() tea.Cmd {
 func (m *visualizerModel) advance(progressMs int) {
 	m.drainImages()
 	m.drainLyrics()
+	data := m.refreshAudioSeen()
 	v := m.viz()
-	if m.audioSrc != nil {
-		if aa, ok := v.(visualizers.AudioAware); ok {
-			aa.SetAudioData(m.audioSrc.Latest())
-		}
+	if aa, ok := v.(visualizers.AudioAware); ok {
+		aa.SetAudioData(data)
 	}
 	if pa, ok := v.(visualizers.ProgressAware); ok {
 		pa.SetProgress(progressMs)
@@ -109,10 +119,61 @@ func (m *visualizerModel) isLyricsViz(idx int) bool {
 
 func (m *visualizerModel) cycle(delta int) {
 	n := len(m.vizList)
-	m.vizIdx = (m.vizIdx + delta + n) % n
-	if m.isEpisode && m.isLyricsViz(m.vizIdx) {
-		m.vizIdx = (m.vizIdx + delta + n) % n
+	if n == 0 {
+		return
 	}
+	orig := m.vizIdx
+	for i := 0; i < n; i++ {
+		m.vizIdx = (m.vizIdx + delta + n) % n
+		if !m.shouldSkip(m.vizIdx) {
+			return
+		}
+	}
+	// AlbumArt is always non-skippable in the current list, so the loop
+	// always finds a slot in practice. This restore is defensive against
+	// future list changes that could leave the user stranded on the
+	// last (skipped) slot the loop visited.
+	m.vizIdx = orig
+}
+
+// shouldSkip returns true if the visualizer at idx is meaningless in the
+// current playback state — episode + lyrics, or audio-reactive while no
+// fresh PCM has been seen for audioStickyWindow.
+func (m *visualizerModel) shouldSkip(idx int) bool {
+	if m.isEpisode && m.isLyricsViz(idx) {
+		return true
+	}
+	if _, audioAware := m.vizList[idx].(visualizers.AudioAware); audioAware {
+		if !m.audioFlowing() {
+			return true
+		}
+	}
+	return false
+}
+
+// audioFlowing reports whether audio was seen flowing within the sticky
+// window. Read-only; refreshAudioSeen is the writer.
+func (m *visualizerModel) audioFlowing() bool {
+	if m.audioSrc == nil || m.audioSeenAt.IsZero() {
+		return false
+	}
+	return time.Since(m.audioSeenAt) < audioStickyWindow
+}
+
+// refreshAudioSeen probes the audio source, bumps the sticky timestamp
+// if a fresh frame is available, and returns the frame (or nil). Called
+// from advance() each tick and from toggle() when the pane opens, so
+// shouldSkip's view of the world stays current without polling on the
+// cycle hot path.
+func (m *visualizerModel) refreshAudioSeen() *audio.FrequencyData {
+	if m.audioSrc == nil {
+		return nil
+	}
+	data := m.audioSrc.Latest()
+	if data != nil {
+		m.audioSeenAt = time.Now()
+	}
+	return data
 }
 
 func (m *visualizerModel) onTrackChange(trackID string, durationMs int, track, artist string, isEpisode bool) {
@@ -128,7 +189,7 @@ func (m *visualizerModel) initTrack(trackID string, durationMs int, track, artis
 	if !isEpisode {
 		m.loadLyrics(trackID, track, artist)
 	}
-	if isEpisode && m.isLyricsViz(m.vizIdx) {
+	if m.shouldSkip(m.vizIdx) {
 		m.cycle(1)
 	}
 }
