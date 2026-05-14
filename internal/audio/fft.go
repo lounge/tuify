@@ -12,8 +12,9 @@ const peakDecay = 0.999
 
 // Analyzer performs FFT analysis on PCM audio chunks and produces FrequencyData.
 type Analyzer struct {
-	window  []float64 // precomputed Hann window coefficients
-	peakMax float64   // running peak for normalization, with decay
+	window   []float64 // precomputed Hann window coefficients
+	peakMax  float64   // running peak for spectral band normalization, with decay
+	levelMax float64   // running peak for time-domain L/R level normalization, with decay
 }
 
 // NewAnalyzer creates an Analyzer with a precomputed Hann window of the given size.
@@ -22,7 +23,7 @@ func NewAnalyzer(windowSize int) *Analyzer {
 	for i := range w {
 		w[i] = 0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(windowSize-1)))
 	}
-	return &Analyzer{window: w, peakMax: 1.0}
+	return &Analyzer{window: w, peakMax: 1.0, levelMax: 1.0}
 }
 
 // Analyze takes interleaved stereo int16 PCM samples and returns FrequencyData.
@@ -31,11 +32,28 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 	n := len(a.window)
 	mono := make([]float64, n)
 
-	// Mix stereo to mono by averaging left and right channels.
+	// Mix stereo to mono for the FFT, and track per-channel peak amplitude
+	// in the time domain so visualizers like the VU meter can read true
+	// stereo loudness instead of the post-mix spectral peak.
+	var lPeak, rPeak int32
 	for i := range n {
 		si := i * 2
 		if si+1 < len(samples) {
-			mono[i] = (float64(samples[si]) + float64(samples[si+1])) / 2.0
+			l := int32(samples[si])
+			r := int32(samples[si+1])
+			mono[i] = (float64(l) + float64(r)) / 2.0
+			if l < 0 {
+				l = -l
+			}
+			if r < 0 {
+				r = -r
+			}
+			if l > lPeak {
+				lPeak = l
+			}
+			if r > rPeak {
+				rPeak = r
+			}
 		}
 	}
 
@@ -122,6 +140,25 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 			fd.Peak = b
 		}
 	}
+
+	// Per-channel time-domain levels with a shared running-max AGC so
+	// stereo balance is preserved across L and R while overall track
+	// loudness is adapted to.
+	chanMax := lPeak
+	if rPeak > chanMax {
+		chanMax = rPeak
+	}
+	if float64(chanMax) > a.levelMax {
+		a.levelMax = float64(chanMax)
+	} else {
+		a.levelMax *= peakDecay
+	}
+	if a.levelMax < 1.0 {
+		a.levelMax = 1.0
+	}
+	levelScale := 1.0 / a.levelMax
+	fd.LeftLevel = float32(math.Min(float64(lPeak)*levelScale, 1.0))
+	fd.RightLevel = float32(math.Min(float64(rPeak)*levelScale, 1.0))
 
 	fd.ComputeConvenienceFields()
 

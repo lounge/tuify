@@ -22,7 +22,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 - **Device Selector** — Switch playback between Spotify Connect devices
 - **Mini Mode** — Compact single-line view with track info and progress
 - **Mouse Support** — Scroll wheel to navigate lists, click to select, double-click to play or drill down
-- **Visualizers** — Album art, starfield, spectrum, oscillogram, spectrogram, and Milkdrop-style presets (spiral, tunnel, kaleidoscope, ripple)
+- **Visualizers** — Album art, starfield, spectrum, oscillogram, spectrogram, VU meter, and Milkdrop-style presets (spiral, tunnel, kaleidoscope, ripple)
 - **Lyrics** — Fetches and displays lyrics from Genius.com
 - **Dark & Light Terminals** — Adaptive color palette that adjusts automatically
 
@@ -117,6 +117,7 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config file.
 | Starfield | Yes |
 | Oscillogram | Yes |
 | Spectrogram | Yes |
+| VU Meter | Yes |
 | Milkdrop Spiral | Yes |
 | Milkdrop Tunnel | Yes |
 | Milkdrop Kaleidoscope | Yes |

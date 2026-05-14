@@ -123,6 +123,8 @@ func (pr *PipeReader) Latest() *FrequencyData {
 	out.Bass = clampUnit(out.Bass * gain)
 	out.Mid = clampUnit(out.Mid * gain)
 	out.High = clampUnit(out.High * gain)
+	out.LeftLevel = clampUnit(out.LeftLevel * gain)
+	out.RightLevel = clampUnit(out.RightLevel * gain)
 	return &out
 }
 

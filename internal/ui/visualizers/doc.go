@@ -20,7 +20,8 @@
 // # Current implementations
 //
 // Album art and lyrics panels work without an audio source. Spectrum,
-// Oscillogram, Spectrogram, Starfield, and the four Milkdrop-style
-// shaders (Spiral, Tunnel, Kaleidoscope, Ripple) need real-time PCM, so
-// they're only useful when librespot + pipe backend is active.
+// Oscillogram, Spectrogram, VU meter, Starfield, and the four
+// Milkdrop-style shaders (Spiral, Tunnel, Kaleidoscope, Ripple) need
+// real-time PCM, so they're only useful when librespot + pipe backend
+// is active.
 package visualizers
