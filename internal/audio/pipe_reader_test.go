@@ -188,22 +188,28 @@ func TestPipeReader_ProgressMsAdvances(t *testing.T) {
 
 	pr.Start(pipe)
 
-	// Wait for the pipe to be fully consumed.
+	// After 8 chunks (8 * 2048 mono samples at 44100), final progress
+	// should be ~371 ms. We accept half that to allow for the reader
+	// being mid-stream when we observe it — but we keep polling until
+	// it reaches that threshold (or the deadline expires) so a slow
+	// runner doesn't catch only the first chunk.
+	expectedMs := int32(numChunks * WindowSize * 1000 / DefaultFormat.SampleRate)
+	threshold := expectedMs / 2
 	deadline := time.After(2 * time.Second)
+	var last int32
 	for {
 		select {
 		case <-deadline:
-			t.Fatal("timed out waiting for FFT data")
+			pr.Stop()
+			t.Fatalf("ProgressMs = %d after deadline, want at least %d", last, threshold)
 		default:
 		}
 		if fd := pr.Latest(); fd != nil {
-			// After 8 chunks (8 * 2048 mono samples at 44100), progress should be ~371ms.
-			expectedMs := int32(numChunks * WindowSize * 1000 / DefaultFormat.SampleRate)
-			if fd.ProgressMs < expectedMs/2 {
-				t.Errorf("ProgressMs = %d, want at least %d", fd.ProgressMs, expectedMs/2)
+			last = fd.ProgressMs
+			if last >= threshold {
+				pr.Stop()
+				return
 			}
-			pr.Stop()
-			return
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
