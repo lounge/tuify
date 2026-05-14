@@ -530,6 +530,14 @@ func TestLogin_InvalidRedirectURL(t *testing.T) {
 	}
 }
 
+func TestLogin_RedirectURLMissingHost(t *testing.T) {
+	a := NewAuthenticator("test-client", "http://127.0.0.1:4444/callback")
+	_, err := Login(context.Background(), a, "/callback-only")
+	if err == nil {
+		t.Fatal("expected error for redirect URL missing host:port")
+	}
+}
+
 // --- openBrowser tests ---
 
 func TestOpenBrowser_UnknownOS(t *testing.T) {

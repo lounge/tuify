@@ -51,7 +51,10 @@ jobs:
         run: |
           ext=""
           if [ "${{ matrix.goos }}" = "windows" ]; then ext=".exe"; fi
-          go build -o "tuify_${{ matrix.goos }}_${{ matrix.goarch }}${ext}" .
+          version="${GITHUB_REF_NAME#v}"
+          go build \
+            -ldflags "-X main.version=${version}" \
+            -o "tuify_${{ matrix.goos }}_${{ matrix.goarch }}${ext}" .
         shell: bash
 
       - uses: actions/upload-artifact@v4
@@ -141,7 +144,7 @@ jobs:
             end
 
             test do
-              assert_match version.to_s, shell_output("#{bin}/tuify --version", 2)
+              assert_match version.to_s, shell_output("#{bin}/tuify --version")
             end
           end
           FORMULA

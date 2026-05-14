@@ -270,7 +270,19 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 	if err != nil {
 		return nil, fmt.Errorf("invalid redirect URL: %w", err)
 	}
-	addr := ":" + parsed.Port()
+	if parsed.Host == "" {
+		return nil, fmt.Errorf("redirect URL must include host and port (got %q)", redirectURL)
+	}
+	// Bind to the exact host:port the user configured. parsed.Host
+	// already includes both (e.g. "127.0.0.1:4444"), and IPv6 hosts come
+	// pre-bracketed.
+	addr := parsed.Host
+	// Use the configured callback path so non-default redirect URLs work.
+	// Empty path (e.g. "http://127.0.0.1:4444") falls back to "/".
+	callbackPath := parsed.Path
+	if callbackPath == "" {
+		callbackPath = "/"
+	}
 
 	verifier, err := generateRandomBase64(32)
 	if err != nil {
@@ -296,7 +308,7 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state") != state {
 			errCh <- errors.New("state mismatch")
 			return
