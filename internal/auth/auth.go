@@ -196,9 +196,10 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 // saveErrCh emits persistence failures (buffered, lossy on full) so the
 // caller can surface them to the user. revokedCh fires exactly once if
 // Spotify rejects the refresh token as permanently invalid ("invalid_grant"
-// — user revoked the app, token expired from inactivity, etc.); the stale
-// token file is deleted before the signal so the next launch runs login
-// cleanly.
+// — most commonly Spotify's 6-month refresh-token lifetime (measured from
+// original authorization, not extended by refresh), or the user revoking
+// the app in their account settings); the stale token file is deleted
+// before the signal so the next launch runs login cleanly.
 // ctx is the parent lifetime: when it is cancelled, the proactive-refresh
 // goroutine exits and in-flight oauth2 refresh requests are cancelled too.
 func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, <-chan error, <-chan struct{}, func(), error) {
@@ -360,7 +361,37 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 	}
 }
 
+// storedToken is the on-disk representation. The embedded oauth2.Token
+// flattens into the JSON top level so the file layout matches earlier
+// versions (access_token, refresh_token, expiry, …); authorized_at is the
+// new field used to estimate when Spotify will force re-authentication.
+// Per Spotify's 2026-06-18 policy, refresh tokens expire 6 months after
+// the user's original authorization — refreshes do not reset the clock.
+type storedToken struct {
+	oauth2.Token
+	AuthorizedAt time.Time `json:"authorized_at,omitempty"`
+}
+
+// SaveToken persists a refreshed token. The authorized_at timestamp from
+// any prior token.json is preserved — refreshes never reset Spotify's
+// 6-month refresh-token clock. Use SaveFreshToken when stamping a token
+// freshly obtained from the Login flow.
 func SaveToken(token *oauth2.Token) error {
+	var prevAuthAt time.Time
+	if prev, err := loadStoredToken(); err == nil && prev != nil {
+		prevAuthAt = prev.AuthorizedAt
+	}
+	return saveTokenAt(token, prevAuthAt)
+}
+
+// SaveFreshToken persists a token freshly obtained from a Login flow,
+// stamping authorized_at to time.Now(). That timestamp is what powers
+// the "your authorization will expire" warning at startup.
+func SaveFreshToken(token *oauth2.Token) error {
+	return saveTokenAt(token, time.Now())
+}
+
+func saveTokenAt(token *oauth2.Token, authorizedAt time.Time) error {
 	dir, err := config.Dir()
 	if err != nil {
 		return err
@@ -368,14 +399,37 @@ func SaveToken(token *oauth2.Token) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(token, "", "  ")
+	st := storedToken{Token: *token, AuthorizedAt: authorizedAt}
+	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, "token.json"), data, 0o600)
 }
 
+// LoadToken reads the persisted oauth2 token. Returns (nil, nil) if no
+// token has been saved.
 func LoadToken() (*oauth2.Token, error) {
+	st, err := loadStoredToken()
+	if err != nil || st == nil {
+		return nil, err
+	}
+	return &st.Token, nil
+}
+
+// LoadTokenWithAuth returns the persisted token alongside the
+// authorized_at timestamp recorded at original authorization. Zero time
+// means the timestamp is missing — either an old tuify version wrote
+// the file before the field existed, or no token has been saved yet.
+func LoadTokenWithAuth() (*oauth2.Token, time.Time, error) {
+	st, err := loadStoredToken()
+	if err != nil || st == nil {
+		return nil, time.Time{}, err
+	}
+	return &st.Token, st.AuthorizedAt, nil
+}
+
+func loadStoredToken() (*storedToken, error) {
 	dir, err := config.Dir()
 	if err != nil {
 		return nil, err
@@ -387,11 +441,11 @@ func LoadToken() (*oauth2.Token, error) {
 		}
 		return nil, err
 	}
-	var token oauth2.Token
-	if err := json.Unmarshal(data, &token); err != nil {
+	var st storedToken
+	if err := json.Unmarshal(data, &st); err != nil {
 		return nil, err
 	}
-	return &token, nil
+	return &st, nil
 }
 
 func generateRandomBase64(n int) (string, error) {

@@ -74,6 +74,88 @@ func TestSaveAndLoadToken(t *testing.T) {
 	}
 }
 
+func TestSaveFreshToken_StampsAuthorizedAt(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	token := &oauth2.Token{
+		AccessToken:  "access-fresh",
+		RefreshToken: "refresh-fresh",
+		TokenType:    "Bearer",
+		Expiry:       time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC),
+	}
+
+	before := time.Now()
+	if err := SaveFreshToken(token); err != nil {
+		t.Fatalf("SaveFreshToken: %v", err)
+	}
+	after := time.Now()
+
+	_, authAt, err := LoadTokenWithAuth()
+	if err != nil {
+		t.Fatalf("LoadTokenWithAuth: %v", err)
+	}
+	if authAt.Before(before) || authAt.After(after) {
+		t.Errorf("AuthorizedAt = %v, want between %v and %v", authAt, before, after)
+	}
+}
+
+func TestSaveToken_PreservesAuthorizedAt(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	freshTok := &oauth2.Token{AccessToken: "v1", RefreshToken: "rt", TokenType: "Bearer"}
+	if err := SaveFreshToken(freshTok); err != nil {
+		t.Fatalf("SaveFreshToken: %v", err)
+	}
+	_, originalAuthAt, err := LoadTokenWithAuth()
+	if err != nil || originalAuthAt.IsZero() {
+		t.Fatalf("setup: expected non-zero AuthorizedAt; err=%v", err)
+	}
+
+	// Simulate a token refresh — SaveToken must NOT reset AuthorizedAt.
+	refreshedTok := &oauth2.Token{AccessToken: "v2", RefreshToken: "rt", TokenType: "Bearer"}
+	time.Sleep(2 * time.Millisecond) // ensure time.Now() differs
+	if err := SaveToken(refreshedTok); err != nil {
+		t.Fatalf("SaveToken: %v", err)
+	}
+
+	loaded, authAt, err := LoadTokenWithAuth()
+	if err != nil {
+		t.Fatalf("LoadTokenWithAuth: %v", err)
+	}
+	if loaded.AccessToken != "v2" {
+		t.Errorf("AccessToken: got %q, want v2", loaded.AccessToken)
+	}
+	if !authAt.Equal(originalAuthAt) {
+		t.Errorf("AuthorizedAt was reset by SaveToken: got %v, want %v", authAt, originalAuthAt)
+	}
+}
+
+func TestLoadTokenWithAuth_BackCompatNoAuthorizedAt(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	// Simulate a token.json written by an older tuify version (no authorized_at).
+	dir := filepath.Join(tmp, "tuify")
+	os.MkdirAll(dir, 0o700)
+	legacy := []byte(`{"access_token":"legacy","refresh_token":"rt","token_type":"Bearer","expiry":"2025-01-01T00:00:00Z"}`)
+	if err := os.WriteFile(filepath.Join(dir, "token.json"), legacy, 0o600); err != nil {
+		t.Fatalf("write legacy: %v", err)
+	}
+
+	tok, authAt, err := LoadTokenWithAuth()
+	if err != nil {
+		t.Fatalf("LoadTokenWithAuth: %v", err)
+	}
+	if tok == nil || tok.AccessToken != "legacy" {
+		t.Errorf("expected legacy token, got %+v", tok)
+	}
+	if !authAt.IsZero() {
+		t.Errorf("AuthorizedAt should be zero for legacy file, got %v", authAt)
+	}
+}
+
 func TestLoadToken_NoFile(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)
