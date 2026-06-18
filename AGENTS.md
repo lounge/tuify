@@ -23,7 +23,7 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.26+.
 
 `Run` owns a root `context.Context` that is cancelled on return. That context is threaded into auth (token refresh), spotify (polls), librespot (reconnect/transfer), and the UI model so every background goroutine unwinds at shutdown rather than running to its per-op timeout. Order matters:
 
-1. Load/setup config → `theme.Apply(cfg.Theme)` → `ui.RebuildStyles()` **before** any rendering. Lipgloss captures colors by value at style-construction time, so styles built before `theme.Apply` would silently use defaults.
+1. Load/setup config → `theme.Apply(cfg.Theme)` → `ui.RebuildStyles()` **before** any rendering (see Hard rule on Lipgloss style construction).
 2. `Authenticate` returns a `*spotify.Client` plus channels for revoked-token + token-save errors that are wired into the UI via `ModelOption`s.
 3. `StartLibrespot` is optional; when active it provides additional `ModelOption`s (audio pipe → FFT, device reconnect callbacks).
 4. `zone.NewGlobal()` then `tea.NewProgram(..., WithAltScreen(), WithMouseCellMotion())`.
@@ -31,9 +31,9 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.26+.
 ### UI shell + screens + submodels (`internal/ui`)
 
 - **Shell** (`app*.go`) owns the `Model`, view stack, event loop, and every side effect (Spotify calls, clipboard, device transfer).
-- **Screens** (home/playlist/track/podcast/episode/search) own local state and render themselves. **Screens never mutate `Model`.** Instead they emit *intent messages* (`app_intents.go`) that the shell's `Update` interprets.
+- **Screens** (home/playlist/track/podcast/episode/search) own local state and render themselves. They communicate with the shell via *intent messages* (`app_intents.go`).
 - **Submodels** (`nowPlayingModel`, `visualizerModel`, `deviceSelectorModel`) are long-lived state on `Model` that transcends the view stack.
-- The shell dispatches via small **capability interfaces** in `common.go` (`listProvider`, `scrollable`, `clickable`, `enterable`, `searchAware`, `syncableView`, `backable`, …). Adding a new screen means implementing the capabilities it cares about — no edits to `handleMouse`/`handleBack`/`handleKeyMsg` needed.
+- The shell dispatches via small **capability interfaces** in `common.go` (`listProvider`, `scrollable`, `clickable`, `enterable`, `searchAware`, `syncableView`, `backable`, …). Adding a new screen means implementing the capabilities it cares about.
 - Every rendered frame is wrapped in `bubblezone.Scan`; list rows are marked by Spotify URI via `zoneListDelegate` (in `styles.go`) so clicks resolve back to specific items.
 
 ### Audio pipeline (`internal/audio` + `internal/librespot`)
