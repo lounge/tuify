@@ -158,7 +158,9 @@ func (m nowPlayingModel) renderGradient(lines []string) string {
 		r, g, bl := c.RGB255()
 		bgEsc := fmt.Sprintf("\x1b[48;2;%d;%d;%dm", r, g, bl)
 		vl = ansiSGR.ReplaceAllString(vl, "${0}"+bgEsc)
-		b.WriteString(bgEsc + vl + "\x1b[0m")
+		b.WriteString(bgEsc)
+		b.WriteString(vl)
+		b.WriteString("\x1b[0m")
 		if i < total-1 {
 			b.WriteString("\n")
 		}
