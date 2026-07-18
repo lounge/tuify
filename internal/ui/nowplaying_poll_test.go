@@ -122,6 +122,64 @@ func TestPollState_SkipsCallDuringRateLimitCooldown(t *testing.T) {
 	}
 }
 
+// advanceProgress must only report a crossing on the *first* tick that
+// pushes progressMs to durationMs. Once clamped, subsequent ticks stay
+// past the end — without the "first crossing" guard, handleProgressTick
+// would emit a fresh pollState every second, racing the regular tick's
+// pollState at cooldown expiry and doubling API calls during a stall.
+func TestAdvanceProgress_ReportsOnlyFirstEndCrossing(t *testing.T) {
+	np := &nowPlayingModel{
+		playing:    true,
+		hasTrack:   true,
+		durationMs: 3000,
+	}
+
+	np.progressMs = 500
+	if np.advanceProgress() {
+		t.Error("mid-track tick should not report end crossing")
+	}
+	if np.progressMs != 1500 {
+		t.Errorf("progressMs after mid-track tick: got %d, want 1500", np.progressMs)
+	}
+
+	np.progressMs = 2500
+	if !np.advanceProgress() {
+		t.Error("tick that crosses end should report true")
+	}
+	if np.progressMs != np.durationMs {
+		t.Errorf("progressMs not clamped: got %d, want %d", np.progressMs, np.durationMs)
+	}
+
+	for i := 0; i < 3; i++ {
+		if np.advanceProgress() {
+			t.Errorf("post-end tick %d re-reported crossing", i)
+		}
+	}
+}
+
+// Paused / no-track states must never trigger a crossing — a poll would
+// be pointless without a playing track.
+func TestAdvanceProgress_QuietWhenPausedOrIdle(t *testing.T) {
+	np := &nowPlayingModel{
+		playing:    false,
+		hasTrack:   true,
+		progressMs: 2500,
+		durationMs: 3000,
+	}
+	if np.advanceProgress() {
+		t.Error("paused: should not report crossing")
+	}
+	if np.progressMs != 2500 {
+		t.Errorf("paused: progressMs should not advance; got %d", np.progressMs)
+	}
+
+	np.playing = true
+	np.hasTrack = false
+	if np.advanceProgress() {
+		t.Error("no track: should not report crossing")
+	}
+}
+
 // Symmetrical coverage for view-level fetches: cancelling the root ctx
 // must abort a playlist/track/etc fetch too. Uses playlistView as the
 // representative since all lazy views share the same fetch shape.

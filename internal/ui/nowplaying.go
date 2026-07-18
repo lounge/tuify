@@ -268,14 +268,30 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 
 func (m *nowPlayingModel) handleProgressTick() tea.Cmd {
 	cmds := []tea.Cmd{m.progressTick()}
-	if m.playing && m.hasTrack {
-		m.progressMs += 1000
-		if m.progressMs >= m.durationMs {
-			m.progressMs = m.durationMs
-			cmds = append(cmds, m.pollState())
-		}
+	if m.advanceProgress() {
+		cmds = append(cmds, m.pollState())
 	}
 	return tea.Batch(cmds...)
+}
+
+// advanceProgress moves the local progress counter one tick forward and
+// reports whether this tick just crossed the end of the track — the only
+// moment at which the caller should request a fresh player-state poll.
+// Once progressMs is clamped at durationMs, subsequent calls return
+// false, so a stalled poller (e.g. during a rate-limit cooldown) doesn't
+// keep emitting pollState commands every second and racing the regular
+// tick's pollState at cooldown expiry.
+func (m *nowPlayingModel) advanceProgress() bool {
+	if !m.playing || !m.hasTrack {
+		return false
+	}
+	prev := m.progressMs
+	m.progressMs += 1000
+	if m.progressMs < m.durationMs {
+		return false
+	}
+	m.progressMs = m.durationMs
+	return prev < m.durationMs
 }
 
 // Status display
