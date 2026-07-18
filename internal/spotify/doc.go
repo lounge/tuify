@@ -16,5 +16,8 @@
 // truncated body). When Spotify rate-limits the client, a shared
 // cooldown is armed so subsequent calls short-circuit before hitting
 // the network; callers polling on a timer should consult RateLimitWait
-// to extend their interval past the deadline.
+// to extend their interval past the deadline. Consecutive 429s escalate
+// the cooldown exponentially (up to one hour) so a persistent throttle
+// backs off instead of retrying at a fixed interval; the streak resets
+// on the first non-429 response.
 package spotify
