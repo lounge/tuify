@@ -53,11 +53,13 @@ func (v playlistView) fetchMore() tea.Cmd {
 	client := v.client
 	parent := v.ctx
 	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
+		defer cancel()
 		var all []spotify.Playlist
 		totalFetched := 0
 		hasMore := true
 		for hasMore && len(all) < 20 {
-			playlists, pageSize, more, err := client.GetPlaylists(parent, offset, 50)
+			playlists, pageSize, more, err := client.GetPlaylists(ctx, offset, 50)
 			if err != nil {
 				return playlistsLoadedMsg{playlists: all, pageSize: totalFetched, hasMore: more, err: err}
 			}

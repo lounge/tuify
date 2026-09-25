@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 )
@@ -240,5 +242,27 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("%s: Breadcrumb() = %q, want %q", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestFetchCmd_AppliesListFetchTimeout(t *testing.T) {
+	var gotDeadline time.Time
+	var hadDeadline bool
+	cmd := fetchCmd(t.Context(), 1, "q",
+		func(ctx context.Context) ([]string, bool, error) {
+			gotDeadline, hadDeadline = ctx.Deadline()
+			return nil, false, nil
+		},
+		func(s string) list.Item { return statusItem{text: s} },
+	)
+	start := time.Now()
+	cmd()
+	end := time.Now()
+	if !hadDeadline {
+		t.Fatal("fetch ran without a deadline")
+	}
+	// The deadline is set inside cmd, so it falls in [start, end] + timeout.
+	if gotDeadline.Before(start.Add(listFetchTimeout)) || gotDeadline.After(end.Add(listFetchTimeout)) {
+		t.Errorf("deadline %v, want listFetchTimeout (%v) after the fetch started", gotDeadline.Sub(start), listFetchTimeout)
 	}
 }

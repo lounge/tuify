@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"context"
+
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
@@ -9,12 +11,14 @@ import (
 // fetchCmd builds a tea.Cmd that fetches data, converts each result to a list.Item,
 // and wraps the outcome in a searchResultMsg.
 func fetchCmd[T any](
-	epoch int, term string,
-	fetch func() ([]T, bool, error),
+	parent context.Context, epoch int, term string,
+	fetch func(ctx context.Context) ([]T, bool, error),
 	convert func(T) list.Item,
 ) tea.Cmd {
 	return func() tea.Msg {
-		results, hasMore, err := fetch()
+		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
+		defer cancel()
+		results, hasMore, err := fetch(ctx)
 		var items []list.Item
 		for _, r := range results {
 			items = append(items, convert(r))
@@ -33,9 +37,9 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	// depth > 0: fetch detail items for a selected container
 	if depth == 1 && prefix == prefixArtist {
 		artistID := v.selectedArtist.id
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Album, bool, error) {
-				return client.GetArtistAlbums(parent, artistID, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Album, bool, error) {
+				return client.GetArtistAlbums(ctx, artistID, offset, limit)
 			},
 			func(a spotify.Album) list.Item {
 				return albumItem{id: a.ID, uri: a.URI, name: a.Name, artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount}
@@ -45,9 +49,9 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	if (depth == 1 && prefix == prefixAlbum) || (depth == 2 && prefix == prefixArtist) {
 		albumID := v.selectedAlbum.id
 		albumName := v.selectedAlbum.name
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Track, bool, error) {
-				return client.GetAlbumTracks(parent, albumID, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Track, bool, error) {
+				return client.GetAlbumTracks(ctx, albumID, offset, limit)
 			},
 			func(t spotify.Track) list.Item {
 				return trackItem{uri: t.URI, name: t.Name, artist: t.Artist, album: albumName, duration: t.Duration}
@@ -56,9 +60,9 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	}
 	if depth == 1 && prefix == prefixShow {
 		showID := v.selectedShow.id
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Episode, bool, error) {
-				return client.GetShowEpisodes(parent, showID, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Episode, bool, error) {
+				return client.GetShowEpisodes(ctx, showID, offset, limit)
 			},
 			func(e spotify.Episode) list.Item {
 				return episodeItem{uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration}
@@ -69,45 +73,45 @@ func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
 	// depth 0: search by prefix type
 	switch prefix {
 	case prefixEpisode:
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Episode, bool, error) {
-				return client.SearchEpisodes(parent, term, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Episode, bool, error) {
+				return client.SearchEpisodes(ctx, term, offset, limit)
 			},
 			func(e spotify.Episode) list.Item {
 				return episodeItem{uri: e.URI, name: e.Name, releaseDate: e.ReleaseDate, duration: e.Duration}
 			},
 		)
 	case prefixAlbum:
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Album, bool, error) {
-				return client.SearchAlbums(parent, term, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Album, bool, error) {
+				return client.SearchAlbums(ctx, term, offset, limit)
 			},
 			func(a spotify.Album) list.Item {
 				return albumItem{id: a.ID, uri: a.URI, name: a.Name, artist: a.Artist, releaseDate: a.ReleaseDate, trackCount: a.TrackCount}
 			},
 		)
 	case prefixArtist:
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Artist, bool, error) {
-				return client.SearchArtists(parent, term, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Artist, bool, error) {
+				return client.SearchArtists(ctx, term, offset, limit)
 			},
 			func(a spotify.Artist) list.Item {
 				return artistItem{id: a.ID, uri: a.URI, name: a.Name, genres: a.Genres}
 			},
 		)
 	case prefixShow:
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Show, bool, error) {
-				return client.SearchShows(parent, term, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Show, bool, error) {
+				return client.SearchShows(ctx, term, offset, limit)
 			},
 			func(s spotify.Show) list.Item {
 				return podcastItem{id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes}
 			},
 		)
 	default: // prefixTrack
-		return fetchCmd(epoch, term,
-			func() ([]spotify.Track, bool, error) {
-				return client.SearchTracks(parent, term, offset, limit)
+		return fetchCmd(parent, epoch, term,
+			func(ctx context.Context) ([]spotify.Track, bool, error) {
+				return client.SearchTracks(ctx, term, offset, limit)
 			},
 			func(t spotify.Track) list.Item {
 				return trackItem{uri: t.URI, name: t.Name, artist: t.Artist, album: t.Album, duration: t.Duration}

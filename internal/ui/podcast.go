@@ -50,7 +50,9 @@ func (v podcastView) fetchMore() tea.Cmd {
 	client := v.client
 	parent := v.ctx
 	return func() tea.Msg {
-		shows, hasMore, err := client.GetSavedShows(parent, offset, 50)
+		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
+		defer cancel()
+		shows, hasMore, err := client.GetSavedShows(ctx, offset, 50)
 		return podcastsLoadedMsg{shows: shows, hasMore: hasMore, err: err}
 	}
 }

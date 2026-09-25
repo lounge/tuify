@@ -58,7 +58,9 @@ func (v episodeView) fetchMore() tea.Cmd {
 	showID := v.showID
 	parent := v.ctx
 	return func() tea.Msg {
-		episodes, hasMore, err := client.GetShowEpisodes(parent, showID, offset, 50)
+		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
+		defer cancel()
+		episodes, hasMore, err := client.GetShowEpisodes(ctx, showID, offset, 50)
 		return episodesLoadedMsg{episodes: episodes, hasMore: hasMore, err: err}
 	}
 }

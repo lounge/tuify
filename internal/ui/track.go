@@ -59,7 +59,9 @@ func (v trackView) fetchMore() tea.Cmd {
 	playlistID := v.playlistID
 	parent := v.ctx
 	return func() tea.Msg {
-		tracks, hasMore, err := client.GetPlaylistTracks(parent, playlistID, offset, 50)
+		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
+		defer cancel()
+		tracks, hasMore, err := client.GetPlaylistTracks(ctx, playlistID, offset, 50)
 		return tracksLoadedMsg{tracks: tracks, hasMore: hasMore, err: err}
 	}
 }

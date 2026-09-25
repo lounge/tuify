@@ -3,11 +3,19 @@ package ui
 import (
 	"log"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	zone "github.com/lrstanley/bubblezone"
 )
+
+// listFetchTimeout bounds one list or search fetch Cmd. The auth HTTP client
+// has dial and response-header timeouts but no bound on reading the body, so
+// without this a stalled response would leave a list stuck in its loading
+// state until the app exits. For the playlist page loop it covers the whole
+// loop, not each page.
+const listFetchTimeout = 30 * time.Second
 
 // lazyList holds the shared state and logic for paginated list views.
 type lazyList struct {
