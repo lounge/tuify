@@ -101,7 +101,7 @@ func (e *APIError) Error() string {
 // short-circuit before hitting the network. Returns an *APIError for
 // non-2xx responses; callers can errors.As to inspect the status.
 func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
-	for attempts := 0; attempts < 3; attempts++ {
+	for range 3 {
 		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 		if err != nil {
 			return nil, 0, err
@@ -110,8 +110,7 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		if err != nil {
 			// Translate transport short-circuits into an APIError so callers
 			// see the same shape as a real 429 from Spotify.
-			var rle *RateLimitedError
-			if errors.As(err, &rle) {
+			if rle, ok := errors.AsType[*RateLimitedError](err); ok {
 				return nil, http.StatusTooManyRequests, &APIError{
 					Status: http.StatusTooManyRequests,
 					Body:   []byte(rle.Error()),

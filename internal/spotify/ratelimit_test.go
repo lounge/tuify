@@ -43,8 +43,7 @@ func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
 	if err == nil {
 		t.Fatal("second call: expected RateLimitedError, got nil")
 	}
-	var rle *RateLimitedError
-	if !errors.As(err, &rle) {
+	if _, ok := errors.AsType[*RateLimitedError](err); !ok {
 		t.Fatalf("second call: expected *RateLimitedError, got %T: %v", err, err)
 	}
 	if hits.Load() != 1 {
@@ -173,7 +172,7 @@ func TestRateLimitTransport_ResetsConsecutiveOnSuccess(t *testing.T) {
 	client := &http.Client{Transport: rl}
 
 	// Escalate the streak with two 429s.
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		rl.until.Store(0)
 		req, _ := http.NewRequest("GET", srv.URL, nil)
 		resp, _ := client.Do(req)

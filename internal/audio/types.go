@@ -25,7 +25,7 @@ const (
 // ComputeConvenienceFields fills Bass, Mid, and High from Bands.
 func (fd *FrequencyData) ComputeConvenienceFields() {
 	fd.Bass, fd.Mid, fd.High = 0, 0, 0
-	for i := 0; i < bassEnd; i++ {
+	for i := range bassEnd {
 		fd.Bass += fd.Bands[i]
 	}
 	fd.Bass /= bassEnd

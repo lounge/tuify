@@ -96,7 +96,7 @@ func TestQueueFrom_NotFound(t *testing.T) {
 
 func TestQueueFrom_MaxCap(t *testing.T) {
 	var items []list.Item
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		items = append(items, trackItem{uri: "u", name: "t"})
 	}
 	v := searchView{items: items}

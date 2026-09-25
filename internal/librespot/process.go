@@ -186,10 +186,7 @@ func restartDelay(uptime time.Duration) time.Duration {
 		return restartBaseDelay
 	}
 	ratio := float64(stableThreshold-uptime) / float64(stableThreshold)
-	delay := time.Duration(float64(restartMaxDelay) * ratio)
-	if delay < restartBaseDelay {
-		delay = restartBaseDelay
-	}
+	delay := max(time.Duration(float64(restartMaxDelay)*ratio), restartBaseDelay)
 	return delay
 }
 

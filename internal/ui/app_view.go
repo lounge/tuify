@@ -100,10 +100,7 @@ func (m Model) helpView(height int) string {
 	lines := make([]string, len(entries))
 	for i, e := range entries {
 		styled := helpCmdStyle.Render(e.cmd)
-		pad := cmdWidth - lipgloss.Width(styled)
-		if pad < 1 {
-			pad = 1
-		}
+		pad := max(cmdWidth-lipgloss.Width(styled), 1)
 		lines[i] = styled + strings.Repeat(" ", pad) + helpDescStyle.Render(e.desc)
 	}
 	box := helpOverlayStyle.Render(strings.Join(lines, "\n"))
@@ -134,10 +131,9 @@ func (m Model) miniModeView() string {
 	innerWidth := m.width - nowPlayingPadding
 
 	// Track — Artist label. Fits: static two-tone. Doesn't fit: marquee.
-	labelBudget := innerWidth - iconLen - tsLen - 8 // 4 spaces + 4 min bar
-	if labelBudget < 1 {
-		labelBudget = 1
-	}
+	labelBudget := max(
+		// 4 spaces + 4 min bar
+		innerWidth-iconLen-tsLen-8, 1)
 	labelStr := np.renderLabel(labelBudget)
 	labelLen := lipgloss.Width(labelStr)
 

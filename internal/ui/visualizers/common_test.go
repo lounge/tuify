@@ -23,7 +23,7 @@ func TestXorshift_DifferentSeeds(t *testing.T) {
 func TestXorshift_NonZero(t *testing.T) {
 	// xorshift should produce non-zero output for non-zero input
 	s := uint64(1)
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		s = xorshift(s)
 		if s == 0 {
 			t.Fatalf("xorshift produced zero at iteration %d", i)

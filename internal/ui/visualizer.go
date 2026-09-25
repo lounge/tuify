@@ -123,7 +123,7 @@ func (m *visualizerModel) cycle(delta int) {
 		return
 	}
 	orig := m.vizIdx
-	for i := 0; i < n; i++ {
+	for range n {
 		m.vizIdx = (m.vizIdx + delta + n) % n
 		if !m.shouldSkip(m.vizIdx) {
 			return

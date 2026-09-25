@@ -85,19 +85,13 @@ func (sf *Starfield) Advance() {
 		speedMul = sf.smoothSpeed
 
 		// Spawn extra stars based on overall intensity.
-		targetCount := baseStars + int(sf.intensity*float64(maxStars-baseStars))
-		if targetCount > maxStars {
-			targetCount = maxStars
-		}
+		targetCount := min(baseStars+int(sf.intensity*float64(maxStars-baseStars)), maxStars)
 		for len(sf.stars) < targetCount {
 			sf.stars = append(sf.stars, sf.newStar(false))
 		}
 	} else if len(sf.stars) > baseStars {
 		// No audio: gradually shed extra stars back to base count.
-		newLen := len(sf.stars) - 2
-		if newLen < baseStars {
-			newLen = baseStars
-		}
+		newLen := max(len(sf.stars)-2, baseStars)
 		sf.stars = sf.stars[:newLen]
 	}
 
@@ -157,10 +151,7 @@ func (sf *Starfield) View(width, height int) string {
 		if sizeVal > 1.0 {
 			sizeVal = 1.0
 		}
-		charIdx := int(sizeVal * float64(len(starChars)-1))
-		if charIdx < 0 {
-			charIdx = 0
-		}
+		charIdx := max(int(sizeVal*float64(len(starChars)-1)), 0)
 		if charIdx >= len(starChars) {
 			charIdx = len(starChars) - 1
 		}

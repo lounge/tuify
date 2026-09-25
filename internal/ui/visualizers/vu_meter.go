@@ -147,14 +147,8 @@ func (v *VUMeter) View(width, height int) string {
 	}
 
 	// Layout 1: two dials side-by-side.
-	sideW := (width - vuDialGap) / 2
-	if sideW > vuMaxDialWidth {
-		sideW = vuMaxDialWidth
-	}
-	sideH := height
-	if sideH > vuMaxDialHeight {
-		sideH = vuMaxDialHeight
-	}
+	sideW := min((width-vuDialGap)/2, vuMaxDialWidth)
+	sideH := min(height, vuMaxDialHeight)
 	if sideW >= vuSideBySideMinWidth && sideH >= vuMinDialHeight {
 		left := renderTEACDial(sideW, sideH, v.leftDb, "LEFT")
 		right := renderTEACDial(sideW, sideH, v.rightDb, "RIGHT")
@@ -162,14 +156,8 @@ func (v *VUMeter) View(width, height int) string {
 	}
 
 	// Layout 2: stacked — L on top, R below, each at the full pane width.
-	stackW := width
-	if stackW > vuMaxDialWidth {
-		stackW = vuMaxDialWidth
-	}
-	stackH := (height - vuStackGap) / 2
-	if stackH > vuMaxDialHeight {
-		stackH = vuMaxDialHeight
-	}
+	stackW := min(width, vuMaxDialWidth)
+	stackH := min((height-vuStackGap)/2, vuMaxDialHeight)
 	if stackW >= vuMinDialWidth && stackH >= vuMinDialHeight {
 		top := renderTEACDial(stackW, stackH, v.leftDb, "LEFT")
 		bot := renderTEACDial(stackW, stackH, v.rightDb, "RIGHT")
@@ -232,10 +220,7 @@ type labelCell struct {
 }
 
 func renderTEACDial(width, height int, db float64, channel string) string {
-	arcRows := height - vuBottomReserve
-	if arcRows < 2 {
-		arcRows = 2
-	}
+	arcRows := max(height-vuBottomReserve, 2)
 	subW := width * 2
 	subH := arcRows * 2
 
@@ -293,7 +278,7 @@ func renderTEACDial(width, height int, db float64, channel string) string {
 	var buf strings.Builder
 	buf.Grow(width*height*24 + 64)
 
-	buf.WriteString(packArc(grid, subW, subH, width, arcRows, overlay))
+	buf.WriteString(packArc(grid, subW, width, arcRows, overlay))
 
 	buf.WriteByte('\n')
 	buf.WriteString(strings.Repeat(" ", width))
@@ -331,10 +316,9 @@ func buildLabelOverlay(width, arcRows int, ticks []tickDef, pivotVX, pivotVY, r,
 
 		vyTop := pivotVY - r*math.Cos(theta) - stalkVyHeight
 		syTop := int(math.Round(vyTop / vuYAspect))
-		row := syTop/2 - 2 // labels sit two cell rows above the stalk top
-		if row < 0 {
-			row = 0
-		}
+		row := max(
+			// labels sit two cell rows above the stalk top
+			syTop/2-2, 0)
 
 		start := colArc - len(t.label)/2
 		if start+len(t.label) > width {
@@ -356,10 +340,7 @@ func buildLabelOverlay(width, arcRows int, ticks []tickDef, pivotVX, pivotVY, r,
 // Hue is derived from the cell column at render time so the arc shows
 // the same green→purple gradient as the band visualizers.
 func stampArc(grid []vuCellKind, subW, subH int, pivotVX, pivotVY, r, sweep float64) {
-	steps := int(2*sweep*r) + 1
-	if steps < 8 {
-		steps = 8
-	}
+	steps := max(int(2*sweep*r)+1, 8)
 	for i := 0; i <= steps; i++ {
 		t := float64(i) / float64(steps)
 		theta := -sweep + 2*sweep*t
@@ -369,10 +350,7 @@ func stampArc(grid []vuCellKind, subW, subH int, pivotVX, pivotVY, r, sweep floa
 
 // stampRadial draws a single-angle radial segment between two radii.
 func stampRadial(grid []vuCellKind, subW, subH int, pivotVX, pivotVY, rIn, rOut, theta float64, kind vuCellKind) {
-	steps := int(math.Abs(rOut-rIn)*2) + 1
-	if steps < 4 {
-		steps = 4
-	}
+	steps := max(int(math.Abs(rOut-rIn)*2)+1, 4)
 	for i := 0; i <= steps; i++ {
 		rr := rIn + (rOut-rIn)*float64(i)/float64(steps)
 		plotVisualPx(grid, subW, subH, pivotVX, pivotVY, rr, theta, kind)
@@ -391,10 +369,7 @@ func stampNeedle(grid []vuCellKind, subW, subH int, pivotVX, pivotVY, theta, tip
 	if baseR >= tipR {
 		return
 	}
-	steps := int((tipR-baseR)*2) + 1
-	if steps < 8 {
-		steps = 8
-	}
+	steps := max(int((tipR-baseR)*2)+1, 8)
 	for i := 0; i <= steps; i++ {
 		rr := baseR + (tipR-baseR)*float64(i)/float64(steps)
 		plotVisualPx(grid, subW, subH, pivotVX, pivotVY, rr, theta, kind)
@@ -446,7 +421,7 @@ func centerTextGradient(width int, text string) string {
 	}
 	pad := (width - len(text)) / 2
 	var bld strings.Builder
-	for i := 0; i < pad; i++ {
+	for range pad {
 		bld.WriteByte(' ')
 	}
 	for i := 0; i < len(text); i++ {
@@ -462,11 +437,11 @@ func centerTextGradient(width int, text string) string {
 	return bld.String()
 }
 
-func packArc(grid []vuCellKind, subW, subH, width, arcRows int, overlay map[int]labelCell) string {
+func packArc(grid []vuCellKind, subW, width, arcRows int, overlay map[int]labelCell) string {
 	var buf strings.Builder
 	buf.Grow(width * arcRows * 20)
-	for row := 0; row < arcRows; row++ {
-		for col := 0; col < width; col++ {
+	for row := range arcRows {
+		for col := range width {
 			if lc, ok := overlay[row*width+col]; ok {
 				writeAnsiFg(&buf, lc.r, lc.g, lc.b)
 				buf.WriteByte(lc.ch)
@@ -496,10 +471,7 @@ func packArc(grid []vuCellKind, subW, subH, width, arcRows int, overlay map[int]
 			if br != vuKindEmpty {
 				pattern |= quadrantBits[3]
 			}
-			best := tl
-			if tr > best {
-				best = tr
-			}
+			best := max(tr, tl)
 			if bl > best {
 				best = bl
 			}
@@ -526,7 +498,7 @@ func composePair(left, right string, dialW, dialH, gap, paneW, paneH int) string
 	rightLines := splitFillLines(right, dialW, dialH)
 	gapStr := strings.Repeat(" ", gap)
 	content := make([]string, dialH)
-	for i := 0; i < dialH; i++ {
+	for i := range dialH {
 		content[i] = leftLines[i] + gapStr + rightLines[i]
 	}
 	return centerInPane(content, dialW*2+gap, paneW, paneH)
@@ -540,7 +512,7 @@ func composeStack(top, bot string, dialW, dialH, gap, paneW, paneH int) string {
 	blank := strings.Repeat(" ", dialW)
 	content := make([]string, 0, dialH*2+gap)
 	content = append(content, topLines...)
-	for i := 0; i < gap; i++ {
+	for range gap {
 		content = append(content, blank)
 	}
 	content = append(content, botLines...)
@@ -585,13 +557,13 @@ func centerInPane(content []string, contentW, paneW, paneH int) string {
 			b.WriteByte('\n')
 		}
 	}
-	for i := 0; i < topPad; i++ {
+	for range topPad {
 		emit(blank)
 	}
 	for _, line := range content {
 		emit(leftPadStr + line + rightPadStr)
 	}
-	for i := 0; i < botPad; i++ {
+	for range botPad {
 		emit(blank)
 	}
 	return b.String()
@@ -618,14 +590,14 @@ func (v *VUMeter) renderFallback(width, height int) string {
 			rowR = height - 1
 		}
 	}
-	for row := 0; row < height; row++ {
+	for row := range height {
 		switch row {
 		case rowL:
 			b.WriteString(renderBarRow(width, v.leftDb, "LEFT"))
 		case rowR:
 			b.WriteString(renderBarRow(width, v.rightDb, "RIGHT"))
 		default:
-			for c := 0; c < width; c++ {
+			for range width {
 				b.WriteByte(' ')
 			}
 		}
@@ -639,7 +611,7 @@ func (v *VUMeter) renderFallback(width, height int) string {
 func renderBarRow(width int, db float64, label string) string {
 	if width < 4 {
 		var b strings.Builder
-		for i := 0; i < width; i++ {
+		for range width {
 			b.WriteByte(' ')
 		}
 		return b.String()
@@ -661,7 +633,7 @@ func renderBarRow(width int, db float64, label string) string {
 		b.WriteByte(prefix[i])
 		b.WriteString(ansiReset)
 	}
-	for c := 0; c < barW; c++ {
+	for c := range barW {
 		var colT float64
 		if barW > 1 {
 			colT = float64(c) / float64(barW-1)

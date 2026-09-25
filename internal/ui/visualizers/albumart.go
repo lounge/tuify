@@ -74,10 +74,7 @@ func (a *AlbumArt) View(width, height int) string {
 	pixW := width
 	pixH := height * 2
 
-	numBlocks := pixW
-	if pixH < numBlocks {
-		numBlocks = pixH
-	}
+	numBlocks := min(pixH, pixW)
 	if numBlocks < 1 {
 		return ""
 	}

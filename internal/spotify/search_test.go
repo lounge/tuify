@@ -9,14 +9,14 @@ import (
 )
 
 func TestSearchTracks(t *testing.T) {
-	response := map[string]interface{}{
-		"tracks": map[string]interface{}{
+	response := map[string]any{
+		"tracks": map[string]any{
 			"offset": 0,
 			"total":  1,
-			"items": []map[string]interface{}{
+			"items": []map[string]any{
 				{"id": "t1", "uri": "spotify:track:t1", "name": "Found Track",
-					"duration_ms": 210000, "artists": []map[string]interface{}{{"name": "Searcher"}},
-					"album": map[string]interface{}{"name": "Search Album"}},
+					"duration_ms": 210000, "artists": []map[string]any{{"name": "Searcher"}},
+					"album": map[string]any{"name": "Search Album"}},
 			},
 		},
 	}
@@ -45,11 +45,11 @@ func TestSearchTracks(t *testing.T) {
 }
 
 func TestSearchEpisodes(t *testing.T) {
-	response := map[string]interface{}{
-		"episodes": map[string]interface{}{
+	response := map[string]any{
+		"episodes": map[string]any{
 			"offset": 0,
 			"total":  1,
-			"items": []map[string]interface{}{
+			"items": []map[string]any{
 				{"id": "ep1", "uri": "spotify:episode:ep1", "name": "Found Episode", "release_date": "2024-01-01", "duration_ms": 1800000},
 			},
 		},
@@ -70,14 +70,14 @@ func TestSearchEpisodes(t *testing.T) {
 }
 
 func TestSearchAlbums(t *testing.T) {
-	response := map[string]interface{}{
-		"albums": map[string]interface{}{
+	response := map[string]any{
+		"albums": map[string]any{
 			"offset": 0,
 			"total":  1,
-			"items": []map[string]interface{}{
+			"items": []map[string]any{
 				{"id": "a1", "uri": "spotify:album:a1", "name": "Found Album",
 					"release_date": "2023-05-15", "total_tracks": 12,
-					"artists": []map[string]interface{}{{"name": "Album Artist"}}},
+					"artists": []map[string]any{{"name": "Album Artist"}}},
 			},
 		},
 	}
@@ -100,11 +100,11 @@ func TestSearchAlbums(t *testing.T) {
 }
 
 func TestSearchArtists(t *testing.T) {
-	response := map[string]interface{}{
-		"artists": map[string]interface{}{
+	response := map[string]any{
+		"artists": map[string]any{
 			"offset": 0,
 			"total":  1,
-			"items": []map[string]interface{}{
+			"items": []map[string]any{
 				{"id": "ar1", "uri": "spotify:artist:ar1", "name": "Found Artist", "genres": []string{"rock", "indie"}},
 			},
 		},
@@ -128,11 +128,11 @@ func TestSearchArtists(t *testing.T) {
 }
 
 func TestSearchShows(t *testing.T) {
-	response := map[string]interface{}{
-		"shows": map[string]interface{}{
+	response := map[string]any{
+		"shows": map[string]any{
 			"offset": 0,
 			"total":  1,
-			"items": []map[string]interface{}{
+			"items": []map[string]any{
 				{"id": "s1", "uri": "spotify:show:s1", "name": "Found Show", "total_episodes": 42},
 			},
 		},
@@ -153,11 +153,11 @@ func TestSearchShows(t *testing.T) {
 }
 
 func TestSearchTracks_Pagination(t *testing.T) {
-	response := map[string]interface{}{
-		"tracks": map[string]interface{}{
+	response := map[string]any{
+		"tracks": map[string]any{
 			"offset": 0,
 			"total":  50,
-			"items": []map[string]interface{}{
+			"items": []map[string]any{
 				{"id": "t1", "uri": "spotify:track:t1", "name": "Track 1", "duration_ms": 100000},
 			},
 		},

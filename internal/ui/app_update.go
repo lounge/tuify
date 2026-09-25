@@ -225,14 +225,10 @@ func (m Model) halfPage(dir int) (tea.Model, tea.Cmd) {
 	if l == nil {
 		return m, nil
 	}
-	half := m.listHeight() / 4 // list items are ~2 lines tall
-	if half < 1 {
-		half = 1
-	}
-	idx := l.Index() + dir*half
-	if idx < 0 {
-		idx = 0
-	}
+	half := max(
+		// list items are ~2 lines tall
+		m.listHeight()/4, 1)
+	idx := max(l.Index()+dir*half, 0)
 	if max := len(l.Items()) - 1; idx > max {
 		idx = max
 	}

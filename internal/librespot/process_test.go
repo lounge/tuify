@@ -2,6 +2,7 @@ package librespot
 
 import (
 	"bytes"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -388,10 +389,8 @@ func assertContains(t *testing.T, args []string, flag, value string) {
 
 func assertHasFlag(t *testing.T, args []string, flag string) {
 	t.Helper()
-	for _, a := range args {
-		if a == flag {
-			return
-		}
+	if slices.Contains(args, flag) {
+		return
 	}
 	t.Errorf("expected args to contain %s, got %v", flag, args)
 }

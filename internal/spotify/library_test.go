@@ -9,13 +9,13 @@ import (
 )
 
 func TestGetPlaylists_OwnerFiltering(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  3,
-		"items": []map[string]interface{}{
-			{"id": "p1", "name": "My Playlist", "owner": map[string]interface{}{"id": "me", "display_name": "Me"}, "items": map[string]interface{}{"total": 10}},
-			{"id": "p2", "name": "Other Playlist", "owner": map[string]interface{}{"id": "other", "display_name": "Other"}, "items": map[string]interface{}{"total": 5}},
-			{"id": "p3", "name": "Also Mine", "owner": map[string]interface{}{"id": "me", "display_name": "Me"}, "items": map[string]interface{}{"total": 20}},
+		"items": []map[string]any{
+			{"id": "p1", "name": "My Playlist", "owner": map[string]any{"id": "me", "display_name": "Me"}, "items": map[string]any{"total": 10}},
+			{"id": "p2", "name": "Other Playlist", "owner": map[string]any{"id": "other", "display_name": "Other"}, "items": map[string]any{"total": 5}},
+			{"id": "p3", "name": "Also Mine", "owner": map[string]any{"id": "me", "display_name": "Me"}, "items": map[string]any{"total": 20}},
 		},
 	}
 
@@ -52,13 +52,13 @@ func TestGetPlaylists_OwnerFiltering(t *testing.T) {
 }
 
 func TestGetPlaylists_HasMoreWithFiltering(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  10,
-		"items": []map[string]interface{}{
-			{"id": "p1", "name": "Mine", "owner": map[string]interface{}{"id": "me", "display_name": "Me"}, "items": map[string]interface{}{"total": 5}},
-			{"id": "p2", "name": "Theirs", "owner": map[string]interface{}{"id": "other", "display_name": "Other"}, "items": map[string]interface{}{"total": 3}},
-			{"id": "p3", "name": "Theirs 2", "owner": map[string]interface{}{"id": "other2", "display_name": "Other2"}, "items": map[string]interface{}{"total": 1}},
+		"items": []map[string]any{
+			{"id": "p1", "name": "Mine", "owner": map[string]any{"id": "me", "display_name": "Me"}, "items": map[string]any{"total": 5}},
+			{"id": "p2", "name": "Theirs", "owner": map[string]any{"id": "other", "display_name": "Other"}, "items": map[string]any{"total": 3}},
+			{"id": "p3", "name": "Theirs 2", "owner": map[string]any{"id": "other2", "display_name": "Other2"}, "items": map[string]any{"total": 1}},
 		},
 	}
 
@@ -87,12 +87,12 @@ func TestGetPlaylists_HasMoreWithFiltering(t *testing.T) {
 }
 
 func TestGetPlaylists_NoUserID(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  2,
-		"items": []map[string]interface{}{
-			{"id": "p1", "name": "Playlist A", "owner": map[string]interface{}{"id": "a", "display_name": "A"}, "items": map[string]interface{}{"total": 5}},
-			{"id": "p2", "name": "Playlist B", "owner": map[string]interface{}{"id": "b", "display_name": "B"}, "items": map[string]interface{}{"total": 3}},
+		"items": []map[string]any{
+			{"id": "p1", "name": "Playlist A", "owner": map[string]any{"id": "a", "display_name": "A"}, "items": map[string]any{"total": 5}},
+			{"id": "p2", "name": "Playlist B", "owner": map[string]any{"id": "b", "display_name": "B"}, "items": map[string]any{"total": 3}},
 		},
 	}
 
@@ -112,22 +112,22 @@ func TestGetPlaylists_NoUserID(t *testing.T) {
 }
 
 func TestGetPlaylistTracks(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  3,
-		"items": []map[string]interface{}{
-			{"item": map[string]interface{}{
+		"items": []map[string]any{
+			{"item": map[string]any{
 				"id": "t1", "uri": "spotify:track:t1", "name": "Track One",
-				"duration_ms": 200000, "artists": []map[string]interface{}{{"name": "Artist A"}},
-				"album": map[string]interface{}{"name": "Album X"},
+				"duration_ms": 200000, "artists": []map[string]any{{"name": "Artist A"}},
+				"album": map[string]any{"name": "Album X"},
 			}},
-			{"item": map[string]interface{}{
+			{"item": map[string]any{
 				"id": "t2", "uri": "spotify:track:t2", "name": "Track Two",
-				"duration_ms": 180000, "artists": []map[string]interface{}{{"name": "Artist B"}},
-				"album": map[string]interface{}{"name": "Album Y"},
+				"duration_ms": 180000, "artists": []map[string]any{{"name": "Artist B"}},
+				"album": map[string]any{"name": "Album Y"},
 			}},
 			// Empty item (e.g. deleted track) — should be filtered out
-			{"item": map[string]interface{}{
+			{"item": map[string]any{
 				"id": "", "uri": "", "name": "",
 			}},
 		},
@@ -157,14 +157,14 @@ func TestGetPlaylistTracks(t *testing.T) {
 }
 
 func TestGetSavedShows(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  2,
-		"items": []map[string]interface{}{
-			{"show": map[string]interface{}{
+		"items": []map[string]any{
+			{"show": map[string]any{
 				"id": "s1", "uri": "spotify:show:s1", "name": "Show One", "total_episodes": 50,
 			}},
-			{"show": map[string]interface{}{
+			{"show": map[string]any{
 				"id": "s2", "uri": "spotify:show:s2", "name": "Show Two", "total_episodes": 100,
 			}},
 		},
@@ -191,10 +191,10 @@ func TestGetSavedShows(t *testing.T) {
 }
 
 func TestGetShowEpisodes(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  1,
-		"items": []map[string]interface{}{
+		"items": []map[string]any{
 			{"id": "ep1", "uri": "spotify:episode:ep1", "name": "Episode One", "release_date": "2024-06-01", "duration_ms": 3600000},
 		},
 	}
@@ -223,12 +223,12 @@ func TestGetShowEpisodes(t *testing.T) {
 }
 
 func TestGetArtistAlbums(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  2,
-		"items": []map[string]interface{}{
-			{"id": "a1", "uri": "spotify:album:a1", "name": "Album One", "release_date": "2020-01-01", "total_tracks": 10, "artists": []map[string]interface{}{{"name": "The Artist"}}},
-			{"id": "a2", "uri": "spotify:album:a2", "name": "Album Two", "release_date": "2022-06-15", "total_tracks": 8, "artists": []map[string]interface{}{{"name": "The Artist"}}},
+		"items": []map[string]any{
+			{"id": "a1", "uri": "spotify:album:a1", "name": "Album One", "release_date": "2020-01-01", "total_tracks": 10, "artists": []map[string]any{{"name": "The Artist"}}},
+			{"id": "a2", "uri": "spotify:album:a2", "name": "Album Two", "release_date": "2022-06-15", "total_tracks": 8, "artists": []map[string]any{{"name": "The Artist"}}},
 		},
 	}
 
@@ -256,11 +256,11 @@ func TestGetArtistAlbums(t *testing.T) {
 }
 
 func TestGetAlbumTracks(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"offset": 0,
 		"total":  2,
-		"items": []map[string]interface{}{
-			{"id": "t1", "uri": "spotify:track:t1", "name": "Track One", "duration_ms": 200000, "artists": []map[string]interface{}{{"name": "Artist"}}},
+		"items": []map[string]any{
+			{"id": "t1", "uri": "spotify:track:t1", "name": "Track One", "duration_ms": 200000, "artists": []map[string]any{{"name": "Artist"}}},
 			{"id": "t2", "uri": "spotify:track:t2", "name": "Track Two", "duration_ms": 180000},
 		},
 	}

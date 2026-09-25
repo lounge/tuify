@@ -93,10 +93,7 @@ func (s *Spectrum) View(width, height int) string {
 			switch {
 			case cellLevel > 0:
 				// Bar fill.
-				blockIdx := int(cellLevel * 8)
-				if blockIdx > 7 {
-					blockIdx = 7
-				}
+				blockIdx := min(int(cellLevel*8), 7)
 				r, g, b := hslToRGB(hue, sat, lum)
 				writeAnsiFg(&buf, r, g, b)
 				if blockIdx >= 7 {

@@ -107,7 +107,7 @@ func TestStarfield_AdvanceDoesNotPanic(t *testing.T) {
 	sf := NewStarfield()
 	sf.Init("seed", 10000)
 	// Run many advances without panic
-	for i := 0; i < 1000; i++ {
+	for range 1000 {
 		sf.Advance()
 	}
 	got := sf.View(40, 10)
@@ -200,7 +200,7 @@ func TestAlbumArt_Deterministic(t *testing.T) {
 	a1 := NewAlbumArt()
 	a1.Init("same-seed", 10000)
 	a1.SetImage(img)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		a1.Advance()
 	}
 	v1 := a1.View(40, 10)
@@ -208,7 +208,7 @@ func TestAlbumArt_Deterministic(t *testing.T) {
 	a2 := NewAlbumArt()
 	a2.Init("same-seed", 10000)
 	a2.SetImage(img)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		a2.Advance()
 	}
 	v2 := a2.View(40, 10)
@@ -245,7 +245,7 @@ func TestAlbumArt_ResolvesAfterEnoughAdvances(t *testing.T) {
 	a.SetImage(testImage(16, 16))
 	a.View(20, 10) // trigger computeGrid
 
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		a.Advance()
 	}
 	if !a.resolved {
@@ -315,7 +315,7 @@ func TestSpectrum_DecaysToZero(t *testing.T) {
 
 	// Remove audio and decay.
 	s.SetAudioData(nil)
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		s.Advance()
 	}
 

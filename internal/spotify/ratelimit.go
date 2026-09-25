@@ -96,18 +96,12 @@ func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error
 		// retry loop handles this without locking out everything else.
 		return resp, nil
 	}
-	cooldown := time.Duration(wait) * time.Second
-	if cooldown < rateLimitMinBackoff {
-		cooldown = rateLimitMinBackoff
-	}
+	cooldown := max(time.Duration(wait)*time.Second, rateLimitMinBackoff)
 	// Exponential backoff: each consecutive 429 doubles the base cooldown.
 	// Shift capped so overflow can't produce a negative Duration; the
 	// result is clamped to rateLimitMaxBackoff regardless.
 	n := t.consecutive.Add(1)
-	shift := n - 1
-	if shift > rateLimitMaxShift {
-		shift = rateLimitMaxShift
-	}
+	shift := min(n-1, rateLimitMaxShift)
 	cooldown *= 1 << shift
 	if cooldown > rateLimitMaxBackoff || cooldown <= 0 {
 		cooldown = rateLimitMaxBackoff

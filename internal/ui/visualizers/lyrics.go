@@ -114,17 +114,11 @@ func (l *Lyrics) View(width, height int) string {
 
 	// Compute the visible window of lyrics lines.
 	// Scroll to keep currentLine centered, but clamp to avoid empty space at edges.
-	startLine := currentLine - height/2
-	if startLine < 0 {
-		startLine = 0
-	}
+	startLine := max(currentLine-height/2, 0)
 	endLine := startLine + height
 	if endLine > totalLines {
 		endLine = totalLines
-		startLine = endLine - height
-		if startLine < 0 {
-			startLine = 0
-		}
+		startLine = max(endLine-height, 0)
 	}
 
 	// If lyrics fit in the viewport, center the block vertically.
@@ -140,7 +134,7 @@ func (l *Lyrics) View(width, height int) string {
 	var buf strings.Builder
 	buf.Grow(width * height * 20)
 
-	for row := 0; row < height; row++ {
+	for row := range height {
 		if row > 0 {
 			buf.WriteRune('\n')
 		}

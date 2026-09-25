@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/lounge/tuify/internal/audio"
@@ -80,8 +81,8 @@ func StartLibrespot(ctx context.Context, rc RuntimeConfig, client *spotify.Clien
 	if err := librespotProc.Start(); err != nil {
 		// Run cleanups we've queued (pipe reader) so the partial startup
 		// doesn't leak resources, then surface the failure to the caller.
-		for i := len(cleanups) - 1; i >= 0; i-- {
-			cleanups[i]()
+		for _, cleanup := range slices.Backward(cleanups) {
+			cleanup()
 		}
 		return nil, fmt.Errorf("librespot failed to start: %w", err)
 	}
@@ -99,8 +100,8 @@ func StartLibrespot(ctx context.Context, rc RuntimeConfig, client *spotify.Clien
 		Options: opts,
 		Cleanup: func() {
 			// Cleanup in reverse order (librespot before pipe reader).
-			for i := len(cleanups) - 1; i >= 0; i-- {
-				cleanups[i]()
+			for _, cleanup := range slices.Backward(cleanups) {
+				cleanup()
 			}
 		},
 	}, nil

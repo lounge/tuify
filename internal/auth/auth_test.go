@@ -65,7 +65,7 @@ func TestSaveAndLoadToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReadFile: %v", err)
 	}
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("saved token is not valid JSON: %v", err)
 	}
@@ -419,8 +419,7 @@ func TestProactiveRefresh_TriggersBeforeExpiry(t *testing.T) {
 		},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	ts.startProactiveRefresh(ctx)
 
 	// Wait for at least one proactive refresh.
@@ -511,8 +510,7 @@ func TestProactiveRefresh_RetriesOnError(t *testing.T) {
 		last: &oauth2.Token{AccessToken: "will-fail", Expiry: time.Now().Add(10 * time.Millisecond)},
 	}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := t.Context()
 	ts.startProactiveRefresh(ctx)
 
 	// The first call will fail. We just verify the goroutine attempted the refresh.

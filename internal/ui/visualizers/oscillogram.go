@@ -98,10 +98,7 @@ func (o *Oscillogram) View(width, height int) string {
 				continue
 			}
 
-			blockIdx := int(cellLevel * 8)
-			if blockIdx > 7 {
-				blockIdx = 7
-			}
+			blockIdx := min(int(cellLevel*8), 7)
 			writeAnsiFg(&buf, c.r, c.g, c.b)
 			buf.WriteString(upperBlocks[blockIdx])
 			buf.WriteString(ansiReset)
@@ -127,10 +124,7 @@ func (o *Oscillogram) View(width, height int) string {
 				continue
 			}
 
-			blockIdx := int(cellLevel * 8)
-			if blockIdx > 7 {
-				blockIdx = 7
-			}
+			blockIdx := min(int(cellLevel*8), 7)
 			writeAnsiFg(&buf, c.r, c.g, c.b)
 			if blockIdx >= 7 {
 				buf.WriteString("█")

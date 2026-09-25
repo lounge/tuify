@@ -85,10 +85,7 @@ func (m Model) stopPlayback() tea.Cmd {
 }
 
 func (m *Model) seekRelative(deltaMs int) tea.Cmd {
-	posMs := m.nowPlaying.progressMs + deltaMs
-	if posMs < 0 {
-		posMs = 0
-	}
+	posMs := max(m.nowPlaying.progressMs+deltaMs, 0)
 	if posMs > m.nowPlaying.durationMs {
 		posMs = m.nowPlaying.durationMs
 	}

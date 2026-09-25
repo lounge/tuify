@@ -71,7 +71,7 @@ func TestVUMeter_StackedLayoutWhenNarrow(t *testing.T) {
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 0.5})
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		v.Advance()
 	}
 	// Width too narrow for side-by-side (each would be 14 < 22) but tall
@@ -97,7 +97,7 @@ func TestVUMeter_BarFallbackWhenTiny(t *testing.T) {
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 0.5})
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		v.Advance()
 	}
 	// Too small for a single dial in either orientation: bar fallback.
@@ -115,7 +115,7 @@ func TestVUMeter_InitResetsBothChannels(t *testing.T) {
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 1.0})
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		v.Advance()
 	}
 	if v.leftDb <= vuDbMin+1 || v.rightDb <= vuDbMin+1 {
@@ -132,7 +132,7 @@ func TestVUMeter_StereoBalanceIsIndependent(t *testing.T) {
 	v.Init("seed", 10000)
 	// Loud left, quiet right.
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 0.05})
-	for i := 0; i < 300; i++ {
+	for range 300 {
 		v.Advance()
 	}
 	if v.leftDb-v.rightDb < 5 {
@@ -144,11 +144,11 @@ func TestVUMeter_NilAudioDecaysBothToFloor(t *testing.T) {
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 1.0})
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		v.Advance()
 	}
 	v.SetAudioData(nil)
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		v.Advance()
 	}
 	if math.Abs(v.leftDb-vuDbMin) > 0.01 || math.Abs(v.rightDb-vuDbMin) > 0.01 {
@@ -166,7 +166,7 @@ func TestVUMeter_LevelClampedToMaxDb(t *testing.T) {
 		LeftLevel:  float32(math.Pow(10, (vuDbMax+5)/20)),
 		RightLevel: 1.0,
 	})
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		v.Advance()
 	}
 	if v.leftDb > vuDbMax+0.01 {
@@ -178,7 +178,7 @@ func TestVUMeter_QuietLevelClampedToMinDb(t *testing.T) {
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1e-8, RightLevel: 1e-8})
-	for i := 0; i < 500; i++ {
+	for range 500 {
 		v.Advance()
 	}
 	if v.leftDb < vuDbMin-0.01 {
@@ -212,7 +212,7 @@ func TestVUMeter_Deterministic(t *testing.T) {
 	b := NewVUMeter()
 	a.Init("seed", 10000)
 	b.Init("seed", 10000)
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		a.SetAudioData(&audio.FrequencyData{LeftLevel: 0.3, RightLevel: 0.6})
 		b.SetAudioData(&audio.FrequencyData{LeftLevel: 0.3, RightLevel: 0.6})
 		a.Advance()

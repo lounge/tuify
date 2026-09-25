@@ -369,7 +369,7 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 // the user's original authorization — refreshes do not reset the clock.
 type storedToken struct {
 	oauth2.Token
-	AuthorizedAt time.Time `json:"authorized_at,omitempty"`
+	AuthorizedAt time.Time `json:"authorized_at"`
 }
 
 // SaveToken persists a refreshed token. The authorized_at timestamp from

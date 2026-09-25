@@ -150,7 +150,7 @@ func TestAdvanceProgress_ReportsOnlyFirstEndCrossing(t *testing.T) {
 		t.Errorf("progressMs not clamped: got %d, want %d", np.progressMs, np.durationMs)
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if np.advanceProgress() {
 			t.Errorf("post-end tick %d re-reported crossing", i)
 		}

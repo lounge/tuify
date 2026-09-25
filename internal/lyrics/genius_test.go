@@ -20,19 +20,19 @@ func newTestClient(handler http.HandlerFunc) (*http.Client, func()) {
 }
 
 // geniusSearchResponse builds a Genius API search response JSON.
-func geniusSearchResponse(hits []map[string]interface{}) map[string]interface{} {
-	return map[string]interface{}{
-		"meta": map[string]interface{}{"status": 200},
-		"response": map[string]interface{}{
+func geniusSearchResponse(hits []map[string]any) map[string]any {
+	return map[string]any{
+		"meta": map[string]any{"status": 200},
+		"response": map[string]any{
 			"hits": hits,
 		},
 	}
 }
 
-func songHit(title, artistNames, url string, instrumental bool) map[string]interface{} {
-	return map[string]interface{}{
+func songHit(title, artistNames, url string, instrumental bool) map[string]any {
+	return map[string]any{
 		"type": "song",
-		"result": map[string]interface{}{
+		"result": map[string]any{
 			"title":                title,
 			"artist_names":         artistNames,
 			"primary_artist_names": artistNames,
@@ -169,7 +169,7 @@ func TestExtractLyrics_NoContainers(t *testing.T) {
 // --- searchSong ---
 
 func TestSearchSong_MatchesCorrectHit(t *testing.T) {
-	resp := geniusSearchResponse([]map[string]interface{}{
+	resp := geniusSearchResponse([]map[string]any{
 		songHit("Wrong Song", "Wrong Artist", "https://genius.com/wrong", false),
 		songHit("Right Song", "Right Artist", "https://genius.com/right", false),
 	})
@@ -189,7 +189,7 @@ func TestSearchSong_MatchesCorrectHit(t *testing.T) {
 }
 
 func TestSearchSong_SkipsGeniusAnnotations(t *testing.T) {
-	resp := geniusSearchResponse([]map[string]interface{}{
+	resp := geniusSearchResponse([]map[string]any{
 		songHit("Song", "Genius English Translations", "https://genius.com/genius", false),
 		songHit("Song", "Real Artist", "https://genius.com/real", false),
 	})
@@ -209,8 +209,8 @@ func TestSearchSong_SkipsGeniusAnnotations(t *testing.T) {
 }
 
 func TestSearchSong_SkipsNonSongTypes(t *testing.T) {
-	resp := geniusSearchResponse([]map[string]interface{}{
-		{"type": "article", "result": map[string]interface{}{
+	resp := geniusSearchResponse([]map[string]any{
+		{"type": "article", "result": map[string]any{
 			"title": "Song", "artist_names": "Artist", "primary_artist_names": "Artist",
 			"url": "https://genius.com/article", "instrumental": false,
 		}},
@@ -232,7 +232,7 @@ func TestSearchSong_SkipsNonSongTypes(t *testing.T) {
 }
 
 func TestSearchSong_Instrumental(t *testing.T) {
-	resp := geniusSearchResponse([]map[string]interface{}{
+	resp := geniusSearchResponse([]map[string]any{
 		songHit("Song", "Artist", "https://genius.com/song", true),
 	})
 
@@ -251,7 +251,7 @@ func TestSearchSong_Instrumental(t *testing.T) {
 }
 
 func TestSearchSong_NoMatch(t *testing.T) {
-	resp := geniusSearchResponse([]map[string]interface{}{
+	resp := geniusSearchResponse([]map[string]any{
 		songHit("Completely Different", "Unknown", "https://genius.com/nope", false),
 	})
 
@@ -286,7 +286,7 @@ func TestSearchSong_APIError(t *testing.T) {
 func TestSearch_EndToEnd(t *testing.T) {
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/search") {
-			resp := geniusSearchResponse([]map[string]interface{}{
+			resp := geniusSearchResponse([]map[string]any{
 				songHit("My Song", "The Artist", "https://genius.com/the-artist-my-song-lyrics", false),
 			})
 			json.NewEncoder(w).Encode(resp)
@@ -310,7 +310,7 @@ func TestSearch_EndToEnd(t *testing.T) {
 
 func TestSearch_Instrumental(t *testing.T) {
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		resp := geniusSearchResponse([]map[string]interface{}{
+		resp := geniusSearchResponse([]map[string]any{
 			songHit("Instrumental Track", "Artist", "https://genius.com/inst", true),
 		})
 		json.NewEncoder(w).Encode(resp)
@@ -342,7 +342,7 @@ func TestSearch_NoResults(t *testing.T) {
 func TestSearch_CaseInsensitiveMatch(t *testing.T) {
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/search") {
-			resp := geniusSearchResponse([]map[string]interface{}{
+			resp := geniusSearchResponse([]map[string]any{
 				songHit("MY SONG", "THE ARTIST", "https://genius.com/lyrics", false),
 			})
 			json.NewEncoder(w).Encode(resp)

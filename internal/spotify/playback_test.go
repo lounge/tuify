@@ -23,7 +23,7 @@ func TestGetPlayerState_NoContent(t *testing.T) {
 }
 
 func TestGetPlayerState_NilItem(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"is_playing":    false,
 		"shuffle_state": false,
 		"progress_ms":   0,
@@ -45,16 +45,16 @@ func TestGetPlayerState_NilItem(t *testing.T) {
 }
 
 func TestGetPlayerState_Playing(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": true,
 		"progress_ms":   60000,
-		"device":        map[string]interface{}{"name": "MacBook Pro"},
-		"item": map[string]interface{}{
+		"device":        map[string]any{"name": "MacBook Pro"},
+		"item": map[string]any{
 			"name":        "Test Song",
 			"uri":         "spotify:track:abc",
 			"duration_ms": 200000,
-			"artists":     []map[string]interface{}{{"name": "Test Artist"}},
+			"artists":     []map[string]any{{"name": "Test Artist"}},
 		},
 	}
 
@@ -94,15 +94,15 @@ func TestGetPlayerState_Playing(t *testing.T) {
 }
 
 func TestGetPlayerState_NoDevice(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
 		"progress_ms":   0,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"name":        "Test Song",
 			"uri":         "spotify:track:abc",
 			"duration_ms": 200000,
-			"artists":     []map[string]interface{}{{"name": "Artist"}},
+			"artists":     []map[string]any{{"name": "Artist"}},
 		},
 	}
 
@@ -124,15 +124,15 @@ func TestGetPlayerState_NoDevice(t *testing.T) {
 }
 
 func TestGetPlayerState_EpisodeWithShow(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
 		"progress_ms":   30000,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"name":        "Episode Title",
 			"uri":         "spotify:episode:xyz",
 			"duration_ms": 1800000,
-			"show":        map[string]interface{}{"name": "Podcast Name"},
+			"show":        map[string]any{"name": "Podcast Name"},
 		},
 	}
 
@@ -151,17 +151,17 @@ func TestGetPlayerState_EpisodeWithShow(t *testing.T) {
 }
 
 func TestGetPlayerState_WithAlbumImage(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
 		"progress_ms":   45000,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"name":        "Image Track",
 			"uri":         "spotify:track:img",
 			"duration_ms": 300000,
-			"artists":     []map[string]interface{}{{"name": "Visual Artist"}},
-			"album": map[string]interface{}{
-				"images": []map[string]interface{}{
+			"artists":     []map[string]any{{"name": "Visual Artist"}},
+			"album": map[string]any{
+				"images": []map[string]any{
 					{"url": "https://img.spotify.com/large.jpg"},
 					{"url": "https://img.spotify.com/medium.jpg"},
 					{"url": "https://img.spotify.com/small.jpg"},
@@ -186,16 +186,16 @@ func TestGetPlayerState_WithAlbumImage(t *testing.T) {
 }
 
 func TestGetPlayerState_EpisodeImages(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
 		"progress_ms":   10000,
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"name":        "Episode With Images",
 			"uri":         "spotify:episode:img",
 			"duration_ms": 600000,
-			"show":        map[string]interface{}{"name": "Image Show"},
-			"images": []map[string]interface{}{
+			"show":        map[string]any{"name": "Image Show"},
+			"images": []map[string]any{
 				{"url": "https://img.spotify.com/ep-large.jpg"},
 				{"url": "https://img.spotify.com/ep-small.jpg"},
 			},
@@ -218,14 +218,14 @@ func TestGetPlayerState_EpisodeImages(t *testing.T) {
 }
 
 func TestGetPlayerState_WithContext(t *testing.T) {
-	response := map[string]interface{}{
+	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
 		"progress_ms":   0,
-		"context": map[string]interface{}{
+		"context": map[string]any{
 			"uri": "spotify:playlist:abc123",
 		},
-		"item": map[string]interface{}{
+		"item": map[string]any{
 			"name":        "Context Track",
 			"uri":         "spotify:track:ctx",
 			"duration_ms": 200000,

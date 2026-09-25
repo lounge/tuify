@@ -144,10 +144,7 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 	// Per-channel time-domain levels with a shared running-max AGC so
 	// stereo balance is preserved across L and R while overall track
 	// loudness is adapted to.
-	chanMax := lPeak
-	if rPeak > chanMax {
-		chanMax = rPeak
-	}
+	chanMax := max(rPeak, lPeak)
 	if float64(chanMax) > a.levelMax {
 		a.levelMax = float64(chanMax)
 	} else {
