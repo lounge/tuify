@@ -44,7 +44,7 @@ When `audio_backend == "pipe"`, `librespot.Process` pipes raw little-endian s16l
 
 ### Spotify client (`internal/spotify`)
 
-Wraps `zmb3/spotify` with the higher-level ops tuify needs. **Both** the `*sp.Client` and the raw `*http.Client` passed to `New` must share the auth-wrapped transport; the rate-limit gate installed by `New` covers both paths. On 429 a shared cooldown is armed and `RateLimitWait` reports the deadline so pollers can extend their interval. Non-2xx surfaces as `*APIError`.
+Wraps `zmb3/spotify` with the higher-level ops tuify needs. **Both** the `*sp.Client` and the raw `*http.Client` passed to `New` must share the auth-wrapped transport; the rate-limit gate installed by `New` covers both paths. On 429 a shared cooldown is armed and `RateLimitWait` reports the deadline so pollers can extend their interval. Non-2xx surfaces as `*APIError` from every method, raw and SDK path alike (`wrapSDKErr` normalizes SDK errors). Only this package's own types go in `APIError.Err`; never wrap zmb3 error types, or callers can couple to the SDK through `errors.As`. The UI turns errors into banner text with `userMessage` and logs the raw error once in the handler that receives it.
 
 ### Auth (`internal/auth`)
 

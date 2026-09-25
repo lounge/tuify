@@ -221,7 +221,7 @@ What each role drives:
 
 ## Logs
 
-Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. The log is overwritten every time you start tuify. Check this file if something isn't working as expected.
+Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. The log is overwritten every time you start tuify. Check this file if something isn't working as expected. Error banners in the app show a short summary; the full Spotify response behind each one is written to this log.
 
 ---
 
