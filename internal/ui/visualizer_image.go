@@ -34,35 +34,28 @@ func (m *visualizerModel) loadImage(imageURL string) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(m.ctx, 10*time.Second)
-	m.images.cancel = cancel
+	ctx, cancel, ch := m.images.begin(m.ctx, 10*time.Second)
 	url := imageURL
-	ch := m.images.ch
 	go func() {
 		defer cancel()
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-		if err != nil {
-			select {
-			case ch <- fetchResult{err: err, url: url}:
-			default:
-			}
-			return
-		}
-		resp, err := httpClient.Do(req)
-		if err != nil {
-			select {
-			case ch <- fetchResult{err: err, url: url}:
-			default:
-			}
-			return
-		}
-		defer resp.Body.Close()
-		img, _, err := image.Decode(io.LimitReader(resp.Body, maxAlbumArtBytes))
-		select {
-		case ch <- fetchResult{img: img, url: url, err: err}:
-		default:
-		}
+		// Exactly one send on this operation's own 1-slot channel, so it
+		// never blocks.
+		ch <- fetchImage(ctx, url)
 	}()
+}
+
+func fetchImage(ctx context.Context, url string) fetchResult {
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return fetchResult{err: err, url: url}
+	}
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		return fetchResult{err: err, url: url}
+	}
+	defer resp.Body.Close()
+	img, _, err := image.Decode(io.LimitReader(resp.Body, maxAlbumArtBytes))
+	return fetchResult{img: img, url: url, err: err}
 }
 
 func (m *visualizerModel) drainImages() {

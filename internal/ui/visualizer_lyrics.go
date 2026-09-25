@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"context"
 	"errors"
 	"log"
 	"strings"
@@ -36,9 +35,7 @@ func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(m.ctx, 15*time.Second)
-	m.lyrics.cancel = cancel
-	ch := m.lyrics.ch
+	ctx, cancel, ch := m.lyrics.begin(m.ctx, 15*time.Second)
 	go func() {
 		defer cancel()
 		text, err := lyrics.Search(ctx, httpClient, track, artist)
@@ -49,11 +46,7 @@ func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
 		} else if err == nil && text != "" {
 			res.lines = strings.Split(text, "\n")
 		}
-		select {
-		case ch <- res:
-		default:
-			log.Printf("[visualizer] lyrics result dropped for %s (channel full)", trackID)
-		}
+		ch <- res // never blocks: this operation's own 1-slot channel
 	}()
 }
 

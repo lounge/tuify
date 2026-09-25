@@ -13,8 +13,13 @@ var httpClient = &http.Client{Timeout: 10 * time.Second}
 // under this; anything larger is almost certainly not the expected content.
 const maxAlbumArtBytes = 5 * 1024 * 1024
 
-// asyncLoader manages a buffered channel for a background fetch with optional
-// cancellation. Both the image and lyrics loaders share this lifecycle.
+// asyncLoader manages the result channel and cancellation for a background
+// fetch. Both the image and lyrics loaders share this lifecycle.
+//
+// Each operation started with begin gets its own 1-slot channel. A cancelled
+// predecessor can still finish and send after it was cancelled; with a
+// per-operation channel that late result lands in an orphaned channel nobody
+// reads, instead of occupying the slot the current operation's result needs.
 type asyncLoader[R any] struct {
 	ch     chan R
 	cancel context.CancelFunc
@@ -36,7 +41,22 @@ func (l *asyncLoader[R]) drain(fn func(R)) {
 	}
 }
 
-// cancelPending cancels any in-flight operation and drains stale results.
+// begin cancels any in-flight operation and starts a new one with a fresh
+// result channel. The returned context carries the timeout; the goroutine
+// doing the work must call the returned cancel func when it finishes and
+// send exactly one result on the returned channel.
+//
+// Call drain before begin if results already sitting on the previous
+// operation's channel should still be processed.
+func (l *asyncLoader[R]) begin(parent context.Context, timeout time.Duration) (context.Context, context.CancelFunc, chan<- R) {
+	l.cancelPending()
+	ctx, cancel := context.WithTimeout(parent, timeout)
+	l.cancel = cancel
+	l.ch = make(chan R, 1)
+	return ctx, cancel, l.ch
+}
+
+// cancelPending cancels any in-flight operation. It does not drain results.
 func (l *asyncLoader[R]) cancelPending() {
 	if l.cancel != nil {
 		l.cancel()
