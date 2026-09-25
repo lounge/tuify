@@ -9,7 +9,6 @@ import (
 
 	"github.com/lounge/tuify/internal/auth"
 	"github.com/lounge/tuify/internal/spotify"
-	sp "github.com/zmb3/spotify/v2"
 )
 
 // refreshTokenLifetime mirrors Spotify's refresh-token expiration policy
@@ -59,8 +58,7 @@ func Authenticate(ctx context.Context, rc RuntimeConfig) (*AuthSession, error) {
 		return nil, err
 	}
 
-	spClient := sp.New(httpClient)
-	client := spotify.New(spClient, httpClient)
+	client := spotify.New(httpClient)
 	if err := client.FetchUserID(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: could not fetch user ID: %v\n", err)
 	}

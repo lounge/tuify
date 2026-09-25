@@ -49,17 +49,17 @@ type Client struct {
 	DeviceOverridden atomic.Bool
 }
 
-// New constructs a Client. spClient handles SDK-level calls (playback
-// control, devices); httpClient is used for raw REST calls that the SDK
-// doesn't expose and must be the same auth-wrapped client so both paths
-// share token refresh.
+// New constructs a Client from the auth-wrapped httpClient.
 //
-// New installs a shared rate-limit gate on httpClient.Transport so SDK
-// and raw paths honor the same cooldown when Spotify returns 429.
-func New(spClient *sp.Client, httpClient *http.Client) *Client {
+// New first installs a rate-limit gate on httpClient.Transport, then builds
+// the zmb3 SDK client on top of that same *http.Client. SDK calls (playback
+// control, devices) and raw REST calls therefore share token refresh and
+// the 429 cooldown by construction, rather than relying on the caller to
+// wire both clients to one transport.
+func New(httpClient *http.Client) *Client {
 	rl := newRateLimitTransport(httpClient.Transport)
 	httpClient.Transport = rl
-	return &Client{sp: spClient, httpClient: httpClient, rl: rl}
+	return &Client{sp: sp.New(httpClient), httpClient: httpClient, rl: rl}
 }
 
 // RateLimitWait reports the remaining cooldown imposed by Spotify, or zero

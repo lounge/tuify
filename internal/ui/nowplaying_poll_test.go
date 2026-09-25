@@ -36,7 +36,7 @@ func TestPollState_RootContextCancelCascadesToHTTPCall(t *testing.T) {
 	defer cancel()
 
 	np := &nowPlayingModel{
-		client: spotify.New(nil, httpClient),
+		client: spotify.New(httpClient),
 		ctx:    ctx,
 	}
 	cmd := np.pollState()
@@ -86,7 +86,7 @@ func TestPollState_SkipsCallDuringRateLimitCooldown(t *testing.T) {
 		Base:   srv.Client().Transport,
 		Target: srv.URL,
 	}}
-	client := spotify.New(nil, httpClient)
+	client := spotify.New(httpClient)
 	np := &nowPlayingModel{client: client, ctx: context.Background()}
 
 	// First poll: arms the cooldown by hitting the 429.
@@ -197,7 +197,7 @@ func TestPlaylistFetch_RootContextCancelCascades(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	pv := newPlaylistView(ctx, spotify.New(nil, httpClient), 80, 20, false)
+	pv := newPlaylistView(ctx, spotify.New(httpClient), 80, 20, false)
 	cmd := pv.fetchMore()
 
 	done := make(chan tea.Msg, 1)

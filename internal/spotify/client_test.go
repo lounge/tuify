@@ -12,7 +12,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/lounge/tuify/internal/testutil"
-	sp "github.com/zmb3/spotify/v2"
 )
 
 // newTestClient creates a Client backed by a test HTTP server. Goes
@@ -23,20 +22,17 @@ import (
 func newTestClient(handler http.HandlerFunc) (*Client, func()) {
 	srv := httptest.NewServer(handler)
 	transport := &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}
-	c := New(nil, &http.Client{Transport: transport})
+	c := New(&http.Client{Transport: transport})
 	return c, srv.Close
 }
 
-// newSDKTestClient is newTestClient with a real zmb3 SDK client wired in,
-// for exercising the SDK-path methods (playback control, devices). Both
-// clients share one *http.Client, so the rate-limit gate covers both paths
-// exactly as in production.
+// newSDKTestClient is newTestClient with t.Cleanup instead of a returned
+// cleanup func, used by the SDK-path tests (playback control, devices).
 func newSDKTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
-	hc := &http.Client{Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}}
-	return New(sp.New(hc), hc)
+	return New(&http.Client{Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}})
 }
 
 func TestFetchUserID(t *testing.T) {

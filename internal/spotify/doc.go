@@ -4,9 +4,9 @@
 // transfer-on-reconnect behavior.
 //
 // Client is the operational entry point; construct it with New passing
-// an *sp.Client and *http.Client from the auth package. Both clients
-// must share the same auth-wrapped transport so token refresh and the
-// rate-limit gate installed by New cover SDK and raw HTTP paths alike.
+// the auth-wrapped *http.Client from the auth package. New installs the
+// rate-limit gate on that client and builds the zmb3 SDK client on top of
+// it, so token refresh and the gate cover SDK and raw HTTP paths alike.
 // Client is safe for concurrent use — the underlying zmb3 client and
 // http.Client are goroutine-safe, and the atomic DeviceOverridden flag
 // coordinates manual-switch awareness between the UI and the librespot
