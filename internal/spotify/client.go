@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -14,6 +13,19 @@ import (
 	"unicode/utf8"
 
 	sp "github.com/zmb3/spotify/v2"
+)
+
+// Operation names recorded in APIError.Endpoint for SDK-path failures, where
+// the SDK does not expose the request URL.
+const (
+	opPlay     = "PUT /me/player/play"
+	opPause    = "PUT /me/player/pause"
+	opSeek     = "PUT /me/player/seek"
+	opNext     = "POST /me/player/next"
+	opPrevious = "POST /me/player/previous"
+	opShuffle  = "PUT /me/player/shuffle"
+	opDevices  = "GET /me/player/devices"
+	opTransfer = "PUT /me/player"
 )
 
 // Client wraps the zmb3 Spotify SDK with the higher-level operations tuify
@@ -82,17 +94,34 @@ func (c *Client) FetchUserID(ctx context.Context) error {
 	return nil
 }
 
-// APIError is returned by doWithRetry for non-2xx responses. It carries the
-// status code and (truncated) response body so callers can distinguish error
-// shapes (e.g. StatusNoContent for "no active playback") without re-parsing.
+// APIError is returned by every Client method for non-2xx responses from
+// Spotify, on both the raw REST path and the SDK path. It carries the status
+// code and (truncated) response body so callers can distinguish error shapes
+// (e.g. 404 for "no active device") without re-parsing.
+//
+// Endpoint identifies the failed call: the full request URL on the raw REST
+// path, or an operation name such as "PUT /me/player/play" on the SDK path,
+// where the SDK does not expose the URL. For SDK calls Body holds Spotify's
+// error message.
+//
+// Err is the underlying cause when it is one of this package's own types
+// (currently *RateLimitedError for a cooldown short-circuit) and is reachable
+// via errors.As. SDK error types are deliberately not wrapped, so callers
+// never depend on the zmb3 SDK through this error.
 type APIError struct {
-	Status int
-	Body   []byte
-	URL    string
+	Status   int
+	Body     []byte
+	Endpoint string
+	Err      error
 }
 
 func (e *APIError) Error() string {
 	return fmt.Sprintf("Spotify API %d: %s", e.Status, e.Body)
+}
+
+// Unwrap returns the underlying cause, if any.
+func (e *APIError) Unwrap() error {
+	return e.Err
 }
 
 // doWithRetry performs a GET request with inline 429 retry for short
@@ -112,9 +141,10 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 			// see the same shape as a real 429 from Spotify.
 			if rle, ok := errors.AsType[*RateLimitedError](err); ok {
 				return nil, http.StatusTooManyRequests, &APIError{
-					Status: http.StatusTooManyRequests,
-					Body:   []byte(rle.Error()),
-					URL:    url,
+					Status:   http.StatusTooManyRequests,
+					Body:     []byte(rle.Error()),
+					Endpoint: url,
+					Err:      rle,
 				}
 			}
 			return nil, 0, err
@@ -129,7 +159,7 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 			// missing Retry-After), don't retry inline — the next attempt
 			// would short-circuit anyway.
 			if c.IsRateLimited() {
-				return nil, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), URL: url}
+				return nil, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), Endpoint: url}
 			}
 			wait := 0
 			if s := resp.Header.Get("Retry-After"); s != "" {
@@ -147,10 +177,46 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
 			return body, resp.StatusCode, nil
 		}
-		log.Printf("[spotify] %s %d body=%s", url, resp.StatusCode, truncateForLog(body))
-		return body, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), URL: url}
+		return body, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), Endpoint: url}
 	}
-	return nil, http.StatusTooManyRequests, fmt.Errorf("Spotify API 429: rate limited after retries")
+	return nil, http.StatusTooManyRequests, &APIError{
+		Status:   http.StatusTooManyRequests,
+		Body:     []byte("rate limited after retries"),
+		Endpoint: url,
+	}
+}
+
+// wrapSDKErr normalizes an error from the zmb3 SDK into an *APIError so SDK
+// methods honor the same error contract as the raw REST path. op names the
+// operation (e.g. "PUT /me/player/play") and is stored in APIError.Endpoint.
+//
+// The SDK reports non-2xx responses as the value type sp.Error, and a
+// cooldown short-circuit from rateLimitTransport as *RateLimitedError
+// wrapped in *url.Error. Anything else (context cancellation, network
+// failures, SDK decode errors) is returned unchanged.
+func wrapSDKErr(err error, op string) error {
+	if err == nil {
+		return nil
+	}
+	if _, ok := errors.AsType[*APIError](err); ok {
+		return err
+	}
+	if rle, ok := errors.AsType[*RateLimitedError](err); ok {
+		return &APIError{
+			Status:   http.StatusTooManyRequests,
+			Body:     []byte(rle.Error()),
+			Endpoint: op,
+			Err:      rle,
+		}
+	}
+	if se, ok := errors.AsType[sp.Error](err); ok {
+		return &APIError{
+			Status:   se.Status,
+			Body:     truncateForLog([]byte(se.Message)),
+			Endpoint: op,
+		}
+	}
+	return err
 }
 
 func (c *Client) apiGet(ctx context.Context, url string, result any) error {

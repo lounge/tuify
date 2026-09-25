@@ -102,7 +102,7 @@ func (c *Client) Play(ctx context.Context, itemURI, contextURI, deviceID string)
 	} else {
 		opts.URIs = []sp.URI{sp.URI(itemURI)}
 	}
-	return c.sp.PlayOpt(ctx, opts)
+	return wrapSDKErr(c.sp.PlayOpt(ctx, opts), opPlay)
 }
 
 // PlayQueue starts playback of an explicit list of track URIs in order.
@@ -116,17 +116,17 @@ func (c *Client) PlayQueue(ctx context.Context, uris []string, deviceID string) 
 	if len(uris) > 0 {
 		opts.PlaybackOffset = &sp.PlaybackOffset{URI: sp.URI(uris[0])}
 	}
-	return c.sp.PlayOpt(ctx, opts)
+	return wrapSDKErr(c.sp.PlayOpt(ctx, opts), opPlay)
 }
 
 // Resume resumes paused playback on the specified device.
 func (c *Client) Resume(ctx context.Context, deviceID string) error {
-	return c.sp.PlayOpt(ctx, playOpts(deviceID))
+	return wrapSDKErr(c.sp.PlayOpt(ctx, playOpts(deviceID)), opPlay)
 }
 
 // Pause pauses playback on the specified device.
 func (c *Client) Pause(ctx context.Context, deviceID string) error {
-	return c.sp.PauseOpt(ctx, playOpts(deviceID))
+	return wrapSDKErr(c.sp.PauseOpt(ctx, playOpts(deviceID)), opPause)
 }
 
 // Stop pauses and seeks to the start of the current track. Spotify has no
@@ -134,30 +134,30 @@ func (c *Client) Pause(ctx context.Context, deviceID string) error {
 func (c *Client) Stop(ctx context.Context, deviceID string) error {
 	opts := playOpts(deviceID)
 	if err := c.sp.PauseOpt(ctx, opts); err != nil {
-		return err
+		return wrapSDKErr(err, opPause)
 	}
-	return c.sp.SeekOpt(ctx, 0, opts)
+	return wrapSDKErr(c.sp.SeekOpt(ctx, 0, opts), opSeek)
 }
 
 // Next skips to the next item in the current playback context.
 func (c *Client) Next(ctx context.Context, deviceID string) error {
-	return c.sp.NextOpt(ctx, playOpts(deviceID))
+	return wrapSDKErr(c.sp.NextOpt(ctx, playOpts(deviceID)), opNext)
 }
 
 // Previous skips to the previous item, or restarts the current one if
 // playback has advanced past the start (Spotify's native behavior).
 func (c *Client) Previous(ctx context.Context, deviceID string) error {
-	return c.sp.PreviousOpt(ctx, playOpts(deviceID))
+	return wrapSDKErr(c.sp.PreviousOpt(ctx, playOpts(deviceID)), opPrevious)
 }
 
 // Shuffle enables or disables shuffle mode on the specified device.
 func (c *Client) Shuffle(ctx context.Context, state bool, deviceID string) error {
-	return c.sp.ShuffleOpt(ctx, state, playOpts(deviceID))
+	return wrapSDKErr(c.sp.ShuffleOpt(ctx, state, playOpts(deviceID)), opShuffle)
 }
 
 // Seek jumps to positionMs within the current track.
 func (c *Client) Seek(ctx context.Context, positionMs int, deviceID string) error {
-	return c.sp.SeekOpt(ctx, positionMs, playOpts(deviceID))
+	return wrapSDKErr(c.sp.SeekOpt(ctx, positionMs, playOpts(deviceID)), opSeek)
 }
 
 func playOpts(deviceID string) *sp.PlayOptions {

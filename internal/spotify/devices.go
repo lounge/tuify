@@ -3,7 +3,6 @@ package spotify
 import (
 	"context"
 	"fmt"
-	"log"
 
 	sp "github.com/zmb3/spotify/v2"
 )
@@ -12,8 +11,7 @@ import (
 func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
-		log.Printf("[devices] GetDevices API error: %v", err)
-		return nil, err
+		return nil, wrapSDKErr(err, opDevices)
 	}
 	out := make([]Device, 0, len(devices))
 	for _, d := range devices {
@@ -35,7 +33,7 @@ func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, active bool, preferred bool, err error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
-		return "", false, false, err
+		return "", false, false, wrapSDKErr(err, opDevices)
 	}
 	if len(devices) == 0 {
 		return "", false, false, fmt.Errorf("no Spotify devices found — open Spotify on any device")
@@ -63,5 +61,5 @@ func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, ac
 // true, playback resumes on the target; otherwise the target is primed
 // but left in its current paused/playing state.
 func (c *Client) TransferPlayback(ctx context.Context, deviceID string, play bool) error {
-	return c.sp.TransferPlayback(ctx, sp.ID(deviceID), play)
+	return wrapSDKErr(c.sp.TransferPlayback(ctx, sp.ID(deviceID), play), opTransfer)
 }

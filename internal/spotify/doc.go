@@ -13,10 +13,18 @@
 // reconnect handler.
 //
 // Errors: non-2xx responses surface as *APIError (carrying status and
-// truncated body). When Spotify rate-limits the client, a shared
-// cooldown is armed so subsequent calls short-circuit before hitting
-// the network; callers polling on a timer should consult RateLimitWait
-// to extend their interval past the deadline. Consecutive 429s escalate
+// truncated body) from every Client method, whether the call went
+// through the raw REST path or the SDK. SDK failures are normalized by
+// wrapSDKErr; the one exception is an SDK error response whose body is
+// empty or not JSON, which the SDK reports as a plain error without a
+// status. A cooldown short-circuit surfaces as an *APIError with status
+// 429 wrapping *RateLimitedError, so errors.As can recover the deadline.
+// Context and network errors are returned unwrapped.
+//
+// When Spotify rate-limits the client, a shared cooldown is armed so
+// subsequent calls short-circuit before hitting the network; callers
+// polling on a timer should consult RateLimitWait to extend their
+// interval past the deadline. Consecutive 429s escalate
 // the cooldown exponentially (up to one hour) so a persistent throttle
 // backs off instead of retrying at a fixed interval; the streak resets
 // on the first non-429 response.

@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/lounge/tuify/internal/testutil"
+	sp "github.com/zmb3/spotify/v2"
 )
 
 // newTestClient creates a Client backed by a test HTTP server. Goes
@@ -24,6 +25,18 @@ func newTestClient(handler http.HandlerFunc) (*Client, func()) {
 	transport := &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}
 	c := New(nil, &http.Client{Transport: transport})
 	return c, srv.Close
+}
+
+// newSDKTestClient is newTestClient with a real zmb3 SDK client wired in,
+// for exercising the SDK-path methods (playback control, devices). Both
+// clients share one *http.Client, so the rate-limit gate covers both paths
+// exactly as in production.
+func newSDKTestClient(t *testing.T, handler http.HandlerFunc) *Client {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	hc := &http.Client{Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}}
+	return New(sp.New(hc), hc)
 }
 
 func TestFetchUserID(t *testing.T) {
@@ -89,6 +102,13 @@ func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
 	}
 	if status != http.StatusTooManyRequests {
 		t.Errorf("status: got %d, want 429", status)
+	}
+	apiErr, ok := errors.AsType[*APIError](err)
+	if !ok {
+		t.Fatalf("expected *APIError, got %T: %v", err, err)
+	}
+	if apiErr.Status != http.StatusTooManyRequests {
+		t.Errorf("APIError.Status: got %d, want 429", apiErr.Status)
 	}
 }
 
