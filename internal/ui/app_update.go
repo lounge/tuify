@@ -11,32 +11,56 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// The waitFor* Cmds each park a goroutine on a bootstrap-owned channel that
+// may never fire. They also select on the root context so the goroutine
+// exits at shutdown, and return nil on a closed channel so the Cmd is not
+// re-armed into a busy loop.
+
 func (m Model) waitForLibrespotInactive() tea.Cmd {
 	ch := m.librespotInactiveCh
+	ctx := m.rootCtx
 	return func() tea.Msg {
-		<-ch
-		return LibrespotInactiveMsg{}
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			return LibrespotInactiveMsg{}
+		case <-ctx.Done():
+			return nil
+		}
 	}
 }
 
 func (m Model) waitForTokenSaveErr() tea.Cmd {
 	ch := m.tokenSaveErrCh
+	ctx := m.rootCtx
 	return func() tea.Msg {
-		err, ok := <-ch
-		if !ok {
+		select {
+		case err, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			return TokenSaveErrMsg{Err: err}
+		case <-ctx.Done():
 			return nil
 		}
-		return TokenSaveErrMsg{Err: err}
 	}
 }
 
 func (m Model) waitForTokenRevoked() tea.Cmd {
 	ch := m.tokenRevokedCh
+	ctx := m.rootCtx
 	return func() tea.Msg {
-		if _, ok := <-ch; !ok {
+		select {
+		case _, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			return TokenRevokedMsg{}
+		case <-ctx.Done():
 			return nil
 		}
-		return TokenRevokedMsg{}
 	}
 }
 

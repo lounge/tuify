@@ -25,9 +25,10 @@ func Run() error {
 	closeLog := SetupLog()
 	defer closeLog()
 
-	// Root context for the whole app run. Cancelled on return so every
-	// background goroutine (token refresh, device polling, librespot
-	// reconnect ops) unwinds cleanly instead of lingering after exit.
+	// Root context for the whole app run. Cancelled as soon as the UI
+	// exits (and on any early return) so every background goroutine
+	// (token refresh, device polling, librespot reconnect ops) unwinds
+	// before the deferred cleanups run instead of racing them.
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -81,7 +82,12 @@ func Run() error {
 	if session.RevokedCh != nil {
 		uiCh := make(chan struct{}, 1)
 		go func() {
-			if _, ok := <-session.RevokedCh; !ok {
+			select {
+			case _, ok := <-session.RevokedCh:
+				if !ok {
+					return
+				}
+			case <-ctx.Done():
 				return
 			}
 			tokenRevoked.Store(true)
@@ -113,6 +119,12 @@ func Run() error {
 		tea.WithMouseCellMotion(),
 	)
 	_, err = p.Run()
+	// Cancel now rather than via defer: the deferred cleanups (librespot
+	// Stop can wait up to 5s) run before a deferred cancel would, so
+	// in-flight Cmds, the reconnect handler and token refresh would keep
+	// running against a live context during teardown. The deferred cancel
+	// above still covers the early-return paths.
+	cancel()
 	if tokenRevoked.Load() {
 		// Replace any tea.Run error (likely nil — the UI returned
 		// tea.Quit cleanly) with a specific re-login message. The
