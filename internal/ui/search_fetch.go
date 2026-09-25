@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"fmt"
-
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
@@ -161,7 +159,7 @@ func (v *searchView) rebuildList() {
 			items = []list.Item{loadingStatusItem}
 		case v.searchErr != nil:
 			items = []list.Item{statusItem{
-				text:    fmt.Sprintf("Search failed: %v", v.searchErr),
+				text:    "Search failed: " + userMessage(v.searchErr),
 				desc:    "press Enter to retry",
 				isError: true,
 			}}

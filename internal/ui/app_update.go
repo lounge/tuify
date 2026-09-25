@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
@@ -94,11 +95,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case transferDeviceMsg:
 		if msg.err != nil {
+			log.Printf("[device] transfer to %s failed: %v", msg.deviceName, msg.err)
 			m.deviceSelector.transferring = false
 			if errors.Is(msg.err, context.DeadlineExceeded) {
 				return m, nil
 			}
-			return m, m.nowPlaying.SetError("Transfer failed: " + msg.err.Error())
+			return m, m.nowPlaying.SetError("Transfer failed: " + userMessage(msg.err))
 		}
 		// Update override state based on whether the chosen device is preferred.
 		if m.client.PreferredDevice != "" && msg.deviceName != m.client.PreferredDevice {

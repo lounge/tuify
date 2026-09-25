@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"fmt"
+	"log"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -41,9 +41,10 @@ func (l *lazyList) onLoaded() {
 
 // onError sets the error state with a retry prompt.
 func (l *lazyList) onError(err error) {
+	log.Printf("[list] load failed: %v", err)
 	l.hasMore = false
 	l.items = append(l.items, statusItem{
-		text:    fmt.Sprintf("Failed to load: %v", err),
+		text:    "Failed to load: " + userMessage(err),
 		desc:    "press Enter to retry",
 		isError: true,
 	})

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -31,6 +32,7 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 		m.nowPlaying.seekPending = false
 	}
 	if msg.err != nil {
+		log.Printf("[playback] command failed: %v", msg.err)
 		if m.nowPlaying.playPausePending {
 			m.nowPlaying.playPausePending = false
 			m.nowPlaying.playing = !m.nowPlaying.playing
@@ -46,7 +48,7 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 			}
 			return m, nil
 		}
-		errCmd := m.nowPlaying.SetError(msg.err.Error())
+		errCmd := m.nowPlaying.SetError(userMessage(msg.err))
 		if msg.seek {
 			return m, tea.Batch(
 				errCmd,

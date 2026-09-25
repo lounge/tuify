@@ -133,22 +133,16 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 			log.Printf("[withDevice] DeviceOverridden=true, finding active device")
 			deviceID, _, _, err := client.FindDevice(ctx, true)
 			if err != nil {
-				log.Printf("[withDevice] FindDevice(activeOnly) failed: %v", err)
 				return playbackResultMsg{err: err, seek: seek}
 			}
 			log.Printf("[withDevice] targeting overridden device: %s", deviceID)
-			if err := fn(ctx, client, deviceID); err != nil {
-				log.Printf("[withDevice] command failed on overridden device: %v", err)
-				return playbackResultMsg{err: err, seek: seek}
-			}
-			return playbackResultMsg{err: nil, seek: seek}
+			return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
 		}
 
 		findCtx, findCancel := context.WithTimeout(parent, 10*time.Second)
 		deviceID, active, preferred, err := client.FindDevice(findCtx, false)
 		findCancel()
 		if err != nil {
-			log.Printf("[withDevice] FindDevice failed: %v", err)
 			return playbackResultMsg{err: err, seek: seek}
 		}
 		log.Printf("[withDevice] device=%s active=%v preferred=%v overridden=%v", deviceID, active, preferred, client.DeviceOverridden.Load())

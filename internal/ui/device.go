@@ -84,6 +84,7 @@ func (d *deviceSelectorModel) open() {
 func (d *deviceSelectorModel) handleLoaded(msg devicesLoadedMsg) {
 	d.loading = false
 	if msg.err != nil {
+		log.Printf("[device] loading devices failed: %v", msg.err)
 		d.err = msg.err
 		return
 	}
@@ -156,7 +157,7 @@ func (d *deviceSelectorModel) view(width, height int) string {
 	case d.loading:
 		body = loadingSpinner.View() + " " + loadingStyle.Render("Loading devices…")
 	case d.err != nil:
-		body = errorStyle.Render(d.err.Error())
+		body = errorStyle.Render(userMessage(d.err))
 	case len(d.devices) == 0:
 		body = loadingStyle.Render("No devices found")
 	default:

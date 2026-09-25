@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"log"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -138,6 +139,7 @@ func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 		}
 		v.pending--
 		if msg.err != nil {
+			log.Printf("[search] fetch failed: %v", msg.err)
 			v.searchErr = msg.err
 			v.hasMore = false
 		} else {
