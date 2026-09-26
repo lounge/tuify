@@ -4,7 +4,11 @@ package audio
 const NumBands = 64
 
 // FrequencyData holds FFT output mapped to visualization-friendly bands.
+// A frame is immutable once PipeReader publishes it.
 type FrequencyData struct {
+	// Bands must stay an array, not a slice: PipeReader.Latest copies the
+	// struct by value to give each caller its own frame, and a slice would
+	// share its backing array with the published frame.
 	Bands      [NumBands]float32 // log-spaced frequency bands, normalized 0.0–1.0
 	Peak       float32           // overall spectral peak this frame, 0.0–1.0
 	Bass       float32           // average of bands 0–7

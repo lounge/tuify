@@ -10,4 +10,8 @@
 // sample count so visualizers can display playback progress without a
 // separate Spotify poll. PipeReader is safe to call Start/Stop from any
 // goroutine; reads are internally synchronized.
+//
+// Frames are immutable once published. Latest returns a copy owned by the
+// caller, so a visualizer may keep or modify it without affecting the
+// producer or other consumers.
 package audio

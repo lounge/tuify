@@ -292,19 +292,29 @@ func TestPipeReader_Latest_VolumeGainCapsAt4x(t *testing.T) {
 	}
 }
 
-func TestPipeReader_Latest_Unity_NoCopy(t *testing.T) {
-	// At 100% volume there's no gain to apply; Latest should return the
-	// stored pointer directly (short-circuit path).
+func TestPipeReader_Latest_ReturnsCallerOwnedCopy(t *testing.T) {
+	// Even at 100% volume, where no gain applies, Latest must return a copy:
+	// visualizers keep the pointer across ticks, and a write through it
+	// must never reach the shared published frame.
 	pr := NewPipeReader()
 	pr.NewPlayer = newNoopPlayer
 	pr.SetVolumePercent(100)
 
 	base := &FrequencyData{Peak: 0.42}
+	base.Bands[0] = 0.5
 	seedFreshFrame(pr, base)
 
 	got := pr.Latest()
-	if got != base {
-		t.Errorf("at 100%% volume Latest should return stored pointer; got new copy")
+	if got == base {
+		t.Fatal("Latest returned the published frame, not a copy")
+	}
+	if got.Peak != 0.42 || got.Bands[0] != 0.5 {
+		t.Errorf("copy differs from the published frame: %+v", got)
+	}
+	got.Bands[0] = 1
+	got.Peak = 1
+	if base.Bands[0] != 0.5 || base.Peak != 0.42 {
+		t.Error("writing through Latest's result mutated the published frame")
 	}
 }
 

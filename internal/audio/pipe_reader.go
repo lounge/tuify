@@ -108,11 +108,15 @@ func (pr *PipeReader) Latest() *FrequencyData {
 	if fd == nil {
 		return nil
 	}
+	// Always hand out a copy. The published frame is shared across
+	// goroutines, and visualizers keep the returned pointer across ticks;
+	// a copy makes it impossible for a consumer write to race the
+	// producer or other consumers. One small allocation per UI tick.
+	out := *fd
 	gain := pr.volumeGain()
 	if gain == 1.0 {
-		return fd
+		return &out
 	}
-	out := *fd
 	for i := range out.Bands {
 		out.Bands[i] = clampUnit(out.Bands[i] * gain)
 	}
