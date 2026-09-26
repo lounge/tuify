@@ -40,9 +40,9 @@ func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, ac
 		return "", false, false, fmt.Errorf("no Spotify devices found — open Spotify on any device")
 	}
 	// When not restricted to active-only, prefer the configured device.
-	if !activeOnly && c.PreferredDevice != "" {
+	if !activeOnly && c.preferredDevice != "" {
 		for _, d := range devices {
-			if d.Name == c.PreferredDevice {
+			if d.Name == c.preferredDevice {
 				return string(d.ID), d.Active, true, nil
 			}
 		}

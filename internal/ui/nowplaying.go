@@ -85,7 +85,6 @@ type nowPlayingModel struct {
 
 	// Device override: when the user manually switches playback to another
 	// device in Spotify, we stop re-claiming the preferred device.
-	preferredDevice  string
 	deviceOverridden bool
 
 	// Marquee scroll offset for the "track — artist" label when it doesn't
@@ -140,11 +139,10 @@ func (m *nowPlayingModel) setDeviceOverride(overridden bool, reason string) {
 // newNowPlaying creates a fresh nowPlayingModel. ctx bounds its polls.
 func newNowPlaying(ctx context.Context, client *spotify.Client) *nowPlayingModel {
 	return &nowPlayingModel{
-		ctx:             ctx,
-		client:          client,
-		preferredDevice: client.PreferredDevice,
-		progressCache:   make(map[string]int),
-		volumePercent:   100,
+		ctx:           ctx,
+		client:        client,
+		progressCache: make(map[string]int),
+		volumePercent: 100,
 	}
 }
 
@@ -223,11 +221,11 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 
 	// Detect external device switches: if playback moved away from the
 	// preferred device without tuify initiating it, stop re-claiming.
-	if m.preferredDevice != "" && msg.state.DeviceName != "" {
-		if msg.state.DeviceName != m.preferredDevice && (m.deviceName == m.preferredDevice || m.deviceName == "") {
-			m.setDeviceOverride(true, fmt.Sprintf("external switch: %s → %s", m.preferredDevice, msg.state.DeviceName))
-		} else if msg.state.DeviceName == m.preferredDevice && m.deviceOverridden {
-			m.setDeviceOverride(false, fmt.Sprintf("playback returned to %s", m.preferredDevice))
+	if preferred := m.client.PreferredDevice(); preferred != "" && msg.state.DeviceName != "" {
+		if msg.state.DeviceName != preferred && (m.deviceName == preferred || m.deviceName == "") {
+			m.setDeviceOverride(true, fmt.Sprintf("external switch: %s → %s", preferred, msg.state.DeviceName))
+		} else if msg.state.DeviceName == preferred && m.deviceOverridden {
+			m.setDeviceOverride(false, fmt.Sprintf("playback returned to %s", preferred))
 		}
 	}
 	m.deviceName = msg.state.DeviceName

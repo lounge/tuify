@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -213,26 +214,18 @@ func TestStartLibrespot_Disabled(t *testing.T) {
 	}
 }
 
-// TestStartLibrespot_SetsPreferredDevice verifies the client's preferred
-// device is written even if the librespot binary isn't available in the test
-// environment — the assignment happens before any subprocess work.
-func TestStartLibrespot_SetsPreferredDevice(t *testing.T) {
-	cfg := &config.Config{
-		ClientID:        "id",
-		EnableLibrespot: true,
-		DeviceName:      "test-device",
-		LibrespotPath:   "/bin/true",
-	}
-	rc := resolveRuntime(cfg)
-	client := &spotify.Client{}
-
-	svc, _ := startLibrespot(context.Background(), rc, client)
-	if svc != nil {
-		defer svc.Cleanup()
-	}
-
-	if client.PreferredDevice != "test-device" {
-		t.Errorf("PreferredDevice: got %q, want %q", client.PreferredDevice, "test-device")
+// TestNewSpotifyClient_PreferredDevice: tuify's librespot device is the
+// preferred one only when librespot is enabled.
+func TestNewSpotifyClient_PreferredDevice(t *testing.T) {
+	for _, tc := range []struct {
+		enable bool
+		want   string
+	}{{true, "test-device"}, {false, ""}} {
+		rc := resolveRuntime(&config.Config{ClientID: "id", EnableLibrespot: tc.enable, DeviceName: "test-device"})
+		client := newSpotifyClient(&http.Client{}, rc)
+		if got := client.PreferredDevice(); got != tc.want {
+			t.Errorf("librespot enabled=%v: PreferredDevice() = %q, want %q", tc.enable, got, tc.want)
+		}
 	}
 }
 

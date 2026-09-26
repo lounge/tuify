@@ -30,7 +30,7 @@ func newDevicesClient(t *testing.T, preferred string, devices ...apiDevice) *Cli
 		}
 		json.NewEncoder(w).Encode(map[string]any{"devices": devices})
 	})
-	c.PreferredDevice = preferred
+	c.preferredDevice = preferred
 	return c
 }
 

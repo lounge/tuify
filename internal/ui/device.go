@@ -224,7 +224,7 @@ func transferDeviceCmd(parent context.Context, client *spotify.Client, dev spoti
 		// backend, so after transferring away the target starts from the
 		// beginning. Seek the target to the progress we tracked locally.
 		// Only needed when leaving the preferred (librespot) device.
-		if currentDeviceID != "" && dev.Name != client.PreferredDevice && progressMs > 0 {
+		if currentDeviceID != "" && dev.Name != client.PreferredDevice() && progressMs > 0 {
 			// Small delay so the new device is fully active before we
 			// seek — Spotify 404s seeks at devices that aren't yet ready.
 			select {

@@ -69,8 +69,7 @@ func TestReconnectHandler(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				fake := &fakeSpotify{}
-				client := spotify.New(&http.Client{Transport: fake})
-				client.PreferredDevice = "tuify"
+				client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
 				client.DeviceOverridden.Store(tc.overridden)
 
 				ctx, cancel := context.WithCancel(t.Context())
@@ -113,8 +112,7 @@ func TestReconnectHandler(t *testing.T) {
 func TestReconnectHandler_OverlappingTriggersTransferOnce(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		fake := &fakeSpotify{}
-		client := spotify.New(&http.Client{Transport: fake})
-		client.PreferredDevice = "tuify"
+		client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
 
 		handler := reconnectHandler(t.Context(), client, "tuify")
 		var wg sync.WaitGroup

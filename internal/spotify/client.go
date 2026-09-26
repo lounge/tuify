@@ -44,7 +44,7 @@ type Client struct {
 	rl              *rateLimitTransport
 	userMu          sync.Mutex // guards userID
 	userID          string
-	PreferredDevice string // if set, FindDevice prefers this device name
+	preferredDevice string // set by WithPreferredDevice; immutable after New
 
 	// DeviceOverridden is set when the user manually switches playback to
 	// another device in Spotify. Checked by the librespot OnReconnect
@@ -59,11 +59,29 @@ type Client struct {
 // control, devices) and raw REST calls therefore share token refresh and
 // the 429 cooldown by construction, rather than relying on the caller to
 // wire both clients to one transport.
-func New(httpClient *http.Client) *Client {
+func New(httpClient *http.Client, opts ...Option) *Client {
 	rl := newRateLimitTransport(httpClient.Transport)
 	httpClient.Transport = rl
-	return &Client{sp: sp.New(httpClient), httpClient: httpClient, rl: rl}
+	c := &Client{sp: sp.New(httpClient), httpClient: httpClient, rl: rl}
+	for _, opt := range opts {
+		opt(c)
+	}
+	return c
 }
+
+// Option configures a Client in New.
+type Option func(*Client)
+
+// WithPreferredDevice names the Spotify Connect device (tuify's own
+// librespot) that FindDevice prefers and that the UI treats as home.
+func WithPreferredDevice(name string) Option {
+	return func(c *Client) { c.preferredDevice = name }
+}
+
+// PreferredDevice returns the device name set by WithPreferredDevice, or
+// "" when there is none. It never changes after New, so it is safe to read
+// from any goroutine.
+func (c *Client) PreferredDevice() string { return c.preferredDevice }
 
 // RateLimitWait reports the remaining cooldown imposed by Spotify, or zero
 // when not rate limited. Callers (e.g. the now-playing poll loop) use this

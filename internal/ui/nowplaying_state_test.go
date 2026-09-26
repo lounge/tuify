@@ -283,7 +283,7 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			np := newNowPlaying(t.Context(), &spotify.Client{PreferredDevice: tc.preferred})
+			np := newNowPlaying(t.Context(), spotify.New(&http.Client{}, spotify.WithPreferredDevice(tc.preferred)))
 			if tc.setup != nil {
 				tc.setup(np)
 			}

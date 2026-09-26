@@ -33,8 +33,6 @@ func startLibrespot(ctx context.Context, rc runtimeConfig, client *spotify.Clien
 		return nil, nil
 	}
 
-	client.PreferredDevice = rc.ResolvedDeviceName
-
 	backend := rc.AudioBackend
 	if backend == "" {
 		backend = librespot.DefaultBackend

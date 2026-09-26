@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -66,7 +67,7 @@ func authenticate(ctx context.Context, rc runtimeConfig) (*authSession, error) {
 		return nil, err
 	}
 
-	client := spotify.New(httpClient)
+	client := newSpotifyClient(httpClient, rc)
 	// Warm the user-ID cache. On failure GetPlaylists retries the fetch
 	// itself, so this only needs a trace; a stderr print here would be
 	// hidden by the alt screen immediately.
@@ -99,4 +100,14 @@ func logReauthWindow(authorizedAt time.Time) {
 		log.Printf("[auth] authorization expires on %s (%s remaining); sign in again to avoid an interruption",
 			expiresAt.Format("2006-01-02"), remaining.Round(24*time.Hour))
 	}
+}
+
+// newSpotifyClient builds the Spotify client. With librespot enabled,
+// tuify's own device is the one to prefer and to transfer back to.
+func newSpotifyClient(httpClient *http.Client, rc runtimeConfig) *spotify.Client {
+	var opts []spotify.Option
+	if rc.EnableLibrespot {
+		opts = append(opts, spotify.WithPreferredDevice(rc.ResolvedDeviceName))
+	}
+	return spotify.New(httpClient, opts...)
 }

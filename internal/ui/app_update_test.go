@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"net/http"
 	"testing"
 	"time"
 
@@ -74,7 +75,7 @@ func assertReturnsNil(t *testing.T, done <-chan tea.Msg) {
 // tuify to fight the user over device selection.
 
 func newTestModelWithClient(preferred string) Model {
-	client := &spotify.Client{PreferredDevice: preferred}
+	client := spotify.New(&http.Client{}, spotify.WithPreferredDevice(preferred))
 	np := newNowPlaying(context.Background(), client)
 	return Model{
 		nowPlaying: np,

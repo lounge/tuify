@@ -108,7 +108,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case pageLoadedMsg:
 		return m, m.routePage(msg)
 	case librespotInactiveMsg:
-		m.nowPlaying.setDeviceOverride(true, "librespot inactive — playback moved away from "+m.client.PreferredDevice)
+		m.nowPlaying.setDeviceOverride(true, "librespot inactive — playback moved away from "+m.client.PreferredDevice())
 		m.nowPlaying.deviceName = ""
 		return m, tea.Batch(m.nowPlaying.pollState(), m.waitForLibrespotInactive())
 	case tokenSaveErrMsg:
@@ -138,7 +138,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, m.nowPlaying.setError("Transfer failed: " + userMessage(msg.err))
 		}
 		// Update override state based on whether the chosen device is preferred.
-		if m.client.PreferredDevice != "" && msg.deviceName != m.client.PreferredDevice {
+		if m.client.PreferredDevice() != "" && msg.deviceName != m.client.PreferredDevice() {
 			m.nowPlaying.setDeviceOverride(true, "transferred to non-preferred device "+msg.deviceName)
 		} else {
 			m.nowPlaying.setDeviceOverride(false, "transferred to preferred device "+msg.deviceName)
