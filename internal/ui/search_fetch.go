@@ -27,7 +27,12 @@ func fetchCmd[T any](
 	}
 }
 
-func (v searchView) fetchResults(term string, offset, limit int) tea.Cmd {
+// searchPageSize is how many results each search or drill-down page asks
+// Spotify for.
+const searchPageSize = 10
+
+func (v searchView) fetchResults(term string, offset int) tea.Cmd {
+	const limit = searchPageSize
 	client := v.client
 	prefix := v.prefix
 	depth := v.depth
@@ -127,7 +132,7 @@ func (v *searchView) fetchMore() tea.Cmd {
 		if v.depth > 0 {
 			term = "" // detail fetches don't need the search term
 		}
-		return v.fetchResults(term, v.offset, 10)
+		return v.fetchResults(term, v.offset)
 	}
 	return nil
 }
@@ -135,7 +140,7 @@ func (v *searchView) fetchMore() tea.Cmd {
 // goBackFetchCmd returns the fetch command needed after goBack.
 func (v *searchView) goBackFetchCmd() tea.Cmd {
 	if v.pending > 0 {
-		return v.fetchResults(v.query, 0, 10)
+		return v.fetchResults(v.query, 0)
 	}
 	return nil
 }
@@ -149,7 +154,7 @@ func (v *searchView) retry() tea.Cmd {
 	if v.depth > 0 {
 		term = ""
 	}
-	return v.fetchResults(term, v.offset, 10)
+	return v.fetchResults(term, v.offset)
 }
 
 // rebuildList refreshes v.list from v.items, swapping in loading/error/empty

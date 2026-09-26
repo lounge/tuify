@@ -223,7 +223,7 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Re-init visualizer on track change and reload album art + lyrics
 	if m.nowPlaying.trackURI != prevURI && isPlayableURI(m.nowPlaying.trackURI) {
-		m.visualizer.onTrackChange(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
+		m.visualizer.initTrack(m.nowPlaying.trackInfo())
 		m.visualizer.loadImage(m.nowPlaying.imageURL)
 		cmds = append(cmds, tea.SetWindowTitle(fmt.Sprintf("tuify — %s — %s", m.nowPlaying.track, m.nowPlaying.artist)))
 	} else if m.nowPlaying.imageURL != m.visualizer.imageURL {

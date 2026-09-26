@@ -79,7 +79,17 @@ func (m *visualizerModel) viz() visualizers.Visualizer {
 	return m.vizList[m.vizIdx]
 }
 
-func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track, artist string, isEpisode bool) tea.Cmd {
+// trackInfo is what the visualizers need to know about the playing item.
+type trackInfo struct {
+	id         string // Spotify ID, also the visualizers' seed
+	durationMs int
+	imageURL   string
+	track      string
+	artist     string
+	isEpisode  bool
+}
+
+func (m *visualizerModel) toggle(t trackInfo) tea.Cmd {
 	if m.active {
 		m.active = false
 		return nil
@@ -88,13 +98,13 @@ func (m *visualizerModel) toggle(trackID string, durationMs int, imageURL, track
 	m.drainImages()
 	m.drainLyrics()
 	m.refreshAudioSeen()
-	if trackID != m.trackID {
-		m.initTrack(trackID, durationMs, track, artist, isEpisode)
+	if t.id != m.trackID {
+		m.initTrack(t)
 	}
 	if m.shouldSkip(m.vizIdx) {
 		m.cycle(1)
 	}
-	m.loadImage(imageURL)
+	m.loadImage(t.imageURL)
 	return m.tick()
 }
 
@@ -182,18 +192,16 @@ func (m *visualizerModel) refreshAudioSeen() *audio.FrequencyData {
 	return data
 }
 
-func (m *visualizerModel) onTrackChange(trackID string, durationMs int, track, artist string, isEpisode bool) {
-	m.initTrack(trackID, durationMs, track, artist, isEpisode)
-}
-
-func (m *visualizerModel) initTrack(trackID string, durationMs int, track, artist string, isEpisode bool) {
-	m.trackID = trackID
-	m.isEpisode = isEpisode
+// initTrack resets every visualizer for a new track and starts its
+// lyrics fetch.
+func (m *visualizerModel) initTrack(t trackInfo) {
+	m.trackID = t.id
+	m.isEpisode = t.isEpisode
 	for _, v := range m.vizList {
-		v.Init(trackID, durationMs)
+		v.Init(t.id, t.durationMs)
 	}
-	if !isEpisode {
-		m.loadLyrics(trackID, track, artist)
+	if !t.isEpisode {
+		m.loadLyrics(t.id, t.track, t.artist)
 	}
 	if m.shouldSkip(m.vizIdx) {
 		m.cycle(1)

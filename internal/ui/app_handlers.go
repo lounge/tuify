@@ -76,18 +76,19 @@ func (m Model) handleVizTick() (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handleEpisodeResume(msg episodeResumeMsg) (tea.Model, tea.Cmd) {
-	posMs := msg.posMs
-	return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
-		return c.Seek(ctx, posMs, id)
-	}, true)
+	return m, m.seekTo(msg.posMs)
 }
 
 func (m Model) handleSeekFire(msg seekFireMsg) (tea.Model, tea.Cmd) {
 	if msg.seq != m.seekSeq {
 		return m, nil // outdated, a newer seek superseded this one
 	}
-	posMs := msg.posMs
-	return m, m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
+	return m, m.seekTo(msg.posMs)
+}
+
+// seekTo seeks the active device to posMs.
+func (m Model) seekTo(posMs int) tea.Cmd {
+	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Seek(ctx, posMs, id)
 	}, true)
 }

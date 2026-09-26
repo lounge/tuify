@@ -148,6 +148,18 @@ func newNowPlaying(ctx context.Context, client *spotify.Client) *nowPlayingModel
 	}
 }
 
+// trackInfo describes the playing item for the visualizers.
+func (m *nowPlayingModel) trackInfo() trackInfo {
+	return trackInfo{
+		id:         idFromURI(m.trackURI),
+		durationMs: m.durationMs,
+		imageURL:   m.imageURL,
+		track:      m.track,
+		artist:     m.artist,
+		isEpisode:  isEpisodeURI(m.trackURI),
+	}
+}
+
 // Lifecycle
 
 func (m *nowPlayingModel) Init() tea.Cmd {
@@ -234,9 +246,9 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	} else {
 		m.playing = msg.state.Playing
 		if !m.seekPending {
-			if m.resumeUntilMs > 0 && msg.state.ProgressMs < m.resumeUntilMs {
-				// API hasn't caught up to the cached resume position yet.
-			} else {
+			// Until the API catches up to a cached resume position, keep
+			// showing that position instead of the lower reported one.
+			if m.resumeUntilMs == 0 || msg.state.ProgressMs >= m.resumeUntilMs {
 				m.resumeUntilMs = 0
 				m.progressMs = msg.state.ProgressMs
 			}

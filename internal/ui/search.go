@@ -166,7 +166,7 @@ func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 		v.selectedAlbum = selectedRef{}
 		v.selectedShow = selectedRef{}
 		v.list.SetItems([]list.Item{loadingStatusItem})
-		return v.fetchResults(term, 0, 10)
+		return v.fetchResults(term, 0)
 
 	case searchResultMsg:
 		if msg.epoch != v.epoch {

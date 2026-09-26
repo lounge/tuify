@@ -180,7 +180,7 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			return m, nil, true
 		}
 		if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
-			cmd := m.visualizer.toggle(idFromURI(m.nowPlaying.trackURI), m.nowPlaying.durationMs, m.nowPlaying.imageURL, m.nowPlaying.track, m.nowPlaying.artist, isEpisodeURI(m.nowPlaying.trackURI))
+			cmd := m.visualizer.toggle(m.nowPlaying.trackInfo())
 			return m, cmd, true
 		}
 		return m, nil, true
