@@ -68,6 +68,38 @@ func (v *searchView) openSearch() {
 	v.resetToDepth0()
 }
 
+// openSearchInput implements inputSearcher.
+func (v *searchView) openSearchInput() { v.openSearch() }
+
+// activeSearchInput implements inputSearcher: while the search input is
+// open, it returns the session the shell routes key presses through.
+// Enter drills into containers and plays playable items; each edit
+// restarts the debounce once the term is at least two runes long.
+func (v *searchView) activeSearchInput() (searchCtx, bool) {
+	if !v.searching {
+		return searchCtx{}, false
+	}
+	return searchCtx{
+		query: &v.searchQuery,
+		list:  &v.list,
+		close: v.closeSearch,
+		play: func(item list.Item) tea.Cmd {
+			if !v.isPlayable() {
+				return v.drillDown(item)
+			}
+			return v.playSelected(item)
+		},
+		onChange: func() tea.Cmd {
+			v.debounceSeq++
+			_, term := parseSearch(v.searchQuery)
+			if len([]rune(term)) >= 2 {
+				return v.debounce()
+			}
+			return nil
+		},
+	}, true
+}
+
 func (v *searchView) resetToDepth0() {
 	v.depth = 0
 	v.items = nil

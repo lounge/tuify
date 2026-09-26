@@ -169,3 +169,87 @@ func TestHandleNavigationKey_VizToggleBlockedInMiniMode(t *testing.T) {
 		t.Error("visualizer must NOT activate while miniMode is on")
 	}
 }
+
+// Key dispatch through Model.Update: pins the tier order in handleKeyMsg
+// (overlay → search input → vim → quit → playback → navigation) and the
+// capability-interface routing that lets screens be added without editing
+// the shell.
+
+func runeKey(s string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)} }
+
+func pressKeys(t *testing.T, m Model, keys ...tea.KeyMsg) (Model, tea.Cmd) {
+	t.Helper()
+	var cmd tea.Cmd
+	for _, k := range keys {
+		var updated tea.Model
+		updated, cmd = m.Update(k)
+		m = updated.(Model)
+	}
+	return m, cmd
+}
+
+func isQuit(cmd tea.Cmd) bool {
+	if cmd == nil {
+		return false
+	}
+	_, ok := cmd().(tea.QuitMsg)
+	return ok
+}
+
+func TestUpdate_HelpOverlayTakesPriority(t *testing.T) {
+	m, _ := pressKeys(t, newIntentTestModel(), runeKey("?"))
+	if !m.showHelp {
+		t.Fatal("? should open the help overlay")
+	}
+
+	// While help is open, a navigation key is swallowed by the overlay.
+	before := len(m.viewStack)
+	m, _ = pressKeys(t, m, runeKey("m"))
+	if m.miniMode || len(m.viewStack) != before || !m.showHelp {
+		t.Error("keys other than close/quit must be swallowed while help is open")
+	}
+
+	m, _ = pressKeys(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if m.showHelp {
+		t.Error("esc should close the help overlay")
+	}
+
+	m, _ = pressKeys(t, m, runeKey("?"))
+	if _, cmd := pressKeys(t, m, runeKey("q")); !isQuit(cmd) {
+		t.Error("q should quit even while help is open")
+	}
+}
+
+func TestUpdate_EscPopsViewStack(t *testing.T) {
+	m := newIntentTestModel()
+	m.viewStack = append(m.viewStack, newPlaylistView(m.rootCtx, m.client, 80, 20, false))
+
+	m, _ = pressKeys(t, m, tea.KeyMsg{Type: tea.KeyEsc})
+	if len(m.viewStack) != 1 {
+		t.Fatalf("viewStack len = %d after esc, want 1", len(m.viewStack))
+	}
+	if _, ok := m.currentView().(*homeView); !ok {
+		t.Errorf("top of viewStack = %T, want *homeView", m.currentView())
+	}
+}
+
+func TestUpdate_SlashOpensViewOwnedSearchInput(t *testing.T) {
+	m := newIntentTestModel()
+	sv := newSearchView(m.rootCtx, m.client, 80, 20, false)
+	m.viewStack = append(m.viewStack, sv)
+
+	m, _ = pressKeys(t, m, runeKey("/"))
+	if !sv.searching {
+		t.Fatal("/ on the search view should open its search input")
+	}
+
+	// With the input open, "n" is typed into the query instead of
+	// triggering the next-track playback shortcut.
+	_, cmd := pressKeys(t, m, runeKey("n"))
+	if sv.searchQuery != "n" {
+		t.Errorf("searchQuery = %q, want %q", sv.searchQuery, "n")
+	}
+	if cmd != nil {
+		t.Error("a one-rune query must not start a search or a playback command")
+	}
+}

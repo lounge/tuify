@@ -40,6 +40,9 @@
 //   - scrollable, clickable — for mouse wheel / click dispatch
 //   - backable — for views that consume "go back" internally
 //   - searchAware — for views hosting a search-input mode
+//   - inputSearcher — for views that own their search input session
+//     (the API search view); the shell opens it on "/" and routes keys
+//     through the session it returns
 //
 // Adding a new screen means implementing the capabilities it cares about;
 // no edits to handleMouse/handleBack/handleKeyMsg are needed.

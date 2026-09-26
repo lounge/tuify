@@ -73,35 +73,17 @@ func (m Model) handleOverlayKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 }
 
 func (m Model) handleSearchInput(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
-	// API search with debounce.
-	if sv, ok := m.currentView().(*searchView); ok && sv.searching {
-		sc := searchCtx{
-			query: &sv.searchQuery,
-			list:  &sv.list,
-			close: func() { sv.closeSearch() },
-			play: func(item list.Item) tea.Cmd {
-				if !sv.isPlayable() {
-					return sv.drillDown(item)
-				}
-				return sv.playSelected(item)
-			},
-			onChange: func() tea.Cmd {
-				sv.debounceSeq++
-				_, term := parseSearch(sv.searchQuery)
-				if len([]rune(term)) >= 2 {
-					return sv.debounce()
-				}
-				return nil
-			},
+	// View-owned search input (e.g. API search with debounce).
+	if is, ok := m.currentView().(inputSearcher); ok {
+		if sc, active := is.activeSearchInput(); active {
+			if cmd, handled := handleSearchKey(sc, msg); handled {
+				return m, cmd, true
+			}
+			// Unhandled keys (up/down) fall through to state update.
+			updated, cmd := m.handleStateUpdate(msg)
+			return updated.(Model), cmd, true
 		}
-		if cmd, handled := handleSearchKey(sc, msg); handled {
-			return m, cmd, true
-		}
-		// Unhandled keys (up/down) fall through to state update.
-		updated, cmd := m.handleStateUpdate(msg)
-		return updated.(Model), cmd, true
 	}
-
 	// Local filter search.
 	sl := m.searchableList()
 	if sl != nil && sl.searching {
@@ -239,8 +221,8 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m, cmd := m.handleEnter()
 		return m.(Model), cmd, true
 	case "/":
-		if sv, ok := m.currentView().(*searchView); ok {
-			sv.openSearch()
+		if is, ok := m.currentView().(inputSearcher); ok {
+			is.openSearchInput()
 			return m, nil, true
 		}
 		if sl := m.searchableList(); sl != nil {

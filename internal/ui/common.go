@@ -54,6 +54,15 @@ type searchableListProvider interface {
 	FetchMore() tea.Cmd
 }
 
+// inputSearcher is implemented by views that own a search input session
+// (the API search view). The shell opens it on "/" and, while it is
+// active, routes key presses through the returned searchCtx. Views that
+// filter a loaded list locally implement searchableListProvider instead.
+type inputSearcher interface {
+	openSearchInput()
+	activeSearchInput() (searchCtx, bool)
+}
+
 // syncableView is implemented by views that sync selection to the playing track.
 type syncableView interface {
 	SyncURI(uri string) tea.Cmd
