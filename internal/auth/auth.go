@@ -31,6 +31,10 @@ import (
 // blips and react accordingly (e.g. delete the stale token, exit).
 var ErrTokenRevoked = errors.New("spotify refresh token revoked")
 
+// ErrTokenCorrupt wraps the parse error when token.json exists but isn't a
+// valid token file. The caller can discard it and log in again.
+var ErrTokenCorrupt = errors.New("token.json is unreadable")
+
 // isRevokedError detects the "invalid_grant" response Spotify returns
 // when a refresh token is permanently dead. The oauth2 library surfaces
 // it as a *RetrieveError with ErrorCode set to RFC 6749's error value.
@@ -480,7 +484,7 @@ func saveTokenAt(token *oauth2.Token, authorizedAt time.Time) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "token.json"), data, 0o600)
+	return config.WriteFileAtomic(filepath.Join(dir, "token.json"), data)
 }
 
 // LoadToken reads the persisted oauth2 token. Returns (nil, nil) if no
@@ -519,7 +523,7 @@ func loadStoredToken() (*storedToken, error) {
 	}
 	var st storedToken
 	if err := json.Unmarshal(data, &st); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrTokenCorrupt, err)
 	}
 	return &st, nil
 }

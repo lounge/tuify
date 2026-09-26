@@ -4,7 +4,10 @@
 //
 // Typical flow:
 //
-//	token, authorizedAt, _ := auth.LoadTokenWithAuth()
+//	token, authorizedAt, err := auth.LoadTokenWithAuth()
+//	if errors.Is(err, auth.ErrTokenCorrupt) {
+//	    token = nil // unreadable token.json: log in again
+//	}
 //	if token == nil {
 //	    token, _ = auth.Login(ctx, authenticator, redirectURL)
 //	    _ = auth.SaveFreshToken(token)
@@ -19,6 +22,11 @@
 // startup (every request retries the refresh, so the app keeps running).
 // revokedCh fires once if Spotify rejects the refresh token as
 // permanently invalid, so the caller can prompt for a fresh login.
+// token.json is written atomically (config.WriteFileAtomic).
+//
+// Login's callback server ends the login only for a request that carries
+// the state it generated; any other request to the port gets a 400 and is
+// ignored, so a stray local request can't abort the login.
 //
 // # Refresh-token lifetime
 //

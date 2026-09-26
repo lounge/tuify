@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -34,7 +35,14 @@ type authSession struct {
 // token-refresh goroutine owned by the returned session.
 func authenticate(ctx context.Context, rc runtimeConfig) (*authSession, error) {
 	token, authorizedAt, err := auth.LoadTokenWithAuth()
-	if err != nil {
+	switch {
+	case errors.Is(err, auth.ErrTokenCorrupt):
+		// A damaged token file only costs a login; don't make the user
+		// find and delete it by hand.
+		log.Printf("[auth] discarding saved session: %v", err)
+		fmt.Fprintln(os.Stderr, "Saved session could not be read.")
+		token = nil
+	case err != nil:
 		return nil, fmt.Errorf("loading token: %w", err)
 	}
 

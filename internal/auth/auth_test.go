@@ -811,3 +811,23 @@ func TestNewAuthenticator(t *testing.T) {
 		t.Errorf("redirect_uri: got %q, want %q", got, "http://localhost:8080/callback")
 	}
 }
+
+// A truncated token.json (crash mid-write before writes were atomic, or a
+// hand edit) must be reported as ErrTokenCorrupt so bootstrap can discard
+// it and log in again instead of failing every launch.
+func TestLoadTokenWithAuth_CorruptFile(t *testing.T) {
+	cfgHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", cfgHome)
+	dir := filepath.Join(cfgHome, "tuify")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "token.json"), []byte(`{"access_token":"abc`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := LoadTokenWithAuth()
+	if !errors.Is(err, ErrTokenCorrupt) {
+		t.Errorf("err = %v, want ErrTokenCorrupt", err)
+	}
+}

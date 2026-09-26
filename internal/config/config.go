@@ -103,5 +103,5 @@ func Save(cfg *Config) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filepath.Join(dir, "config.json"), data, 0o600)
+	return WriteFileAtomic(filepath.Join(dir, "config.json"), data)
 }
