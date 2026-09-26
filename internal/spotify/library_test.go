@@ -20,10 +20,9 @@ func TestGetPlaylists_OwnerFiltering(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	c.userID = "me"
 
@@ -63,10 +62,9 @@ func TestGetPlaylists_HasMoreWithFiltering(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	c.userID = "me"
 
@@ -97,14 +95,13 @@ func TestGetPlaylists_NoUserID(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/me" {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	// No userID and /me fails: degrade to returning all playlists.
 	playlists, _, _, err := c.GetPlaylists(context.Background(), 0, 50)
@@ -126,7 +123,7 @@ func TestGetPlaylists_FetchesUserIDOnDemand(t *testing.T) {
 		},
 	}
 	var meCalls atomic.Int32
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/me" {
 			meCalls.Add(1)
 			json.NewEncoder(w).Encode(map[string]string{"id": "me"})
@@ -134,7 +131,6 @@ func TestGetPlaylists_FetchesUserIDOnDemand(t *testing.T) {
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	// The startup FetchUserID was skipped or failed; the first
 	// GetPlaylists fetches the ID and filters out followed playlists.
@@ -174,10 +170,9 @@ func TestGetPlaylistTracks(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	tracks, more, err := c.GetPlaylistTracks(context.Background(), "playlist1", 0, 50)
 	if err != nil {
@@ -211,10 +206,9 @@ func TestGetSavedShows(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	shows, more, err := c.GetSavedShows(context.Background(), 0, 50)
 	if err != nil {
@@ -240,10 +234,9 @@ func TestGetShowEpisodes(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	eps, more, err := c.GetShowEpisodes(context.Background(), "show1", 0, 50)
 	if err != nil {
@@ -273,13 +266,12 @@ func TestGetArtistAlbums(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/artists/") {
 			t.Errorf("expected /artists/ in path, got %s", r.URL.Path)
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	albums, more, err := c.GetArtistAlbums(context.Background(), "artist1", 0, 50)
 	if err != nil {
@@ -306,13 +298,12 @@ func TestGetAlbumTracks(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/albums/") {
 			t.Errorf("expected /albums/ in path, got %s", r.URL.Path)
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	tracks, more, err := c.GetAlbumTracks(context.Background(), "album1", 0, 50)
 	if err != nil {

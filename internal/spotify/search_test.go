@@ -21,13 +21,12 @@ func TestSearchTracks(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.RawQuery, "type=track") {
 			t.Errorf("expected type=track in query, got %s", r.URL.RawQuery)
 		}
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	tracks, more, err := c.SearchTracks(context.Background(), "test query", 0, 20)
 	if err != nil {
@@ -55,10 +54,9 @@ func TestSearchEpisodes(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	eps, _, err := c.SearchEpisodes(context.Background(), "podcast", 0, 20)
 	if err != nil {
@@ -82,10 +80,9 @@ func TestSearchAlbums(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	albums, _, err := c.SearchAlbums(context.Background(), "album query", 0, 20)
 	if err != nil {
@@ -110,10 +107,9 @@ func TestSearchArtists(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	artists, _, err := c.SearchArtists(context.Background(), "artist query", 0, 20)
 	if err != nil {
@@ -138,10 +134,9 @@ func TestSearchShows(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	shows, _, err := c.SearchShows(context.Background(), "show query", 0, 20)
 	if err != nil {
@@ -163,10 +158,9 @@ func TestSearchTracks_Pagination(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	_, more, err := c.SearchTracks(context.Background(), "query", 0, 1)
 	if err != nil {

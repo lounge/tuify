@@ -51,7 +51,7 @@ func TestSDKMethods_ErrorResponseIsAPIError(t *testing.T) {
 	const msg = "Player command failed: Restriction violated"
 	for _, tc := range sdkCalls {
 		t.Run(tc.name, func(t *testing.T) {
-			c := newSDKTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusForbidden)
 				w.Write([]byte(`{"error":{"status":403,"message":"` + msg + `"}}`))
@@ -84,7 +84,7 @@ func TestSDKMethods_CooldownIsAPIError429(t *testing.T) {
 	for _, tc := range sdkCalls {
 		t.Run(tc.name, func(t *testing.T) {
 			var hits atomic.Int32
-			c := newSDKTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 				hits.Add(1)
 				w.WriteHeader(http.StatusNoContent)
 			})

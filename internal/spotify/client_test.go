@@ -16,19 +16,9 @@ import (
 
 // newTestClient creates a Client backed by a test HTTP server. Goes
 // through New so the rate-limit gate is wired up the same way as in
-// production. The handler receives all requests. The returned cleanup
-// function must be deferred. Shared with every other *_test.go in the
-// package.
-func newTestClient(handler http.HandlerFunc) (*Client, func()) {
-	srv := httptest.NewServer(handler)
-	transport := &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}
-	c := New(&http.Client{Transport: transport})
-	return c, srv.Close
-}
-
-// newSDKTestClient is newTestClient with t.Cleanup instead of a returned
-// cleanup func, used by the SDK-path tests (playback control, devices).
-func newSDKTestClient(t *testing.T, handler http.HandlerFunc) *Client {
+// production. The handler receives all requests; the server closes when
+// the test ends. Shared with every other *_test.go in the package.
+func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
@@ -36,14 +26,13 @@ func newSDKTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 }
 
 func TestFetchUserID(t *testing.T) {
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/v1/me") {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		json.NewEncoder(w).Encode(map[string]string{"id": "testuser123"})
 	})
-	defer cleanup()
 
 	if err := c.FetchUserID(context.Background()); err != nil {
 		t.Fatalf("FetchUserID: %v", err)
@@ -56,7 +45,7 @@ func TestFetchUserID(t *testing.T) {
 func TestDoWithRetry_429(t *testing.T) {
 	var attempts atomic.Int32
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		n := attempts.Add(1)
 		if n <= 2 {
 			w.Header().Set("Retry-After", "0")
@@ -67,7 +56,6 @@ func TestDoWithRetry_429(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"ok": true}`))
 	})
-	defer cleanup()
 
 	body, status, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
 	if err != nil {
@@ -85,12 +73,11 @@ func TestDoWithRetry_429(t *testing.T) {
 }
 
 func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "0")
 		w.WriteHeader(http.StatusTooManyRequests)
 		w.Write([]byte("rate limited"))
 	})
-	defer cleanup()
 
 	_, status, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
 	if err == nil {
@@ -109,12 +96,11 @@ func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
 }
 
 func TestDoWithRetry_429_LongRetryAfter(t *testing.T) {
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "60")
 		w.WriteHeader(http.StatusTooManyRequests)
 		w.Write([]byte("rate limited"))
 	})
-	defer cleanup()
 
 	_, _, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
 	if err == nil {
@@ -127,12 +113,11 @@ func TestDoWithRetry_429_LongRetryAfter(t *testing.T) {
 // structured *APIError with status 429 — not a wrapped url.Error.
 func TestDoWithRetry_TransportShortCircuitTranslatesToAPIError(t *testing.T) {
 	var hits atomic.Int32
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
 		w.Header().Set("Retry-After", "60")
 		w.WriteHeader(http.StatusTooManyRequests)
 	})
-	defer cleanup()
 
 	// First call arms the cooldown.
 	if _, _, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test"); err == nil {
@@ -161,11 +146,10 @@ func TestDoWithRetry_TransportShortCircuitTranslatesToAPIError(t *testing.T) {
 }
 
 func TestApiGet_NonOK(t *testing.T) {
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("not found"))
 	})
-	defer cleanup()
 
 	var result struct{}
 	err := c.apiGet(context.Background(), "https://api.spotify.com/v1/test", &result)
@@ -175,11 +159,10 @@ func TestApiGet_NonOK(t *testing.T) {
 }
 
 func TestApiGet_InvalidJSON(t *testing.T) {
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("not json"))
 	})
-	defer cleanup()
 
 	var result struct{ Name string }
 	err := c.apiGet(context.Background(), "https://api.spotify.com/v1/test", &result)

@@ -8,10 +8,9 @@ import (
 )
 
 func TestGetPlayerState_NoContent(t *testing.T) {
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
@@ -30,10 +29,9 @@ func TestGetPlayerState_NilItem(t *testing.T) {
 		"item":          nil,
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
@@ -58,10 +56,9 @@ func TestGetPlayerState_Playing(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
@@ -106,10 +103,9 @@ func TestGetPlayerState_NoDevice(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
@@ -136,10 +132,9 @@ func TestGetPlayerState_EpisodeWithShow(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
@@ -170,10 +165,9 @@ func TestGetPlayerState_WithAlbumImage(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
@@ -202,10 +196,9 @@ func TestGetPlayerState_EpisodeImages(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
@@ -232,10 +225,9 @@ func TestGetPlayerState_WithContext(t *testing.T) {
 		},
 	}
 
-	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(response)
 	})
-	defer cleanup()
 
 	state, err := c.GetPlayerState(context.Background())
 	if err != nil {
