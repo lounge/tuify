@@ -6,6 +6,8 @@ import (
 )
 
 func TestAnalyzeSilence(t *testing.T) {
+	t.Parallel()
+
 	a := NewAnalyzer(WindowSize)
 	samples := make([]int16, WindowSize*2) // stereo silence
 	fd := a.Analyze(samples)
@@ -22,6 +24,8 @@ func TestAnalyzeSilence(t *testing.T) {
 }
 
 func TestAnalyzeSineWave(t *testing.T) {
+	t.Parallel()
+
 	a := NewAnalyzer(WindowSize)
 
 	// Generate a 1 kHz sine wave at full scale, stereo.
@@ -63,6 +67,8 @@ func TestAnalyzeSineWave(t *testing.T) {
 }
 
 func TestAnalyzeDeterministic(t *testing.T) {
+	t.Parallel()
+
 	a := NewAnalyzer(WindowSize)
 
 	samples := make([]int16, WindowSize*2)
@@ -84,6 +90,8 @@ func TestAnalyzeDeterministic(t *testing.T) {
 }
 
 func TestAnalyzeLowFrequency(t *testing.T) {
+	t.Parallel()
+
 	a := NewAnalyzer(WindowSize)
 
 	// Generate a 60 Hz sine wave (bass range).
@@ -111,6 +119,8 @@ func TestAnalyzeLowFrequency(t *testing.T) {
 // TestFFTMatchesDFT checks the in-place radix-2 FFT against a direct O(n²)
 // DFT of the same input, bin by bin.
 func TestFFTMatchesDFT(t *testing.T) {
+	t.Parallel()
+
 	const n = 256
 	a := NewAnalyzer(n)
 	in := make([]float64, n)
@@ -141,6 +151,8 @@ func TestFFTMatchesDFT(t *testing.T) {
 }
 
 func TestNewAnalyzer_PanicsOnNonPowerOfTwo(t *testing.T) {
+	t.Parallel()
+
 	for _, n := range []int{0, 1, 3, 1000} {
 		func() {
 			defer func() {

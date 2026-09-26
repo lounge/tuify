@@ -10,6 +10,8 @@ import (
 )
 
 func TestConfigSetDefaults(t *testing.T) {
+	t.Parallel()
+
 	c := Config{}
 	c.setDefaults()
 
@@ -28,6 +30,8 @@ func TestConfigSetDefaults(t *testing.T) {
 }
 
 func TestConfigSetDefaults_Preserves(t *testing.T) {
+	t.Parallel()
+
 	c := Config{
 		BinaryPath: "/custom/librespot",
 		DeviceName: "custom",
@@ -51,6 +55,8 @@ func TestConfigSetDefaults_Preserves(t *testing.T) {
 }
 
 func TestArgs_PipeBackend(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{
 		DeviceName: "test-device",
 		Backend:    DefaultBackend,
@@ -79,6 +85,8 @@ func TestArgs_PipeBackend(t *testing.T) {
 }
 
 func TestArgs_NonPipeBackend(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{
 		Backend: "pulseaudio",
 	})
@@ -95,6 +103,8 @@ func TestArgs_NonPipeBackend(t *testing.T) {
 }
 
 func TestArgs_NoCacheDir(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{Backend: "rodio"})
 	args := p.args()
 
@@ -106,6 +116,8 @@ func TestArgs_NoCacheDir(t *testing.T) {
 }
 
 func TestArgs_NoUsername(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{Backend: "rodio"})
 	args := p.args()
 
@@ -117,6 +129,8 @@ func TestArgs_NoUsername(t *testing.T) {
 }
 
 func TestNewProcess_AppliesDefaults(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	if p.config.BinaryPath != "librespot" {
@@ -128,6 +142,8 @@ func TestNewProcess_AppliesDefaults(t *testing.T) {
 }
 
 func TestMonitorStderr_AuthenticatedCallsOnReconnect(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	done := make(chan struct{})
@@ -143,6 +159,8 @@ func TestMonitorStderr_AuthenticatedCallsOnReconnect(t *testing.T) {
 }
 
 func TestMonitorStderr_AudioKeyAndSpirc(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	// Feed audio key error first
@@ -159,6 +177,8 @@ func TestMonitorStderr_AudioKeyAndSpirc(t *testing.T) {
 }
 
 func TestMonitorStderr_AudioKeyAndPlaybackFailure(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	p.monitorStderr("Audio key response timeout")
@@ -170,6 +190,8 @@ func TestMonitorStderr_AudioKeyAndPlaybackFailure(t *testing.T) {
 }
 
 func TestMonitorStderr_NoFalsePositive(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	// Only spirc without audio key shouldn't trigger
@@ -183,6 +205,8 @@ func TestMonitorStderr_NoFalsePositive(t *testing.T) {
 }
 
 func TestPipeLog_FiltersLibmdns(t *testing.T) {
+	t.Parallel()
+
 	input := "line one\nlibmdns::fsm noisy line\nline three\n"
 	r := strings.NewReader(input)
 
@@ -200,6 +224,8 @@ func TestPipeLog_FiltersLibmdns(t *testing.T) {
 }
 
 func TestPipeLog_NilCallback(t *testing.T) {
+	t.Parallel()
+
 	input := "hello\nworld\n"
 	r := strings.NewReader(input)
 
@@ -208,6 +234,8 @@ func TestPipeLog_NilCallback(t *testing.T) {
 }
 
 func TestPipeLog_EmptyInput(t *testing.T) {
+	t.Parallel()
+
 	r := bytes.NewReader(nil)
 
 	var lines []string
@@ -221,6 +249,8 @@ func TestPipeLog_EmptyInput(t *testing.T) {
 }
 
 func TestPipeLog_LineLongerThanDefaultScannerBuffer(t *testing.T) {
+	t.Parallel()
+
 	long := strings.Repeat("x", 100*1024) // over bufio's 64 KiB default
 	r := strings.NewReader(long + "\nAuthenticated as user\n")
 
@@ -235,6 +265,8 @@ func TestPipeLog_LineLongerThanDefaultScannerBuffer(t *testing.T) {
 // A line over maxLogLine stops scanning. pipeLog must keep draining the
 // pipe afterwards, or the writer (librespot) would block forever.
 func TestPipeLog_DrainsAfterScanError(t *testing.T) {
+	t.Parallel()
+
 	pr, pw := io.Pipe()
 	writerDone := make(chan error, 1)
 	go func() {
@@ -268,6 +300,8 @@ func TestPipeLog_DrainsAfterScanError(t *testing.T) {
 }
 
 func TestStopIdempotent(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	// Stop without ever starting, and a second Stop, must return
@@ -279,6 +313,8 @@ func TestStopIdempotent(t *testing.T) {
 // --- restartDelay tests ---
 
 func TestRestartDelay_ImmediateCrash(t *testing.T) {
+	t.Parallel()
+
 	// Process died instantly — should get max delay.
 	delay := restartDelay(0)
 	if delay != restartMaxDelay {
@@ -287,6 +323,8 @@ func TestRestartDelay_ImmediateCrash(t *testing.T) {
 }
 
 func TestRestartDelay_StableUptime(t *testing.T) {
+	t.Parallel()
+
 	// Process ran longer than stable threshold — should get base delay.
 	delay := restartDelay(stableThreshold + time.Second)
 	if delay != restartBaseDelay {
@@ -295,6 +333,8 @@ func TestRestartDelay_StableUptime(t *testing.T) {
 }
 
 func TestRestartDelay_ExactThreshold(t *testing.T) {
+	t.Parallel()
+
 	// Process ran exactly at the stable threshold — should get base delay.
 	delay := restartDelay(stableThreshold)
 	if delay != restartBaseDelay {
@@ -303,6 +343,8 @@ func TestRestartDelay_ExactThreshold(t *testing.T) {
 }
 
 func TestRestartDelay_HalfUptime(t *testing.T) {
+	t.Parallel()
+
 	// Process lived half the stable threshold — delay should be ~half of max.
 	delay := restartDelay(stableThreshold / 2)
 	expected := restartMaxDelay / 2
@@ -313,6 +355,8 @@ func TestRestartDelay_HalfUptime(t *testing.T) {
 }
 
 func TestRestartDelay_NearThreshold(t *testing.T) {
+	t.Parallel()
+
 	// Process lived almost to threshold — delay should be close to base, but clamped.
 	delay := restartDelay(stableThreshold - 100*time.Millisecond)
 	if delay < restartBaseDelay {
@@ -323,6 +367,8 @@ func TestRestartDelay_NearThreshold(t *testing.T) {
 // --- monitorStderr additional tests ---
 
 func TestMonitorStderr_InactiveCallsOnInactive(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	done := make(chan struct{})
@@ -338,6 +384,8 @@ func TestMonitorStderr_InactiveCallsOnInactive(t *testing.T) {
 }
 
 func TestMonitorStderr_InactiveNilCallback(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 	p.OnInactive = nil
 
@@ -346,6 +394,8 @@ func TestMonitorStderr_InactiveNilCallback(t *testing.T) {
 }
 
 func TestMonitorStderr_AuthenticatedResetsFlags(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 	p.OnReconnect = func() {} // non-nil but no-op
 
@@ -364,6 +414,8 @@ func TestMonitorStderr_AuthenticatedResetsFlags(t *testing.T) {
 }
 
 func TestMonitorStderr_AuthenticatedNilCallback(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 	p.OnReconnect = nil
 
@@ -372,6 +424,8 @@ func TestMonitorStderr_AuthenticatedNilCallback(t *testing.T) {
 }
 
 func TestMonitorStderr_UnrelatedLine(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	// Unrelated lines should not affect state.
@@ -382,6 +436,8 @@ func TestMonitorStderr_UnrelatedLine(t *testing.T) {
 }
 
 func TestMonitorStderr_SpircThenAudioKey(t *testing.T) {
+	t.Parallel()
+
 	// Reverse order: spirc first, then audio key — should still trigger.
 	p := NewProcess(Config{})
 
@@ -400,6 +456,8 @@ func TestMonitorStderr_SpircThenAudioKey(t *testing.T) {
 // --- scheduleRestart tests ---
 
 func TestScheduleRestart_StopChSuppresses(t *testing.T) {
+	t.Parallel()
+
 	p := NewProcess(Config{})
 
 	// Close stopCh before scheduleRestart so it returns immediately.

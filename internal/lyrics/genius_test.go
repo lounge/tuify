@@ -45,6 +45,8 @@ func songHit(title, artistNames, url string, instrumental bool) map[string]any {
 // --- improveQuery ---
 
 func TestImproveQuery(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		input string
 		want  string
@@ -69,6 +71,8 @@ func TestImproveQuery(t *testing.T) {
 // --- normalizeLyrics ---
 
 func TestNormalizeLyrics(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		name  string
 		input string
@@ -113,6 +117,8 @@ func TestNormalizeLyrics(t *testing.T) {
 // --- extractLyrics ---
 
 func TestExtractLyrics(t *testing.T) {
+	t.Parallel()
+
 	html := `<html><body>
 		<div data-lyrics-container="true">Hello<br>World</div>
 		<div>not lyrics</div>
@@ -135,6 +141,8 @@ func TestExtractLyrics(t *testing.T) {
 }
 
 func TestExtractLyrics_ExcludesSelection(t *testing.T) {
+	t.Parallel()
+
 	html := `<html><body>
 		<div data-lyrics-container="true">
 			Keep this
@@ -155,6 +163,8 @@ func TestExtractLyrics_ExcludesSelection(t *testing.T) {
 }
 
 func TestExtractLyrics_NoContainers(t *testing.T) {
+	t.Parallel()
+
 	html := `<html><body><div>no lyrics here</div></body></html>`
 
 	got, err := extractLyrics(strings.NewReader(html))
@@ -169,6 +179,8 @@ func TestExtractLyrics_NoContainers(t *testing.T) {
 // --- searchSong ---
 
 func TestSearchSong_MatchesCorrectHit(t *testing.T) {
+	t.Parallel()
+
 	resp := geniusSearchResponse([]map[string]any{
 		songHit("Wrong Song", "Wrong Artist", "https://genius.com/wrong", false),
 		songHit("Right Song", "Right Artist", "https://genius.com/right", false),
@@ -189,6 +201,8 @@ func TestSearchSong_MatchesCorrectHit(t *testing.T) {
 }
 
 func TestSearchSong_SkipsGeniusAnnotations(t *testing.T) {
+	t.Parallel()
+
 	resp := geniusSearchResponse([]map[string]any{
 		songHit("Song", "Genius English Translations", "https://genius.com/genius", false),
 		songHit("Song", "Real Artist", "https://genius.com/real", false),
@@ -209,6 +223,8 @@ func TestSearchSong_SkipsGeniusAnnotations(t *testing.T) {
 }
 
 func TestSearchSong_SkipsNonSongTypes(t *testing.T) {
+	t.Parallel()
+
 	resp := geniusSearchResponse([]map[string]any{
 		{"type": "article", "result": map[string]any{
 			"title": "Song", "artist_names": "Artist", "primary_artist_names": "Artist",
@@ -232,6 +248,8 @@ func TestSearchSong_SkipsNonSongTypes(t *testing.T) {
 }
 
 func TestSearchSong_Instrumental(t *testing.T) {
+	t.Parallel()
+
 	resp := geniusSearchResponse([]map[string]any{
 		songHit("Song", "Artist", "https://genius.com/song", true),
 	})
@@ -251,6 +269,8 @@ func TestSearchSong_Instrumental(t *testing.T) {
 }
 
 func TestSearchSong_NoMatch(t *testing.T) {
+	t.Parallel()
+
 	resp := geniusSearchResponse([]map[string]any{
 		songHit("Completely Different", "Unknown", "https://genius.com/nope", false),
 	})
@@ -270,6 +290,8 @@ func TestSearchSong_NoMatch(t *testing.T) {
 }
 
 func TestSearchSong_APIError(t *testing.T) {
+	t.Parallel()
+
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	})
@@ -284,6 +306,8 @@ func TestSearchSong_APIError(t *testing.T) {
 // --- Search (end-to-end) ---
 
 func TestSearch_EndToEnd(t *testing.T) {
+	t.Parallel()
+
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/search") {
 			resp := geniusSearchResponse([]map[string]any{
@@ -309,6 +333,8 @@ func TestSearch_EndToEnd(t *testing.T) {
 }
 
 func TestSearch_Instrumental(t *testing.T) {
+	t.Parallel()
+
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		resp := geniusSearchResponse([]map[string]any{
 			songHit("Instrumental Track", "Artist", "https://genius.com/inst", true),
@@ -324,6 +350,8 @@ func TestSearch_Instrumental(t *testing.T) {
 }
 
 func TestSearch_NoResults(t *testing.T) {
+	t.Parallel()
+
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		resp := geniusSearchResponse(nil)
 		json.NewEncoder(w).Encode(resp)
@@ -340,6 +368,8 @@ func TestSearch_NoResults(t *testing.T) {
 }
 
 func TestSearch_CaseInsensitiveMatch(t *testing.T) {
+	t.Parallel()
+
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		if strings.HasPrefix(r.URL.Path, "/api/search") {
 			resp := geniusSearchResponse([]map[string]any{
@@ -379,6 +409,8 @@ func skipUnlessContract(t *testing.T) {
 }
 
 func TestContract_SearchAndScrape(t *testing.T) {
+	t.Parallel()
+
 	skipUnlessContract(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -418,6 +450,8 @@ func TestContract_SearchAndScrape(t *testing.T) {
 }
 
 func TestContract_SearchAPI_ReturnsResults(t *testing.T) {
+	t.Parallel()
+
 	skipUnlessContract(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -436,6 +470,8 @@ func TestContract_SearchAPI_ReturnsResults(t *testing.T) {
 }
 
 func TestContract_HTMLStructure(t *testing.T) {
+	t.Parallel()
+
 	skipUnlessContract(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -460,6 +496,8 @@ func TestContract_HTMLStructure(t *testing.T) {
 }
 
 func TestContract_Instrumental(t *testing.T) {
+	t.Parallel()
+
 	skipUnlessContract(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

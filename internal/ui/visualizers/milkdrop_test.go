@@ -85,83 +85,131 @@ func testMilkdropDecay(t *testing.T, v *MilkdropPreset, name string) {
 // --- Spiral ---
 
 func TestMilkdropSpiral_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewBeforeInit(t, NewMilkdropSpiral(), "Spiral")
 }
 func TestMilkdropSpiral_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropAdvanceBeforeInit(t, NewMilkdropSpiral())
 }
 func TestMilkdropSpiral_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewZero(t, NewMilkdropSpiral(), "Spiral")
 }
 func TestMilkdropSpiral_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewDimensions(t, NewMilkdropSpiral(), "Spiral")
 }
 func TestMilkdropSpiral_Resize(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropResize(t, NewMilkdropSpiral(), "Spiral")
 }
 func TestMilkdropSpiral_DecaysToBlack(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropDecay(t, NewMilkdropSpiral(), "Spiral")
 }
 
 // --- Tunnel ---
 
 func TestMilkdropTunnel_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewBeforeInit(t, NewMilkdropTunnel(), "Tunnel")
 }
 func TestMilkdropTunnel_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropAdvanceBeforeInit(t, NewMilkdropTunnel())
 }
 func TestMilkdropTunnel_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewZero(t, NewMilkdropTunnel(), "Tunnel")
 }
 func TestMilkdropTunnel_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewDimensions(t, NewMilkdropTunnel(), "Tunnel")
 }
 func TestMilkdropTunnel_Resize(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropResize(t, NewMilkdropTunnel(), "Tunnel")
 }
 func TestMilkdropTunnel_DecaysToBlack(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropDecay(t, NewMilkdropTunnel(), "Tunnel")
 }
 
 // --- Kaleidoscope ---
 
 func TestMilkdropKaleidoscope_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewBeforeInit(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
 }
 func TestMilkdropKaleidoscope_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropAdvanceBeforeInit(t, NewMilkdropKaleidoscope())
 }
 func TestMilkdropKaleidoscope_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewZero(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
 }
 func TestMilkdropKaleidoscope_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewDimensions(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
 }
 func TestMilkdropKaleidoscope_Resize(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropResize(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
 }
 func TestMilkdropKaleidoscope_DecaysToBlack(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropDecay(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
 }
 
 // --- Ripple ---
 
 func TestMilkdropRipple_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewBeforeInit(t, NewMilkdropRipple(), "Ripple")
 }
 func TestMilkdropRipple_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropAdvanceBeforeInit(t, NewMilkdropRipple())
 }
 func TestMilkdropRipple_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewZero(t, NewMilkdropRipple(), "Ripple")
 }
 func TestMilkdropRipple_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropViewDimensions(t, NewMilkdropRipple(), "Ripple")
 }
 func TestMilkdropRipple_Resize(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropResize(t, NewMilkdropRipple(), "Ripple")
 }
 func TestMilkdropRipple_DecaysToBlack(t *testing.T) {
+	t.Parallel()
+
 	testMilkdropDecay(t, NewMilkdropRipple(), "Ripple")
 }

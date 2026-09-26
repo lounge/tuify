@@ -15,6 +15,8 @@ import (
 // changes pile up requests). The transport must lock out subsequent calls
 // instead of letting the polling loop keep hammering the API.
 func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
+	t.Parallel()
+
 	var hits atomic.Int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -59,6 +61,8 @@ func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
 // retry path is preserved: a 429 with a small Retry-After lets doWithRetry
 // retry without locking out everything else.
 func TestRateLimitTransport_ShortRetryAfterPassesThrough(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "1")
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -83,6 +87,8 @@ func TestRateLimitTransport_ShortRetryAfterPassesThrough(t *testing.T) {
 // TestRateLimitTransport_LargeRetryAfterCapped verifies a malicious or
 // out-of-range Retry-After is capped to rateLimitMaxBackoff.
 func TestRateLimitTransport_LargeRetryAfterCapped(t *testing.T) {
+	t.Parallel()
+
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "99999")
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -141,6 +147,8 @@ func get(t *testing.T, rl *rateLimitTransport) error {
 // TestRateLimitTransport_ExpiredCooldownAllowsCalls verifies the gate
 // holds calls back until the deadline and re-opens once it passes.
 func TestRateLimitTransport_ExpiredCooldownAllowsCalls(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		stub := &stubTransport{status: always(http.StatusTooManyRequests)}
 		rl := newRateLimitTransport(stub)
@@ -169,6 +177,8 @@ func TestRateLimitTransport_ExpiredCooldownAllowsCalls(t *testing.T) {
 // fixed-interval retry loop for hours. Each iteration waits out the
 // cooldown on the fake clock, as the poller would, before retrying.
 func TestRateLimitTransport_ConsecutiveCooldownEscalates(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		rl := newRateLimitTransport(&stubTransport{status: always(http.StatusTooManyRequests)})
 
@@ -190,6 +200,8 @@ func TestRateLimitTransport_ConsecutiveCooldownEscalates(t *testing.T) {
 // resets after any non-429 response, so the *next* 429 arms a base-level
 // cooldown rather than resuming the escalated one from an earlier storm.
 func TestRateLimitTransport_ResetsConsecutiveOnSuccess(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		status := http.StatusTooManyRequests
 		rl := newRateLimitTransport(&stubTransport{status: func() int { return status }})

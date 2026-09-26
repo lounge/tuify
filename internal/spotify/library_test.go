@@ -10,6 +10,8 @@ import (
 )
 
 func TestGetPlaylists_OwnerFiltering(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  3,
@@ -52,6 +54,8 @@ func TestGetPlaylists_OwnerFiltering(t *testing.T) {
 }
 
 func TestGetPlaylists_HasMoreWithFiltering(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  10,
@@ -86,6 +90,8 @@ func TestGetPlaylists_HasMoreWithFiltering(t *testing.T) {
 }
 
 func TestGetPlaylists_NoUserID(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  2,
@@ -114,6 +120,8 @@ func TestGetPlaylists_NoUserID(t *testing.T) {
 }
 
 func TestGetPlaylists_FetchesUserIDOnDemand(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  2,
@@ -149,6 +157,8 @@ func TestGetPlaylists_FetchesUserIDOnDemand(t *testing.T) {
 }
 
 func TestGetPlaylistTracks(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  3,
@@ -193,6 +203,8 @@ func TestGetPlaylistTracks(t *testing.T) {
 }
 
 func TestGetSavedShows(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  2,
@@ -226,6 +238,8 @@ func TestGetSavedShows(t *testing.T) {
 }
 
 func TestGetShowEpisodes(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  1,
@@ -257,6 +271,8 @@ func TestGetShowEpisodes(t *testing.T) {
 }
 
 func TestGetArtistAlbums(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  2,
@@ -289,6 +305,8 @@ func TestGetArtistAlbums(t *testing.T) {
 }
 
 func TestGetAlbumTracks(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"offset": 0,
 		"total":  2,

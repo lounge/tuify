@@ -7,6 +7,8 @@ import (
 )
 
 func TestXorshift_Deterministic(t *testing.T) {
+	t.Parallel()
+
 	a := xorshift(42)
 	b := xorshift(42)
 	if a != b {
@@ -15,6 +17,8 @@ func TestXorshift_Deterministic(t *testing.T) {
 }
 
 func TestXorshift_DifferentSeeds(t *testing.T) {
+	t.Parallel()
+
 	a := xorshift(1)
 	b := xorshift(2)
 	if a == b {
@@ -23,6 +27,8 @@ func TestXorshift_DifferentSeeds(t *testing.T) {
 }
 
 func TestXorshift_NonZero(t *testing.T) {
+	t.Parallel()
+
 	// xorshift should produce non-zero output for non-zero input
 	s := uint64(1)
 	for i := range 100 {
@@ -34,6 +40,8 @@ func TestXorshift_NonZero(t *testing.T) {
 }
 
 func TestHslToRGB_Red(t *testing.T) {
+	t.Parallel()
+
 	// Pure red: H=0, S=1, L=0.5
 	r, g, b := hslToRGB(0, 1, 0.5)
 	if r != 255 || g != 0 || b != 0 {
@@ -42,6 +50,8 @@ func TestHslToRGB_Red(t *testing.T) {
 }
 
 func TestHslToRGB_Green(t *testing.T) {
+	t.Parallel()
+
 	// Pure green: H=120, S=1, L=0.5
 	r, g, b := hslToRGB(120, 1, 0.5)
 	if r != 0 || g != 255 || b != 0 {
@@ -50,6 +60,8 @@ func TestHslToRGB_Green(t *testing.T) {
 }
 
 func TestHslToRGB_Blue(t *testing.T) {
+	t.Parallel()
+
 	// Pure blue: H=240, S=1, L=0.5
 	r, g, b := hslToRGB(240, 1, 0.5)
 	if r != 0 || g != 0 || b != 255 {
@@ -58,6 +70,8 @@ func TestHslToRGB_Blue(t *testing.T) {
 }
 
 func TestHslToRGB_White(t *testing.T) {
+	t.Parallel()
+
 	// White: any H, S=0, L=1
 	r, g, b := hslToRGB(0, 0, 1)
 	if r != 255 || g != 255 || b != 255 {
@@ -66,6 +80,8 @@ func TestHslToRGB_White(t *testing.T) {
 }
 
 func TestHslToRGB_Black(t *testing.T) {
+	t.Parallel()
+
 	// Black: any H, S=0, L=0
 	r, g, b := hslToRGB(0, 0, 0)
 	if r != 0 || g != 0 || b != 0 {
@@ -74,6 +90,8 @@ func TestHslToRGB_Black(t *testing.T) {
 }
 
 func TestHslToRGB_NegativeHue(t *testing.T) {
+	t.Parallel()
+
 	// Negative hue should wrap around
 	r1, g1, b1 := hslToRGB(-60, 1, 0.5)
 	r2, g2, b2 := hslToRGB(300, 1, 0.5)
@@ -83,6 +101,8 @@ func TestHslToRGB_NegativeHue(t *testing.T) {
 }
 
 func TestHslToRGB_HueWraps360(t *testing.T) {
+	t.Parallel()
+
 	// 360 should equal 0
 	r1, g1, b1 := hslToRGB(360, 1, 0.5)
 	r2, g2, b2 := hslToRGB(0, 1, 0.5)
@@ -92,6 +112,8 @@ func TestHslToRGB_HueWraps360(t *testing.T) {
 }
 
 func TestHslToRGB_OutputRange(t *testing.T) {
+	t.Parallel()
+
 	// Test various hues to ensure output is always in [0, 255]
 	for h := -720.0; h <= 720.0; h += 30 {
 		for _, s := range []float64{0, 0.5, 1} {
@@ -106,6 +128,8 @@ func TestHslToRGB_OutputRange(t *testing.T) {
 }
 
 func TestClamp(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		v, lo, hi, want int
 	}{
@@ -125,6 +149,8 @@ func TestClamp(t *testing.T) {
 }
 
 func TestWriteAnsiFgBg_MatchesStrconv(t *testing.T) {
+	t.Parallel()
+
 	for _, c := range [][6]int{{0, 0, 0, 255, 255, 255}, {7, 42, 199, 100, 10, 1}, {-1, 256, 1000, 0, 128, 255}} {
 		var sb strings.Builder
 		writeAnsiFgBg(&sb, c[0], c[1], c[2], c[3], c[4], c[5])

@@ -6,6 +6,8 @@ import (
 )
 
 func TestHasMore(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		offset, count, total int
 		want                 bool
@@ -25,6 +27,8 @@ func TestHasMore(t *testing.T) {
 }
 
 func TestFirstArtist(t *testing.T) {
+	t.Parallel()
+
 	if got := firstArtist(nil); got != "" {
 		t.Errorf("firstArtist(nil) = %q, want empty", got)
 	}
@@ -37,6 +41,8 @@ func TestFirstArtist(t *testing.T) {
 }
 
 func TestConvertTracks(t *testing.T) {
+	t.Parallel()
+
 	raw := []rawTrack{
 		{
 			ID:       "t1",
@@ -86,6 +92,8 @@ func TestConvertTracks(t *testing.T) {
 }
 
 func TestConvertTracks_Empty(t *testing.T) {
+	t.Parallel()
+
 	tracks := convertTracks(nil)
 	if tracks != nil {
 		t.Errorf("expected nil, got %v", tracks)
@@ -93,6 +101,8 @@ func TestConvertTracks_Empty(t *testing.T) {
 }
 
 func TestConvertAlbums(t *testing.T) {
+	t.Parallel()
+
 	raw := []rawAlbum{
 		{
 			ID:          "a1",
@@ -134,6 +144,8 @@ func TestConvertAlbums(t *testing.T) {
 }
 
 func TestConvertAlbums_Empty(t *testing.T) {
+	t.Parallel()
+
 	albums := convertAlbums(nil)
 	if albums != nil {
 		t.Errorf("expected nil, got %v", albums)
@@ -141,6 +153,8 @@ func TestConvertAlbums_Empty(t *testing.T) {
 }
 
 func TestConvertEpisodes(t *testing.T) {
+	t.Parallel()
+
 	raw := []rawEpisode{
 		{
 			ID:          "e1",
@@ -170,6 +184,8 @@ func TestConvertEpisodes(t *testing.T) {
 }
 
 func TestConvertEpisodes_Empty(t *testing.T) {
+	t.Parallel()
+
 	episodes := convertEpisodes(nil)
 	if episodes != nil {
 		t.Errorf("expected nil, got %v", episodes)
@@ -177,6 +193,8 @@ func TestConvertEpisodes_Empty(t *testing.T) {
 }
 
 func TestConvertArtists(t *testing.T) {
+	t.Parallel()
+
 	raw := []rawArtist{
 		{ID: "ar1", URI: "spotify:artist:ar1", Name: "Artist One", Genres: []string{"rock"}},
 		{ID: "ar2", URI: "spotify:artist:ar2", Name: "Artist Two", Genres: nil},
@@ -194,6 +212,8 @@ func TestConvertArtists(t *testing.T) {
 }
 
 func TestConvertArtists_Empty(t *testing.T) {
+	t.Parallel()
+
 	artists := convertArtists(nil)
 	if artists != nil {
 		t.Errorf("expected nil, got %v", artists)
@@ -201,6 +221,8 @@ func TestConvertArtists_Empty(t *testing.T) {
 }
 
 func TestConvertShows(t *testing.T) {
+	t.Parallel()
+
 	raw := []rawShow{
 		{ID: "s1", URI: "spotify:show:s1", Name: "Show One", TotalEpisodes: 50},
 	}
@@ -214,6 +236,8 @@ func TestConvertShows(t *testing.T) {
 }
 
 func TestConvertShows_Empty(t *testing.T) {
+	t.Parallel()
+
 	shows := convertShows(nil)
 	if shows != nil {
 		t.Errorf("expected nil, got %v", shows)

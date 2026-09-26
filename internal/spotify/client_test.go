@@ -26,6 +26,8 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 }
 
 func TestFetchUserID(t *testing.T) {
+	t.Parallel()
+
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if !strings.Contains(r.URL.Path, "/v1/me") {
 			w.WriteHeader(http.StatusNotFound)
@@ -43,6 +45,8 @@ func TestFetchUserID(t *testing.T) {
 }
 
 func TestDoWithRetry_429(t *testing.T) {
+	t.Parallel()
+
 	var attempts atomic.Int32
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
@@ -73,6 +77,8 @@ func TestDoWithRetry_429(t *testing.T) {
 }
 
 func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
+	t.Parallel()
+
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "0")
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -96,6 +102,8 @@ func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
 }
 
 func TestDoWithRetry_429_LongRetryAfter(t *testing.T) {
+	t.Parallel()
+
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Retry-After", "60")
 		w.WriteHeader(http.StatusTooManyRequests)
@@ -112,6 +120,8 @@ func TestDoWithRetry_429_LongRetryAfter(t *testing.T) {
 // calls must short-circuit at the transport (no network) and surface a
 // structured *APIError with status 429 — not a wrapped url.Error.
 func TestDoWithRetry_TransportShortCircuitTranslatesToAPIError(t *testing.T) {
+	t.Parallel()
+
 	var hits atomic.Int32
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		hits.Add(1)
@@ -146,6 +156,8 @@ func TestDoWithRetry_TransportShortCircuitTranslatesToAPIError(t *testing.T) {
 }
 
 func TestApiGet_NonOK(t *testing.T) {
+	t.Parallel()
+
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		w.Write([]byte("not found"))
@@ -159,6 +171,8 @@ func TestApiGet_NonOK(t *testing.T) {
 }
 
 func TestApiGet_InvalidJSON(t *testing.T) {
+	t.Parallel()
+
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("not json"))
@@ -172,6 +186,8 @@ func TestApiGet_InvalidJSON(t *testing.T) {
 }
 
 func TestTruncateForLog_ShortInput(t *testing.T) {
+	t.Parallel()
+
 	in := []byte("hello")
 	out := truncateForLog(in)
 	if string(out) != "hello" {
@@ -180,6 +196,8 @@ func TestTruncateForLog_ShortInput(t *testing.T) {
 }
 
 func TestTruncateForLog_LongASCII(t *testing.T) {
+	t.Parallel()
+
 	in := make([]byte, 1000)
 	for i := range in {
 		in[i] = 'a'
@@ -194,6 +212,8 @@ func TestTruncateForLog_LongASCII(t *testing.T) {
 // cut fell in the middle of a multi-byte rune, yielding malformed bytes.
 // Every prefix length must still produce valid UTF-8 output.
 func TestTruncateForLog_MultibyteBoundary(t *testing.T) {
+	t.Parallel()
+
 	// Build a payload where the 500-byte cut lands mid-rune. "日" is 3 bytes.
 	// Prefixing 499 ASCII bytes means position 500 is the 2nd byte of 日.
 	in := make([]byte, 0, 1000)

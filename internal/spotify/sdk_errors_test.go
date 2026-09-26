@@ -48,6 +48,8 @@ var sdkCalls = []struct {
 }
 
 func TestSDKMethods_ErrorResponseIsAPIError(t *testing.T) {
+	t.Parallel()
+
 	const msg = "Player command failed: Restriction violated"
 	for _, tc := range sdkCalls {
 		t.Run(tc.name, func(t *testing.T) {
@@ -81,6 +83,8 @@ func TestSDKMethods_ErrorResponseIsAPIError(t *testing.T) {
 }
 
 func TestSDKMethods_CooldownIsAPIError429(t *testing.T) {
+	t.Parallel()
+
 	for _, tc := range sdkCalls {
 		t.Run(tc.name, func(t *testing.T) {
 			var hits atomic.Int32
@@ -114,6 +118,8 @@ func TestSDKMethods_CooldownIsAPIError429(t *testing.T) {
 }
 
 func TestWrapSDKErr_PassThrough(t *testing.T) {
+	t.Parallel()
+
 	if got := wrapSDKErr(nil, opPlay); got != nil {
 		t.Errorf("nil: got %v, want nil", got)
 	}

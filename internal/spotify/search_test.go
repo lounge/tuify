@@ -9,6 +9,8 @@ import (
 )
 
 func TestSearchTracks(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"tracks": map[string]any{
 			"offset": 0,
@@ -44,6 +46,8 @@ func TestSearchTracks(t *testing.T) {
 }
 
 func TestSearchEpisodes(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"episodes": map[string]any{
 			"offset": 0,
@@ -68,6 +72,8 @@ func TestSearchEpisodes(t *testing.T) {
 }
 
 func TestSearchAlbums(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"albums": map[string]any{
 			"offset": 0,
@@ -97,6 +103,8 @@ func TestSearchAlbums(t *testing.T) {
 }
 
 func TestSearchArtists(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"artists": map[string]any{
 			"offset": 0,
@@ -124,6 +132,8 @@ func TestSearchArtists(t *testing.T) {
 }
 
 func TestSearchShows(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"shows": map[string]any{
 			"offset": 0,
@@ -148,6 +158,8 @@ func TestSearchShows(t *testing.T) {
 }
 
 func TestSearchTracks_Pagination(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"tracks": map[string]any{
 			"offset": 0,

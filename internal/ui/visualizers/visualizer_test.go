@@ -13,6 +13,8 @@ import (
 // --- Oscillogram tests ---
 
 func TestOscillogram_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	o := NewOscillogram()
 	got := o.View(80, 10)
 	if got != "" {
@@ -21,12 +23,16 @@ func TestOscillogram_ViewBeforeInit(t *testing.T) {
 }
 
 func TestOscillogram_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	o := NewOscillogram()
 	// Should not panic.
 	o.Advance()
 }
 
 func TestOscillogram_NoAudioShowsRestingBars(t *testing.T) {
+	t.Parallel()
+
 	o := NewOscillogram()
 	o.Init("seed", 10000)
 	height := 10
@@ -42,6 +48,8 @@ func TestOscillogram_NoAudioShowsRestingBars(t *testing.T) {
 }
 
 func TestOscillogram_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	o := NewOscillogram()
 	o.Init("seed", 10000)
 	if got := o.View(0, 10); got != "" {
@@ -53,6 +61,8 @@ func TestOscillogram_ViewZeroDimensions(t *testing.T) {
 }
 
 func TestOscillogram_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	o := NewOscillogram()
 	o.Init("seed", 10000)
 	for _, height := range []int{1, 2, 3, 10, 21} {
@@ -67,6 +77,8 @@ func TestOscillogram_ViewDimensions(t *testing.T) {
 // --- Starfield tests ---
 
 func TestStarfield_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	sf := NewStarfield()
 	got := sf.View(80, 10)
 	if got != "" {
@@ -75,12 +87,16 @@ func TestStarfield_ViewBeforeInit(t *testing.T) {
 }
 
 func TestStarfield_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	sf := NewStarfield()
 	// Should not panic
 	sf.Advance()
 }
 
 func TestStarfield_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	sf := NewStarfield()
 	sf.Init("test-seed", 30000)
 
@@ -93,6 +109,8 @@ func TestStarfield_ViewDimensions(t *testing.T) {
 }
 
 func TestStarfield_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	sf := NewStarfield()
 	sf.Init("seed", 10000)
 
@@ -105,6 +123,8 @@ func TestStarfield_ViewZeroDimensions(t *testing.T) {
 }
 
 func TestStarfield_AdvanceDoesNotPanic(t *testing.T) {
+	t.Parallel()
+
 	sf := NewStarfield()
 	sf.Init("seed", 10000)
 	// Run many advances without panic
@@ -118,6 +138,8 @@ func TestStarfield_AdvanceDoesNotPanic(t *testing.T) {
 }
 
 func TestStarfield_ResizeGrid(t *testing.T) {
+	t.Parallel()
+
 	sf := NewStarfield()
 	sf.Init("seed", 10000)
 
@@ -144,6 +166,8 @@ func testImage(w, h int) image.Image {
 }
 
 func TestAlbumArt_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	a := NewAlbumArt()
 	got := a.View(80, 10)
 	if got != "" {
@@ -152,12 +176,16 @@ func TestAlbumArt_ViewBeforeInit(t *testing.T) {
 }
 
 func TestAlbumArt_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	a := NewAlbumArt()
 	// Should not panic
 	a.Advance()
 }
 
 func TestAlbumArt_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
 
@@ -170,6 +198,8 @@ func TestAlbumArt_ViewZeroDimensions(t *testing.T) {
 }
 
 func TestAlbumArt_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
 	a.SetImage(testImage(64, 64))
@@ -183,6 +213,8 @@ func TestAlbumArt_ViewDimensions(t *testing.T) {
 }
 
 func TestAlbumArt_ResizeGrid(t *testing.T) {
+	t.Parallel()
+
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
 	a.SetImage(testImage(64, 64))
@@ -196,6 +228,8 @@ func TestAlbumArt_ResizeGrid(t *testing.T) {
 }
 
 func TestAlbumArt_Deterministic(t *testing.T) {
+	t.Parallel()
+
 	img := testImage(64, 64)
 
 	a1 := NewAlbumArt()
@@ -220,6 +254,8 @@ func TestAlbumArt_Deterministic(t *testing.T) {
 }
 
 func TestAlbumArt_AdvanceRespectsFrames(t *testing.T) {
+	t.Parallel()
+
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
 	a.SetImage(testImage(16, 16))
@@ -241,6 +277,8 @@ func TestAlbumArt_AdvanceRespectsFrames(t *testing.T) {
 }
 
 func TestAlbumArt_ResolvesAfterEnoughAdvances(t *testing.T) {
+	t.Parallel()
+
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
 	a.SetImage(testImage(16, 16))
@@ -255,6 +293,8 @@ func TestAlbumArt_ResolvesAfterEnoughAdvances(t *testing.T) {
 }
 
 func TestAlbumArt_MusicNoteFallback(t *testing.T) {
+	t.Parallel()
+
 	img := MusicNoteFallback()
 	bounds := img.Bounds()
 	if bounds.Dx() != 16 || bounds.Dy() != 16 {
@@ -265,6 +305,8 @@ func TestAlbumArt_MusicNoteFallback(t *testing.T) {
 // --- Spectrum tests ---
 
 func TestSpectrum_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrum()
 	got := s.View(80, 10)
 	if got != "" {
@@ -273,12 +315,16 @@ func TestSpectrum_ViewBeforeInit(t *testing.T) {
 }
 
 func TestSpectrum_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrum()
 	// Should not panic.
 	s.Advance()
 }
 
 func TestSpectrum_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrum()
 	s.Init("seed", 10000)
 
@@ -291,6 +337,8 @@ func TestSpectrum_ViewZeroDimensions(t *testing.T) {
 }
 
 func TestSpectrum_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrum()
 	s.Init("seed", 10000)
 
@@ -303,6 +351,8 @@ func TestSpectrum_ViewDimensions(t *testing.T) {
 }
 
 func TestSpectrum_DecaysToZero(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrum()
 	s.Init("seed", 10000)
 
@@ -332,6 +382,8 @@ func TestSpectrum_DecaysToZero(t *testing.T) {
 // ---- Spectrogram ----
 
 func TestSpectrogram_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrogram()
 	if got := s.View(80, 10); got != "" {
 		t.Errorf("View before Init should return empty, got %q", got)
@@ -339,10 +391,14 @@ func TestSpectrogram_ViewBeforeInit(t *testing.T) {
 }
 
 func TestSpectrogram_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	NewSpectrogram().Advance() // must not panic
 }
 
 func TestSpectrogram_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrogram()
 	s.Init("seed", 10000)
 	if got := s.View(0, 10); got != "" {
@@ -354,6 +410,8 @@ func TestSpectrogram_ViewZeroDimensions(t *testing.T) {
 }
 
 func TestSpectrogram_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrogram()
 	s.Init("seed", 10000)
 
@@ -371,6 +429,8 @@ func TestSpectrogram_ViewDimensions(t *testing.T) {
 // glyph depends on the 4-way rank; we just smoke-check one of the common
 // "right-side hot" shapes is present.
 func TestSpectrogram_ScrollsRightToLeft(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrogram()
 	s.Init("seed", 10000)
 
@@ -408,6 +468,8 @@ func TestSpectrogram_ScrollsRightToLeft(t *testing.T) {
 // silent buffer must NOT produce a band at full amplitude on the first call,
 // because the smoothing weights it with the zero-valued previous frame.
 func TestSpectrogram_SmoothingReducesFrameDelta(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrogram()
 	s.Init("seed", 10000)
 
@@ -431,6 +493,8 @@ func TestSpectrogram_SmoothingReducesFrameDelta(t *testing.T) {
 // zero over time. (Older slots still hold their original data — that's the
 // whole point of the ring buffer; this test only checks the rolling tail.)
 func TestSpectrogram_DecaysToFloor(t *testing.T) {
+	t.Parallel()
+
 	s := NewSpectrogram()
 	s.Init("seed", 10000)
 
@@ -455,6 +519,8 @@ func TestSpectrogram_DecaysToFloor(t *testing.T) {
 // TestInfernoColor_MatchesExactGamma pins the folded gamma table to the
 // exact math.Pow-then-lookup mapping it replaced, within 5/255 per channel.
 func TestInfernoColor_MatchesExactGamma(t *testing.T) {
+	t.Parallel()
+
 	for k := 0; k <= 100000; k++ {
 		amp := float32(k) / 100000
 		c := infernoLUT[int(math.Pow(float64(amp), spectroGamma)*255)]

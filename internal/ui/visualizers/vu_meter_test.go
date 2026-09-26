@@ -16,6 +16,8 @@ func stripANSI(s string) string {
 }
 
 func TestVUMeter_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	if got := v.View(100, 14); got != "" {
 		t.Errorf("View before Init should return empty, got %q", got)
@@ -23,10 +25,14 @@ func TestVUMeter_ViewBeforeInit(t *testing.T) {
 }
 
 func TestVUMeter_AdvanceBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	NewVUMeter().Advance() // must not panic
 }
 
 func TestVUMeter_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	if got := v.View(0, 10); got != "" {
@@ -38,6 +44,8 @@ func TestVUMeter_ViewZeroDimensions(t *testing.T) {
 }
 
 func TestVUMeter_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	for _, sz := range []struct{ w, h int }{
@@ -55,6 +63,8 @@ func TestVUMeter_ViewDimensions(t *testing.T) {
 }
 
 func TestVUMeter_NoPanicAtTinySizes(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	for _, sz := range []struct{ w, h int }{
@@ -68,6 +78,8 @@ func TestVUMeter_NoPanicAtTinySizes(t *testing.T) {
 }
 
 func TestVUMeter_StackedLayoutWhenNarrow(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 0.5})
@@ -94,6 +106,8 @@ func TestVUMeter_StackedLayoutWhenNarrow(t *testing.T) {
 }
 
 func TestVUMeter_BarFallbackWhenTiny(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 0.5})
@@ -112,6 +126,8 @@ func TestVUMeter_BarFallbackWhenTiny(t *testing.T) {
 }
 
 func TestVUMeter_InitResetsBothChannels(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 1.0})
@@ -128,6 +144,8 @@ func TestVUMeter_InitResetsBothChannels(t *testing.T) {
 }
 
 func TestVUMeter_StereoBalanceIsIndependent(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	// Loud left, quiet right.
@@ -141,6 +159,8 @@ func TestVUMeter_StereoBalanceIsIndependent(t *testing.T) {
 }
 
 func TestVUMeter_NilAudioDecaysBothToFloor(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 1.0})
@@ -157,6 +177,8 @@ func TestVUMeter_NilAudioDecaysBothToFloor(t *testing.T) {
 }
 
 func TestVUMeter_LevelClampedToMaxDb(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	// LeftLevel=1.0 → 0 dB which is below vuDbMax (+3). To probe the
@@ -175,6 +197,8 @@ func TestVUMeter_LevelClampedToMaxDb(t *testing.T) {
 }
 
 func TestVUMeter_QuietLevelClampedToMinDb(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1e-8, RightLevel: 1e-8})
@@ -187,6 +211,8 @@ func TestVUMeter_QuietLevelClampedToMinDb(t *testing.T) {
 }
 
 func TestVUMeter_RenderShowsChannels(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	plain := stripANSI(v.View(100, 14))
@@ -196,6 +222,8 @@ func TestVUMeter_RenderShowsChannels(t *testing.T) {
 }
 
 func TestVUMeter_RenderShowsScaleExtremes(t *testing.T) {
+	t.Parallel()
+
 	v := NewVUMeter()
 	v.Init("seed", 10000)
 	plain := stripANSI(v.View(100, 14))
@@ -208,6 +236,8 @@ func TestVUMeter_RenderShowsScaleExtremes(t *testing.T) {
 }
 
 func TestVUMeter_Deterministic(t *testing.T) {
+	t.Parallel()
+
 	a := NewVUMeter()
 	b := NewVUMeter()
 	a.Init("seed", 10000)

@@ -57,6 +57,8 @@ func generateSineBytes(freq float64, numChunks int) []byte {
 }
 
 func TestPipeReader_LatestNilBeforeStart(t *testing.T) {
+	t.Parallel()
+
 	pr := NewPipeReader()
 	pr.NewPlayer = newNoopPlayer
 
@@ -66,6 +68,8 @@ func TestPipeReader_LatestNilBeforeStart(t *testing.T) {
 }
 
 func TestPipeReader_LatestNilWhenStale(t *testing.T) {
+	t.Parallel()
+
 	pr := NewPipeReader()
 	pr.NewPlayer = newNoopPlayer
 
@@ -90,6 +94,8 @@ func progressAfter(chunks int) int32 {
 }
 
 func TestPipeReader_ReceivesFFTData(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
 		pr.NewPlayer = newNoopPlayer
@@ -110,6 +116,8 @@ func TestPipeReader_ReceivesFFTData(t *testing.T) {
 }
 
 func TestPipeReader_StopIdempotent(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		// Stop without Start.
 		pr := NewPipeReader()
@@ -128,6 +136,8 @@ func TestPipeReader_StopIdempotent(t *testing.T) {
 }
 
 func TestPipeReader_ReentrantStart(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
 		pr.NewPlayer = newNoopPlayer
@@ -163,6 +173,8 @@ func (c *closeTracker) Close() error {
 }
 
 func TestPipeReader_StartAfterStopIgnored(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
 		pr.NewPlayer = newNoopPlayer
@@ -183,6 +195,8 @@ func TestPipeReader_StartAfterStopIgnored(t *testing.T) {
 }
 
 func TestPipeReader_ProgressMsAdvances(t *testing.T) {
+	t.Parallel()
+
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
 		pr.NewPlayer = newNoopPlayer
@@ -210,6 +224,8 @@ func seedFreshFrame(pr *PipeReader, fd *FrequencyData) {
 }
 
 func TestPipeReader_Latest_VolumeGainAt50Percent(t *testing.T) {
+	t.Parallel()
+
 	pr := NewPipeReader()
 	pr.NewPlayer = newNoopPlayer
 	pr.SetVolumePercent(50)
@@ -248,6 +264,8 @@ func TestPipeReader_Latest_VolumeGainAt50Percent(t *testing.T) {
 }
 
 func TestPipeReader_Latest_VolumeGainCapsAt4x(t *testing.T) {
+	t.Parallel()
+
 	pr := NewPipeReader()
 	pr.NewPlayer = newNoopPlayer
 	pr.SetVolumePercent(10) // 100/10 = 10x uncapped, must clamp to 4x
@@ -280,6 +298,8 @@ func TestPipeReader_Latest_VolumeGainCapsAt4x(t *testing.T) {
 }
 
 func TestPipeReader_Latest_ReturnsCallerOwnedCopy(t *testing.T) {
+	t.Parallel()
+
 	// Even at 100% volume, where no gain applies, Latest must return a copy:
 	// visualizers keep the pointer across ticks, and a write through it
 	// must never reach the shared published frame.
@@ -309,6 +329,8 @@ func TestPipeReader_Latest_ReturnsCallerOwnedCopy(t *testing.T) {
 // happy with SetVolumePercent firing from one goroutine while Latest runs
 // from another. Run with `go test -race`.
 func TestPipeReader_Latest_ConcurrentSetVolume(t *testing.T) {
+	t.Parallel()
+
 	pr := NewPipeReader()
 	pr.NewPlayer = newNoopPlayer
 
@@ -351,6 +373,8 @@ func TestPipeReader_Latest_ConcurrentSetVolume(t *testing.T) {
 // between reads, and checks it publishes the same frames as analyzing
 // each whole chunk directly.
 func TestBridgeRead_OddReadSizesMatchWholeChunks(t *testing.T) {
+	t.Parallel()
+
 	const chunks = 5
 	raw := generateSineBytes(440, chunks)
 

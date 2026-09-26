@@ -8,6 +8,8 @@ import (
 )
 
 func TestGetPlayerState_NoContent(t *testing.T) {
+	t.Parallel()
+
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNoContent)
 	})
@@ -22,6 +24,8 @@ func TestGetPlayerState_NoContent(t *testing.T) {
 }
 
 func TestGetPlayerState_NilItem(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"is_playing":    false,
 		"shuffle_state": false,
@@ -43,6 +47,8 @@ func TestGetPlayerState_NilItem(t *testing.T) {
 }
 
 func TestGetPlayerState_Playing(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": true,
@@ -91,6 +97,8 @@ func TestGetPlayerState_Playing(t *testing.T) {
 }
 
 func TestGetPlayerState_NoDevice(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
@@ -120,6 +128,8 @@ func TestGetPlayerState_NoDevice(t *testing.T) {
 }
 
 func TestGetPlayerState_EpisodeWithShow(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
@@ -146,6 +156,8 @@ func TestGetPlayerState_EpisodeWithShow(t *testing.T) {
 }
 
 func TestGetPlayerState_WithAlbumImage(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
@@ -180,6 +192,8 @@ func TestGetPlayerState_WithAlbumImage(t *testing.T) {
 }
 
 func TestGetPlayerState_EpisodeImages(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
@@ -211,6 +225,8 @@ func TestGetPlayerState_EpisodeImages(t *testing.T) {
 }
 
 func TestGetPlayerState_WithContext(t *testing.T) {
+	t.Parallel()
+
 	response := map[string]any{
 		"is_playing":    true,
 		"shuffle_state": false,
@@ -239,6 +255,8 @@ func TestGetPlayerState_WithContext(t *testing.T) {
 }
 
 func TestPlayOpts_WithDeviceID(t *testing.T) {
+	t.Parallel()
+
 	opts := playOpts("device123")
 	if opts.DeviceID == nil {
 		t.Fatal("DeviceID should not be nil")
@@ -246,6 +264,8 @@ func TestPlayOpts_WithDeviceID(t *testing.T) {
 }
 
 func TestPlayOpts_EmptyDeviceID(t *testing.T) {
+	t.Parallel()
+
 	opts := playOpts("")
 	if opts.DeviceID != nil {
 		t.Error("DeviceID should be nil for empty string")

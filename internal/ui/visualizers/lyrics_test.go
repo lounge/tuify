@@ -6,6 +6,8 @@ import (
 )
 
 func TestLyrics_ViewBeforeInit(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	got := l.View(80, 10)
 	if got != "" {
@@ -14,6 +16,8 @@ func TestLyrics_ViewBeforeInit(t *testing.T) {
 }
 
 func TestLyrics_ViewZeroDimensions(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 
@@ -26,6 +30,8 @@ func TestLyrics_ViewZeroDimensions(t *testing.T) {
 }
 
 func TestLyrics_Loading(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 
@@ -36,6 +42,8 @@ func TestLyrics_Loading(t *testing.T) {
 }
 
 func TestLyrics_NoLyrics(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 	l.SetLyrics(nil)
@@ -47,6 +55,8 @@ func TestLyrics_NoLyrics(t *testing.T) {
 }
 
 func TestLyrics_Instrumental(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 	l.SetInstrumental()
@@ -58,6 +68,8 @@ func TestLyrics_Instrumental(t *testing.T) {
 }
 
 func TestLyrics_SetLyricsClearsLoading(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 	l.SetLyrics([]string{"Line one", "Line two"})
@@ -69,6 +81,8 @@ func TestLyrics_SetLyricsClearsLoading(t *testing.T) {
 }
 
 func TestLyrics_SetInstrumentalClearsLoading(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 	l.SetInstrumental()
@@ -82,6 +96,8 @@ func TestLyrics_SetInstrumentalClearsLoading(t *testing.T) {
 }
 
 func TestLyrics_ViewDimensions(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 	lines := make([]string, 30)
@@ -99,6 +115,8 @@ func TestLyrics_ViewDimensions(t *testing.T) {
 }
 
 func TestLyrics_ProgressScrolls(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 
@@ -122,6 +140,8 @@ func TestLyrics_ProgressScrolls(t *testing.T) {
 }
 
 func TestLyrics_AdvanceIsNoop(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 	l.SetLyrics([]string{"test"})
@@ -131,6 +151,8 @@ func TestLyrics_AdvanceIsNoop(t *testing.T) {
 }
 
 func TestLyrics_ReinitResetsState(t *testing.T) {
+	t.Parallel()
+
 	l := NewLyrics()
 	l.Init("seed", 10000)
 	l.SetLyrics([]string{"old lyrics"})
@@ -146,6 +168,8 @@ func TestLyrics_ReinitResetsState(t *testing.T) {
 }
 
 func TestLyricGray_Dark(t *testing.T) {
+	t.Parallel()
+
 	// Non-section, close distance
 	g := lyricGray(true, false, 0)
 	if g < 50 || g > 255 {
@@ -168,6 +192,8 @@ func TestLyricGray_Dark(t *testing.T) {
 }
 
 func TestLyricGray_Light(t *testing.T) {
+	t.Parallel()
+
 	// Light mode: grays should increase with distance (darker = lower number)
 	g0 := lyricGray(false, false, 0)
 	g5 := lyricGray(false, false, 5)
@@ -177,6 +203,8 @@ func TestLyricGray_Light(t *testing.T) {
 }
 
 func TestCenterPad(t *testing.T) {
+	t.Parallel()
+
 	tests := []struct {
 		s     string
 		width int
@@ -202,6 +230,8 @@ func TestCenterPad(t *testing.T) {
 }
 
 func TestCenterPad_Empty(t *testing.T) {
+	t.Parallel()
+
 	got := centerPad("", 10)
 	// centerPad uses fmt.Sprintf("%*s%s", left, "", s) — left=5 for width=10, empty s
 	if !strings.HasPrefix(got, " ") {
