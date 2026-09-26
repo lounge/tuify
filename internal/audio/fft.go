@@ -8,10 +8,10 @@ import (
 // peakDecay controls how fast the running peak normalizer decays per FFT frame (~46 ms).
 const peakDecay = 0.999
 
-// Analyzer performs FFT analysis on PCM audio chunks and produces FrequencyData.
-// It owns its FFT work buffers, so Analyze does not allocate; an Analyzer
+// analyzer performs FFT analysis on PCM audio chunks and produces FrequencyData.
+// It owns its FFT work buffers, so Analyze does not allocate; an analyzer
 // must not be used from more than one goroutine at a time.
-type Analyzer struct {
+type analyzer struct {
 	window   []float64 // precomputed Hann window coefficients
 	re, im   []float64 // FFT work buffers, reused across frames
 	cos, sin []float64 // twiddle factors e^(-2πik/n) for k < n/2
@@ -22,15 +22,15 @@ type Analyzer struct {
 	levelMax float64       // running peak for time-domain L/R level normalization, with decay
 }
 
-// NewAnalyzer creates an Analyzer with a precomputed Hann window, FFT
+// newAnalyzer creates an analyzer with a precomputed Hann window, FFT
 // tables and band-to-bin map for the given window size. windowSize must be
-// a power of two of at least 2; NewAnalyzer panics otherwise.
-func NewAnalyzer(windowSize int) *Analyzer {
+// a power of two of at least 2; newAnalyzer panics otherwise.
+func newAnalyzer(windowSize int) *analyzer {
 	n := windowSize
 	if n < 2 || n&(n-1) != 0 {
-		panic("audio.NewAnalyzer: windowSize must be a power of two >= 2")
+		panic("audio.newAnalyzer: windowSize must be a power of two >= 2")
 	}
-	a := &Analyzer{
+	a := &analyzer{
 		window:   make([]float64, n),
 		re:       make([]float64, n),
 		im:       make([]float64, n),
@@ -53,7 +53,7 @@ func NewAnalyzer(windowSize int) *Analyzer {
 	}
 
 	// Map FFT bins to 64 logarithmically spaced frequency bands (20 Hz – 20 kHz).
-	nyquist := float64(DefaultFormat.SampleRate) / 2.0
+	nyquist := float64(defaultFormat.SampleRate) / 2.0
 	binHz := nyquist / float64(n/2)
 	logMin := math.Log10(20.0)
 	logMax := math.Log10(20000.0)
@@ -72,7 +72,7 @@ func NewAnalyzer(windowSize int) *Analyzer {
 
 // Analyze takes interleaved stereo int16 PCM samples and returns FrequencyData.
 // The samples slice must contain at least WindowSize*2 values (stereo pairs).
-func (a *Analyzer) Analyze(samples []int16) FrequencyData {
+func (a *analyzer) Analyze(samples []int16) FrequencyData {
 	n := len(a.window)
 	re, im := a.re, a.im
 	clear(im)
@@ -177,7 +177,7 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 
 // fft runs an in-place iterative radix-2 FFT over re/im, which must
 // already hold the input in bit-reversed order.
-func (a *Analyzer) fft() {
+func (a *analyzer) fft() {
 	re, im := a.re, a.im
 	n := len(re)
 	for size := 2; size <= n; size <<= 1 {

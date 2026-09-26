@@ -8,7 +8,7 @@ import (
 func TestAnalyzeSilence(t *testing.T) {
 	t.Parallel()
 
-	a := NewAnalyzer(WindowSize)
+	a := newAnalyzer(WindowSize)
 	samples := make([]int16, WindowSize*2) // stereo silence
 	fd := a.Analyze(samples)
 
@@ -26,13 +26,13 @@ func TestAnalyzeSilence(t *testing.T) {
 func TestAnalyzeSineWave(t *testing.T) {
 	t.Parallel()
 
-	a := NewAnalyzer(WindowSize)
+	a := newAnalyzer(WindowSize)
 
 	// Generate a 1 kHz sine wave at full scale, stereo.
 	freq := 1000.0
 	samples := make([]int16, WindowSize*2)
 	for i := range WindowSize {
-		val := int16(32000 * math.Sin(2*math.Pi*freq*float64(i)/float64(DefaultFormat.SampleRate)))
+		val := int16(32000 * math.Sin(2*math.Pi*freq*float64(i)/float64(defaultFormat.SampleRate)))
 		samples[i*2] = val   // left
 		samples[i*2+1] = val // right
 	}
@@ -69,7 +69,7 @@ func TestAnalyzeSineWave(t *testing.T) {
 func TestAnalyzeDeterministic(t *testing.T) {
 	t.Parallel()
 
-	a := NewAnalyzer(WindowSize)
+	a := newAnalyzer(WindowSize)
 
 	samples := make([]int16, WindowSize*2)
 	for i := range samples {
@@ -79,7 +79,7 @@ func TestAnalyzeDeterministic(t *testing.T) {
 	fd1 := a.Analyze(samples)
 
 	// Reset analyzer to same initial state.
-	a2 := NewAnalyzer(WindowSize)
+	a2 := newAnalyzer(WindowSize)
 	fd2 := a2.Analyze(samples)
 
 	for i := range fd1.Bands {
@@ -92,13 +92,13 @@ func TestAnalyzeDeterministic(t *testing.T) {
 func TestAnalyzeLowFrequency(t *testing.T) {
 	t.Parallel()
 
-	a := NewAnalyzer(WindowSize)
+	a := newAnalyzer(WindowSize)
 
 	// Generate a 60 Hz sine wave (bass range).
 	freq := 60.0
 	samples := make([]int16, WindowSize*2)
 	for i := range WindowSize {
-		val := int16(32000 * math.Sin(2*math.Pi*freq*float64(i)/float64(DefaultFormat.SampleRate)))
+		val := int16(32000 * math.Sin(2*math.Pi*freq*float64(i)/float64(defaultFormat.SampleRate)))
 		samples[i*2] = val
 		samples[i*2+1] = val
 	}
@@ -122,7 +122,7 @@ func TestFFTMatchesDFT(t *testing.T) {
 	t.Parallel()
 
 	const n = 256
-	a := NewAnalyzer(n)
+	a := newAnalyzer(n)
 	in := make([]float64, n)
 	x := uint32(1)
 	for i := range in {
@@ -157,10 +157,10 @@ func TestNewAnalyzer_PanicsOnNonPowerOfTwo(t *testing.T) {
 		func() {
 			defer func() {
 				if recover() == nil {
-					t.Errorf("NewAnalyzer(%d) should panic", n)
+					t.Errorf("newAnalyzer(%d) should panic", n)
 				}
 			}()
-			NewAnalyzer(n)
+			newAnalyzer(n)
 		}()
 	}
 }

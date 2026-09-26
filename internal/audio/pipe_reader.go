@@ -178,8 +178,8 @@ func (pr *PipeReader) Stop() {
 func (pr *PipeReader) readLoop(pipe io.ReadCloser, quit <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 
-	analyzer := NewAnalyzer(WindowSize)
-	format := DefaultFormat
+	analyzer := newAnalyzer(WindowSize)
+	format := defaultFormat
 
 	bridge := &pipeReaderBridge{
 		pipe:     pipe,
@@ -232,8 +232,8 @@ func (pr *PipeReader) storeFrame(fd *FrequencyData) {
 // FFT analyzer and stores frequency data via the store callback.
 type pipeReaderBridge struct {
 	pipe        io.Reader
-	analyzer    *Analyzer
-	format      PCMFormat
+	analyzer    *analyzer
+	format      pCMFormat
 	totalFrames int64   // mono samples read so far
 	accum       []byte  // bytes not yet analyzed; compacted in place, never re-sliced from the front
 	samples     []int16 // decoded chunk, reused across chunks
@@ -288,7 +288,7 @@ func (b *pipeReaderBridge) Read(p []byte) (int, error) {
 // playerFactory creates an audio player from a PCM source. The returned
 // Closer stops playback when closed. Replaceable in tests to avoid needing
 // a real audio device.
-type playerFactory func(src io.Reader, format PCMFormat) (player, error)
+type playerFactory func(src io.Reader, format pCMFormat) (player, error)
 
 // player is the minimal interface for audio playback.
 type player interface {
@@ -316,7 +316,7 @@ var (
 )
 
 // defaultPlayerFactory creates a real oto player using the singleton context.
-func defaultPlayerFactory(src io.Reader, format PCMFormat) (player, error) {
+func defaultPlayerFactory(src io.Reader, format pCMFormat) (player, error) {
 	otoCtxOnce.Do(func() {
 		var ready chan struct{}
 		otoCtx, ready, otoCtxErr = oto.NewContext(&oto.NewContextOptions{

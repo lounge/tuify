@@ -18,7 +18,7 @@ type noopPlayer struct {
 	done    chan struct{}
 }
 
-func newNoopPlayer(src io.Reader, _ PCMFormat) (player, error) {
+func newNoopPlayer(src io.Reader, _ pCMFormat) (player, error) {
 	p := &noopPlayer{src: src, done: make(chan struct{})}
 	p.playing.Store(true)
 	go func() {
@@ -48,7 +48,7 @@ func generateSineBytes(freq float64, numChunks int) []byte {
 	totalSamples := numChunks * WindowSize
 	buf := make([]byte, totalSamples*2*2) // stereo, 16-bit
 	for i := range totalSamples {
-		val := int16(16000 * math.Sin(2*math.Pi*freq*float64(i)/float64(DefaultFormat.SampleRate)))
+		val := int16(16000 * math.Sin(2*math.Pi*freq*float64(i)/float64(defaultFormat.SampleRate)))
 		offset := i * 4
 		binary.LittleEndian.PutUint16(buf[offset:], uint16(val))
 		binary.LittleEndian.PutUint16(buf[offset+2:], uint16(val))
@@ -90,7 +90,7 @@ func TestPipeReader_LatestNilWhenStale(t *testing.T) {
 
 // progressAfter is the ProgressMs of the last frame of a chunks-long pipe.
 func progressAfter(chunks int) int32 {
-	return int32(chunks * WindowSize * 1000 / DefaultFormat.SampleRate)
+	return int32(chunks * WindowSize * 1000 / defaultFormat.SampleRate)
 }
 
 func TestPipeReader_ReceivesFFTData(t *testing.T) {
@@ -381,8 +381,8 @@ func TestBridgeRead_OddReadSizesMatchWholeChunks(t *testing.T) {
 	var got []FrequencyData
 	br := &pipeReaderBridge{
 		pipe:     bytes.NewReader(raw),
-		analyzer: NewAnalyzer(WindowSize),
-		format:   DefaultFormat,
+		analyzer: newAnalyzer(WindowSize),
+		format:   defaultFormat,
 		store:    func(fd *FrequencyData) { got = append(got, *fd) },
 	}
 	p := make([]byte, 3001)
@@ -397,7 +397,7 @@ func TestBridgeRead_OddReadSizesMatchWholeChunks(t *testing.T) {
 		t.Fatalf("published %d frames, want %d", len(got), chunks)
 	}
 
-	ref := NewAnalyzer(WindowSize)
+	ref := newAnalyzer(WindowSize)
 	samples := make([]int16, WindowSize*2)
 	for c := range chunks {
 		chunk := raw[c*ChunkBytes : (c+1)*ChunkBytes]
@@ -408,7 +408,7 @@ func TestBridgeRead_OddReadSizesMatchWholeChunks(t *testing.T) {
 		if got[c].Bands != want.Bands {
 			t.Errorf("frame %d bands differ from a direct Analyze of the same chunk", c)
 		}
-		if wantMs := int32(int64(c+1) * WindowSize * 1000 / int64(DefaultFormat.SampleRate)); got[c].ProgressMs > wantMs+100 || got[c].ProgressMs < wantMs {
+		if wantMs := int32(int64(c+1) * WindowSize * 1000 / int64(defaultFormat.SampleRate)); got[c].ProgressMs > wantMs+100 || got[c].ProgressMs < wantMs {
 			t.Errorf("frame %d ProgressMs = %d, want about %d", c, got[c].ProgressMs, wantMs)
 		}
 	}

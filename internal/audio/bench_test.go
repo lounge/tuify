@@ -12,7 +12,7 @@ import (
 // 440 Hz + 3 kHz mix, so both low and mid bands carry energy.
 func benchSamples() []int16 {
 	s := make([]int16, WindowSize*2)
-	rate := float64(DefaultFormat.SampleRate)
+	rate := float64(defaultFormat.SampleRate)
 	for i := range WindowSize {
 		t := float64(i) / rate
 		v := int16(8000*math.Sin(2*math.Pi*440*t) + 8000*math.Sin(2*math.Pi*3000*t))
@@ -22,7 +22,7 @@ func benchSamples() []int16 {
 }
 
 func BenchmarkAnalyze(b *testing.B) {
-	a := NewAnalyzer(WindowSize)
+	a := newAnalyzer(WindowSize)
 	samples := benchSamples()
 	b.ReportAllocs()
 	for b.Loop() {
@@ -51,8 +51,8 @@ func BenchmarkBridgeRead(b *testing.B) {
 		b.Run(strconv.Itoa(size), func(b *testing.B) {
 			br := &pipeReaderBridge{
 				pipe:     &cyclicReader{buf: raw.Bytes()},
-				analyzer: NewAnalyzer(WindowSize),
-				format:   DefaultFormat,
+				analyzer: newAnalyzer(WindowSize),
+				format:   defaultFormat,
 				store:    func(*FrequencyData) {},
 			}
 			p := make([]byte, size)

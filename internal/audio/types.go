@@ -45,15 +45,15 @@ func (fd *FrequencyData) ComputeConvenienceFields() {
 	fd.High /= float32(NumBands - midEnd)
 }
 
-// PCMFormat describes the expected audio format from librespot.
-type PCMFormat struct {
+// pCMFormat describes the expected audio format from librespot.
+type pCMFormat struct {
 	SampleRate int
 	Channels   int
 	BitDepth   int
 }
 
-// DefaultFormat is librespot's default output: 44100 Hz, stereo, 16-bit signed LE.
-var DefaultFormat = PCMFormat{SampleRate: 44100, Channels: 2, BitDepth: 16}
+// defaultFormat is librespot's default output: 44100 Hz, stereo, 16-bit signed LE.
+var defaultFormat = pCMFormat{SampleRate: 44100, Channels: 2, BitDepth: 16}
 
 // WindowSize is the number of mono samples per FFT frame.
 // 2048 at 44100 Hz = ~46 ms, a good latency/resolution tradeoff.
