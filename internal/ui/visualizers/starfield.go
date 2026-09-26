@@ -30,7 +30,7 @@ type Starfield struct {
 	gridH       int
 	audioData   *audio.FrequencyData
 	intensity   float64 // audio intensity, computed in Advance()
-	beat        BeatDetector
+	beat        beatDetector
 	smoothSpeed float64 // smoothed speed multiplier
 }
 

@@ -151,9 +151,9 @@ func bandHue(bandIdx int) float64 {
 	return themeHueStart + float64(bandIdx)/float64(audio.NumBands)*themeHueRange
 }
 
-// BeatDetector uses spectral flux with an adaptive threshold to detect beats
+// beatDetector uses spectral flux with an adaptive threshold to detect beats
 // and estimate tempo. Embed in any visualizer that needs tempo-aware behavior.
-type BeatDetector struct {
+type beatDetector struct {
 	prevBands  [audio.NumBands]float32 // previous frame's bands for flux calculation
 	fluxAvg    float64                 // running average of spectral flux
 	hasPrev    bool                    // whether prevBands is populated
@@ -173,7 +173,7 @@ const (
 )
 
 // Reset clears all beat state. Call on track change or Init.
-func (bd *BeatDetector) Reset() {
+func (bd *beatDetector) Reset() {
 	bd.prevBands = [audio.NumBands]float32{}
 	bd.fluxAvg = 0
 	bd.hasPrev = false
@@ -186,7 +186,7 @@ func (bd *BeatDetector) Reset() {
 
 // Tick decays the pulse and processes a new frame of frequency bands.
 // Call once per frame with the full band data and playback progress.
-func (bd *BeatDetector) Tick(bands *[audio.NumBands]float32, progressMs int32) {
+func (bd *beatDetector) Tick(bands *[audio.NumBands]float32, progressMs int32) {
 	bd.Pulse *= beatPulseDecay
 
 	// Detect seek or track change.
@@ -239,7 +239,7 @@ func (bd *BeatDetector) Tick(bands *[audio.NumBands]float32, progressMs int32) {
 	}
 }
 
-func (bd *BeatDetector) updateTempo() {
+func (bd *beatDetector) updateTempo() {
 	if len(bd.intervals) < 3 {
 		return
 	}
