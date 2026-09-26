@@ -48,7 +48,7 @@ Wraps `zmb3/spotify` with the higher-level ops tuify needs. `New` takes the auth
 
 ### Auth (`internal/auth`)
 
-OAuth2 PKCE. `NewSavingClient` returns an `*http.Client` that refreshes and re-persists tokens automatically, plus `saveErrCh` (disk-write errors → UI banner) and `revokedCh` (refresh-token permanently rejected → bootstrap replaces the tea error with a re-login message and deletes `token.json`).
+OAuth2 PKCE. `NewSavingClient` returns an `*http.Client` that refreshes and re-persists tokens automatically, plus `saveErrCh` (non-fatal problems: token.json write failures and a failed startup refresh → UI banner) and `revokedCh` (refresh-token permanently rejected → bootstrap replaces the tea error with a re-login message and deletes `token.json`).
 
 ## Hard rules
 

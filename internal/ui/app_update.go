@@ -98,7 +98,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, tea.Batch(m.nowPlaying.pollState(), m.waitForLibrespotInactive())
 	case TokenSaveErrMsg:
 		return m, tea.Batch(
-			m.nowPlaying.SetError("Token save failed: "+msg.Err.Error()),
+			m.nowPlaying.SetError("Auth: "+userMessage(msg.Err)),
 			m.waitForTokenSaveErr(),
 		)
 	case TokenRevokedMsg:

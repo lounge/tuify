@@ -22,11 +22,13 @@ type playbackResultMsg struct {
 // device became inactive, indicating playback moved to another device.
 type LibrespotInactiveMsg struct{}
 
-// TokenSaveErrMsg is delivered when the auth layer fails to persist a
-// refreshed OAuth token. The UI surfaces this as a visible warning because
-// the in-memory token still works for the session — but the user will be
-// forced to log in again on next restart, and without a signal they have
-// no way to connect that to a fixable cause (permissions, disk full, etc.).
+// TokenSaveErrMsg is delivered when the auth layer reports a non-fatal
+// problem: most importantly a failure to persist a refreshed OAuth token,
+// but also a failed token refresh at startup. The UI surfaces this as a
+// visible warning. For a save failure the in-memory token still works for
+// the session, but the user will be forced to log in again on next
+// restart, and without a signal they have no way to connect that to a
+// fixable cause (permissions, disk full, etc.).
 type TokenSaveErrMsg struct{ Err error }
 
 // TokenRevokedMsg is delivered when Spotify rejects the refresh token as

@@ -24,7 +24,7 @@ const reauthWarningWindow = 30 * 24 * time.Hour
 type AuthSession struct {
 	Client    *spotify.Client
 	Cleanup   func()
-	SaveErrCh <-chan error    // emits token-persistence failures
+	SaveErrCh <-chan error    // emits non-fatal auth problems (token save, startup refresh)
 	RevokedCh <-chan struct{} // fires once if the refresh token is permanently invalid
 }
 

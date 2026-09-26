@@ -40,9 +40,10 @@ func WithLibrespotInactive(ch <-chan struct{}) ModelOption {
 	return func(m *Model) { m.librespotInactiveCh = ch }
 }
 
-// WithTokenSaveErrors provides a channel that emits OAuth token persistence
-// failures. Each value is rendered as a visible warning so the user can tell
-// why they're getting logged out between sessions.
+// WithTokenSaveErrors provides a channel that emits non-fatal OAuth problems:
+// token persistence failures and a failed refresh at startup. Each value is
+// rendered as a visible warning so the user can tell why they're getting
+// logged out between sessions or why the first requests fail.
 func WithTokenSaveErrors(ch <-chan error) ModelOption {
 	return func(m *Model) { m.tokenSaveErrCh = ch }
 }
