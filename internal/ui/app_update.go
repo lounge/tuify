@@ -25,7 +25,7 @@ func (m Model) waitForLibrespotInactive() tea.Cmd {
 			if !ok {
 				return nil
 			}
-			return LibrespotInactiveMsg{}
+			return librespotInactiveMsg{}
 		case <-ctx.Done():
 			return nil
 		}
@@ -41,7 +41,7 @@ func (m Model) waitForTokenSaveErr() tea.Cmd {
 			if !ok {
 				return nil
 			}
-			return TokenSaveErrMsg{Err: err}
+			return tokenSaveErrMsg{Err: err}
 		case <-ctx.Done():
 			return nil
 		}
@@ -57,7 +57,7 @@ func (m Model) waitForTokenRevoked() tea.Cmd {
 			if !ok {
 				return nil
 			}
-			return TokenRevokedMsg{}
+			return tokenRevokedMsg{}
 		case <-ctx.Done():
 			return nil
 		}
@@ -100,21 +100,21 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleEpisodeResume(msg)
 	case clipboardResultMsg:
 		if msg.err != nil {
-			return m, m.nowPlaying.SetError("Failed to copy: " + msg.err.Error())
+			return m, m.nowPlaying.setError("Failed to copy: " + msg.err.Error())
 		}
-		return m, m.nowPlaying.SetInfo("Copied link to clipboard")
+		return m, m.nowPlaying.setInfo("Copied link to clipboard")
 	case seekFireMsg:
 		return m.handleSeekFire(msg)
-	case LibrespotInactiveMsg:
+	case librespotInactiveMsg:
 		m.nowPlaying.setDeviceOverride(true, "librespot inactive — playback moved away from "+m.client.PreferredDevice)
 		m.nowPlaying.deviceName = ""
 		return m, tea.Batch(m.nowPlaying.pollState(), m.waitForLibrespotInactive())
-	case TokenSaveErrMsg:
+	case tokenSaveErrMsg:
 		return m, tea.Batch(
-			m.nowPlaying.SetError("Auth: "+userMessage(msg.Err)),
+			m.nowPlaying.setError("Auth: "+userMessage(msg.Err)),
 			m.waitForTokenSaveErr(),
 		)
-	case TokenRevokedMsg:
+	case tokenRevokedMsg:
 		// Refresh token permanently invalid — every API call will fail.
 		// Exit the TUI; bootstrap.Run prints the re-login message on stderr.
 		return m, tea.Quit
@@ -133,7 +133,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if errors.Is(msg.err, context.DeadlineExceeded) {
 				return m, nil
 			}
-			return m, m.nowPlaying.SetError("Transfer failed: " + userMessage(msg.err))
+			return m, m.nowPlaying.setError("Transfer failed: " + userMessage(msg.err))
 		}
 		// Update override state based on whether the chosen device is preferred.
 		if m.client.PreferredDevice != "" && msg.deviceName != m.client.PreferredDevice {
@@ -142,7 +142,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.nowPlaying.setDeviceOverride(false, "transferred to preferred device "+msg.deviceName)
 		}
 		m.nowPlaying.deviceName = msg.deviceName
-		return m, m.nowPlaying.SetSpinningInfo("Switching to " + msg.deviceName)
+		return m, m.nowPlaying.setSpinningInfo("Switching to " + msg.deviceName)
 
 	// Intent messages emitted by views (see app_intents.go). The shell
 	// interprets each intent by constructing the target view or

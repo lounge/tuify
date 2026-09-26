@@ -48,7 +48,7 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 			}
 			return m, nil
 		}
-		errCmd := m.nowPlaying.SetError(userMessage(msg.err))
+		errCmd := m.nowPlaying.setError(userMessage(msg.err))
 		if msg.seek {
 			return m, tea.Batch(
 				errCmd,

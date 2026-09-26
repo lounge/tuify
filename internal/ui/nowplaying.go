@@ -301,7 +301,7 @@ func (m *nowPlayingModel) advanceProgress() bool {
 
 // Status display
 
-func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
+func (m *nowPlayingModel) setError(msg string) tea.Cmd {
 	m.statusMsg = msg
 	m.statusIsError = true
 	m.statusSpinning = false
@@ -310,7 +310,7 @@ func (m *nowPlayingModel) SetError(msg string) tea.Cmd {
 	})
 }
 
-func (m *nowPlayingModel) SetInfo(msg string) tea.Cmd {
+func (m *nowPlayingModel) setInfo(msg string) tea.Cmd {
 	m.statusMsg = msg
 	m.statusIsError = false
 	m.statusSpinning = false
@@ -319,13 +319,13 @@ func (m *nowPlayingModel) SetInfo(msg string) tea.Cmd {
 	})
 }
 
-// SetSpinningInfo shows msg prefixed with the global spinner until the
-// status auto-clears (or a subsequent SetError / SetInfo replaces it).
+// setSpinningInfo shows msg prefixed with the global spinner until the
+// status auto-clears (or a subsequent setError / setInfo replaces it).
 // Use for operations that take a moment to settle — e.g. "Switching to
 // Living Room Speaker" while the device poll confirms the transfer. The
 // shell restarts the idle spinner tick on the Update that sets this (see
 // app_tickers.go).
-func (m *nowPlayingModel) SetSpinningInfo(msg string) tea.Cmd {
+func (m *nowPlayingModel) setSpinningInfo(msg string) tea.Cmd {
 	m.statusMsg = msg
 	m.statusIsError = false
 	m.statusSpinning = true

@@ -62,7 +62,7 @@ func TestNeedsSpinner(t *testing.T) {
 		want  bool
 	}{
 		{"idle home", func(*Model) {}, false},
-		{"spinning status banner", func(m *Model) { m.nowPlaying.SetSpinningInfo("Switching") }, true},
+		{"spinning status banner", func(m *Model) { m.nowPlaying.setSpinningInfo("Switching") }, true},
 		{"device overlay loading", func(m *Model) { m.showDeviceSelector = true; m.deviceSelector.loading = true }, true},
 		{"device loading but overlay closed", func(m *Model) { m.deviceSelector.loading = true }, false},
 		{"trailing loading-more row", func(m *Model) {

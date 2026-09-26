@@ -18,25 +18,25 @@ type playbackResultMsg struct {
 	seek bool // true for seek results (uses lighter post-action polling)
 }
 
-// LibrespotInactiveMsg is sent (via p.Send) when librespot reports that the
+// librespotInactiveMsg is sent (via p.Send) when librespot reports that the
 // device became inactive, indicating playback moved to another device.
-type LibrespotInactiveMsg struct{}
+type librespotInactiveMsg struct{}
 
-// TokenSaveErrMsg is delivered when the auth layer reports a non-fatal
+// tokenSaveErrMsg is delivered when the auth layer reports a non-fatal
 // problem: most importantly a failure to persist a refreshed OAuth token,
 // but also a failed token refresh at startup. The UI surfaces this as a
 // visible warning. For a save failure the in-memory token still works for
 // the session, but the user will be forced to log in again on next
 // restart, and without a signal they have no way to connect that to a
 // fixable cause (permissions, disk full, etc.).
-type TokenSaveErrMsg struct{ Err error }
+type tokenSaveErrMsg struct{ Err error }
 
-// TokenRevokedMsg is delivered when Spotify rejects the refresh token as
+// tokenRevokedMsg is delivered when Spotify rejects the refresh token as
 // permanently invalid (user revoked app access, expiry from inactivity,
 // etc.). Every API call will fail from this point on, so the UI shuts
 // down cleanly — bootstrap.Run() then prints a re-login message to
 // stderr and exits.
-type TokenRevokedMsg struct{}
+type tokenRevokedMsg struct{}
 
 // searchCtx captures the parts that differ between API search and local filter search.
 type searchCtx struct {

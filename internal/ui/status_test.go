@@ -82,7 +82,7 @@ func TestRenderStatusLine_Error(t *testing.T) {
 }
 
 // nowPlayingModel status lifecycle — setters set the flag, clearStatusMsg
-// resets it, and SetInfo/SetError replace a prior spinning state cleanly.
+// resets it, and setInfo/setError replace a prior spinning state cleanly.
 
 func newTestNowPlaying(t *testing.T) *nowPlayingModel {
 	t.Helper()
@@ -91,9 +91,9 @@ func newTestNowPlaying(t *testing.T) *nowPlayingModel {
 
 func TestNowPlaying_SetSpinningInfo_SetsFlag(t *testing.T) {
 	np := newTestNowPlaying(t)
-	cmd := np.SetSpinningInfo("Switching to X")
+	cmd := np.setSpinningInfo("Switching to X")
 	if !np.statusSpinning {
-		t.Fatal("SetSpinningInfo should set statusSpinning=true")
+		t.Fatal("setSpinningInfo should set statusSpinning=true")
 	}
 	if np.statusMsg != "Switching to X" {
 		t.Errorf("statusMsg = %q, want %q", np.statusMsg, "Switching to X")
@@ -102,13 +102,13 @@ func TestNowPlaying_SetSpinningInfo_SetsFlag(t *testing.T) {
 		t.Error("statusIsError should be false")
 	}
 	if cmd == nil {
-		t.Error("SetSpinningInfo should return the auto-clear tick command")
+		t.Error("setSpinningInfo should return the auto-clear tick command")
 	}
 }
 
 func TestNowPlaying_ClearStatusMsg_ResetsSpinning(t *testing.T) {
 	np := newTestNowPlaying(t)
-	np.SetSpinningInfo("Switching to X")
+	np.setSpinningInfo("Switching to X")
 
 	if cmd := np.Update(clearStatusMsg{}); cmd != nil {
 		t.Errorf("clearStatusMsg shouldn't return a command, got %v", cmd)
@@ -123,11 +123,11 @@ func TestNowPlaying_ClearStatusMsg_ResetsSpinning(t *testing.T) {
 
 func TestNowPlaying_SetInfo_ResetsSpinningFromPriorCall(t *testing.T) {
 	np := newTestNowPlaying(t)
-	np.SetSpinningInfo("Switching to X")
-	np.SetInfo("Copied link")
+	np.setSpinningInfo("Switching to X")
+	np.setInfo("Copied link")
 
 	if np.statusSpinning {
-		t.Error("SetInfo should reset statusSpinning even after SetSpinningInfo")
+		t.Error("setInfo should reset statusSpinning even after setSpinningInfo")
 	}
 	if np.statusMsg != "Copied link" {
 		t.Errorf("statusMsg = %q, want %q", np.statusMsg, "Copied link")
@@ -136,13 +136,13 @@ func TestNowPlaying_SetInfo_ResetsSpinningFromPriorCall(t *testing.T) {
 
 func TestNowPlaying_SetError_ResetsSpinning(t *testing.T) {
 	np := newTestNowPlaying(t)
-	np.SetSpinningInfo("Switching to X")
-	np.SetError("boom")
+	np.setSpinningInfo("Switching to X")
+	np.setError("boom")
 
 	if np.statusSpinning {
-		t.Error("SetError should reset statusSpinning")
+		t.Error("setError should reset statusSpinning")
 	}
 	if !np.statusIsError {
-		t.Error("SetError should set statusIsError")
+		t.Error("setError should set statusIsError")
 	}
 }
