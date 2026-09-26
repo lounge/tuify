@@ -5,6 +5,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lounge/tuify/internal/spotify"
 )
 
 // handleSearchKey tests — the "Enter on artist/album" regression lives here.
@@ -254,6 +255,21 @@ func TestUpdate_SlashOpensViewOwnedSearchInput(t *testing.T) {
 	}
 }
 
+func TestUpdate_SlashOpensLocalFilterOnPlaylists(t *testing.T) {
+	m := newIntentTestModel()
+	pv := newPlaylistView(m.rootCtx, m.client, 80, 20, false)
+	m.viewStack = append(m.viewStack, pv)
+
+	m, _ = pressKeys(t, m, runeKey("/"))
+	if !pv.searching {
+		t.Fatal("/ on the playlists screen should open the local filter")
+	}
+	pressKeys(t, m, runeKey("r"), runeKey("o"))
+	if pv.searchQuery != "ro" {
+		t.Errorf("filter query = %q, want %q", pv.searchQuery, "ro")
+	}
+}
+
 func TestNewModel_PanicsOnNilClient(t *testing.T) {
 	defer func() {
 		if recover() == nil {
@@ -261,4 +277,29 @@ func TestNewModel_PanicsOnNilClient(t *testing.T) {
 		}
 	}()
 	NewModel(t.Context(), nil)
+}
+
+func TestPlaylistAndPodcastSearch_KeepsFetchingWhileFiltering(t *testing.T) {
+	ctx, client := t.Context(), &spotify.Client{}
+	tests := []struct {
+		name string
+		v    interface {
+			view
+			SearchableList() *lazyList
+		}
+		loaded tea.Msg
+	}{
+		{"playlists", newPlaylistView(ctx, client, 80, 20, false),
+			playlistsLoadedMsg{playlists: []spotify.Playlist{{ID: "p1", Name: "Road"}}, pageSize: 1, hasMore: true}},
+		{"podcasts", newPodcastView(ctx, client, 80, 20, false),
+			podcastsLoadedMsg{shows: []spotify.Show{{ID: "s1", Name: "Road"}}, hasMore: true}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tc.v.SearchableList().searching = true
+			if cmd := tc.v.Update(tc.loaded); cmd == nil {
+				t.Error("a page loaded during an active filter with more pages left must fetch the next page")
+			}
+		})
+	}
 }

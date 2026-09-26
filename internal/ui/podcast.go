@@ -71,7 +71,11 @@ func (v *podcastView) Update(msg tea.Msg) tea.Cmd {
 				id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes,
 			})
 		}
-		v.append(items, len(msg.shows), msg.hasMore)
+		// While a search filter is active, append asks for the next page
+		// so the filter covers every item, not just those loaded so far.
+		if v.append(items, len(msg.shows), msg.hasMore) {
+			return v.fetchMore()
+		}
 		return nil
 	}
 
@@ -95,3 +99,6 @@ func (v *podcastView) retryLoad() tea.Cmd {
 }
 
 func (v *podcastView) Breadcrumb() string { return "Home > Podcasts" }
+
+func (v *podcastView) SearchableList() *lazyList { return &v.lazyList }
+func (v *podcastView) FetchMore() tea.Cmd        { return v.fetchMore() }

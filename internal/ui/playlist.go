@@ -86,7 +86,11 @@ func (v *playlistView) Update(msg tea.Msg) tea.Cmd {
 				id: p.ID, name: p.Name, ownerName: p.OwnerName, trackCount: p.TrackCount,
 			})
 		}
-		v.append(items, msg.pageSize, msg.hasMore)
+		// While a search filter is active, append asks for the next page
+		// so the filter covers every item, not just those loaded so far.
+		if v.append(items, msg.pageSize, msg.hasMore) {
+			return v.fetchMore()
+		}
 		return nil
 	}
 
@@ -110,3 +114,6 @@ func (v *playlistView) retryLoad() tea.Cmd {
 }
 
 func (v *playlistView) Breadcrumb() string { return "Home > Playlists" }
+
+func (v *playlistView) SearchableList() *lazyList { return &v.lazyList }
+func (v *playlistView) FetchMore() tea.Cmd        { return v.fetchMore() }
