@@ -109,34 +109,46 @@ func TestHandleSearchKey_Enter_IgnoresStatusItem(t *testing.T) {
 // close ('h'/'?'/'esc') and quit ('ctrl+c'/'q'). This documents the "help
 // blocks all input" contract that the rest of the dispatcher relies on.
 
-func TestHandleOverlayKey_HelpConsumesMostKeys(t *testing.T) {
-	m := Model{showHelp: true, nowPlaying: &nowPlayingModel{}}
+// keyMsg builds the tea.KeyMsg Bubble Tea sends for a key name: the
+// special keys get their key type, anything else is typed runes.
+func keyMsg(name string) tea.KeyMsg {
+	special := map[string]tea.KeyType{
+		"up": tea.KeyUp, "down": tea.KeyDown, "enter": tea.KeyEnter,
+		"tab": tea.KeyTab, "esc": tea.KeyEsc, " ": tea.KeySpace,
+	}
+	if kt, ok := special[name]; ok {
+		return tea.KeyMsg{Type: kt}
+	}
+	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(name)}
+}
 
-	cases := []string{"up", "down", "enter", " ", "n", "p", "/", "tab", "v"}
-	for _, key := range cases {
-		_, _, handled := m.handleOverlayKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)})
-		if !handled {
-			t.Errorf("help overlay should consume %q", key)
-		}
+func TestHandleOverlayKey_HelpConsumesMostKeys(t *testing.T) {
+	for _, key := range []string{"up", "down", "enter", " ", "n", "p", "/", "tab", "v"} {
+		t.Run(key, func(t *testing.T) {
+			m := Model{showHelp: true, nowPlaying: &nowPlayingModel{}}
+			after, cmd, handled := m.handleOverlayKey(keyMsg(key))
+			if !handled {
+				t.Errorf("help overlay should consume %q", key)
+			}
+			if cmd != nil || !after.showHelp {
+				t.Errorf("%q should be swallowed: cmd=%v showHelp=%v", key, cmd != nil, after.showHelp)
+			}
+		})
 	}
 }
 
 func TestHandleOverlayKey_HelpClosesOnToggleKeys(t *testing.T) {
 	for _, key := range []string{"h", "?", "esc"} {
-		m := Model{showHelp: true, nowPlaying: &nowPlayingModel{}}
-		var msg tea.KeyMsg
-		if key == "esc" {
-			msg = tea.KeyMsg{Type: tea.KeyEsc}
-		} else {
-			msg = tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(key)}
-		}
-		after, _, handled := m.handleOverlayKey(msg)
-		if !handled {
-			t.Fatalf("%q should be handled by overlay", key)
-		}
-		if after.showHelp {
-			t.Errorf("%q should close help overlay", key)
-		}
+		t.Run(key, func(t *testing.T) {
+			m := Model{showHelp: true, nowPlaying: &nowPlayingModel{}}
+			after, _, handled := m.handleOverlayKey(keyMsg(key))
+			if !handled {
+				t.Fatalf("%q should be handled by overlay", key)
+			}
+			if after.showHelp {
+				t.Errorf("%q should close help overlay", key)
+			}
+		})
 	}
 }
 
