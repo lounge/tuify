@@ -253,3 +253,12 @@ func TestUpdate_SlashOpensViewOwnedSearchInput(t *testing.T) {
 		t.Error("a one-rune query must not start a search or a playback command")
 	}
 }
+
+func TestNewModel_PanicsOnNilClient(t *testing.T) {
+	defer func() {
+		if recover() == nil {
+			t.Error("NewModel with a nil client should panic")
+		}
+	}()
+	NewModel(t.Context(), nil)
+}

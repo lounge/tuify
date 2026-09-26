@@ -70,10 +70,14 @@ type Model struct {
 // wraps it with a per-operation timeout so shutdown cancellation
 // cascades instead of leaking pending requests past tea.Program exit.
 // Panics on nil ctx — forgetting to pass one would silently downgrade
-// shutdown semantics.
+// shutdown semantics — and on nil client, which would otherwise panic
+// later on the first poll or keypress, far from the cause.
 func NewModel(ctx context.Context, client *spotify.Client, opts ...ModelOption) Model {
 	if ctx == nil {
 		panic("ui.NewModel: ctx must not be nil")
+	}
+	if client == nil {
+		panic("ui.NewModel: client must not be nil")
 	}
 	home := newHomeView(0, 0)
 	m := Model{
