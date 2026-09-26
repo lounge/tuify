@@ -152,16 +152,22 @@ func (p *Process) launch() error {
 
 	startedAt := time.Now()
 	done := p.done
+	// Hand the goroutine its own reference instead of having it read p.cmd
+	// without the lock; p.cmd is only cleared below, but that invariant is
+	// invisible to the race detector and easy to break.
+	cmd := p.cmd
 
 	go func() {
-		err := p.cmd.Wait()
+		err := cmd.Wait()
 		if err != nil {
 			log.Printf("[librespot] exited: %v", err)
 		} else {
 			log.Printf("[librespot] exited normally")
 		}
 		p.mu.Lock()
-		p.cmd = nil
+		if p.cmd == cmd {
+			p.cmd = nil
+		}
 		p.mu.Unlock()
 		close(done)
 
@@ -172,6 +178,10 @@ func (p *Process) launch() error {
 }
 
 const (
+	// maxLogLine caps one line of librespot output. bufio.Scanner's default
+	// is 64 KiB; librespot occasionally dumps large debug payloads.
+	maxLogLine = 1024 * 1024
+
 	restartBaseDelay = 2 * time.Second
 	restartMaxDelay  = 30 * time.Second
 	stableThreshold  = 60 * time.Second
@@ -215,13 +225,13 @@ func (p *Process) scheduleRestart(lastStart time.Time) {
 	}
 }
 
-// Stop sends SIGTERM, waits up to 5 seconds, then SIGKILL.
+// Stop sends an interrupt (SIGINT), waits up to 5 seconds, then SIGKILL.
 // Suppresses any pending or future automatic restarts.
-func (p *Process) Stop() error {
+func (p *Process) Stop() {
 	p.mu.Lock()
 	if p.stopped {
 		p.mu.Unlock()
-		return nil
+		return
 	}
 	p.stopped = true
 	close(p.stopCh)
@@ -237,7 +247,7 @@ func (p *Process) Stop() error {
 	p.mu.Unlock()
 
 	if cmd == nil || cmd.Process == nil || done == nil {
-		return nil
+		return
 	}
 
 	log.Printf("[librespot] stopping")
@@ -253,8 +263,6 @@ func (p *Process) Stop() error {
 		_ = cmd.Process.Kill()
 		<-done
 	}
-
-	return nil
 }
 
 // monitorStderr detects broken sessions where librespot reconnects internally
@@ -310,8 +318,19 @@ func (p *Process) monitorStderr(line string) {
 // pipeLog reads lines from r and writes them to the log with the given prefix.
 // Filters out noisy libmdns warnings. If onLine is non-nil, it is called for
 // each non-filtered line.
+//
+// If scanning fails (e.g. a line longer than maxLogLine), the error is logged
+// and the rest of r is discarded rather than abandoned: an undrained pipe
+// would block librespot on its next write to stdout/stderr.
 func pipeLog(prefix string, r io.Reader, onLine func(string)) {
 	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), maxLogLine)
+	defer func() {
+		if err := scanner.Err(); err != nil {
+			log.Printf("%s log scanning stopped, discarding further output: %v", prefix, err)
+			_, _ = io.Copy(io.Discard, r)
+		}
+	}()
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.Contains(line, "libmdns::fsm") {

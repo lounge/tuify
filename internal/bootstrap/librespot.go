@@ -86,7 +86,7 @@ func StartLibrespot(ctx context.Context, rc RuntimeConfig, client *spotify.Clien
 		}
 		return nil, fmt.Errorf("librespot failed to start: %w", err)
 	}
-	cleanups = append(cleanups, func() { _ = librespotProc.Stop() })
+	cleanups = append(cleanups, librespotProc.Stop)
 
 	// Only expose the audio source and inactive channel to the UI once we
 	// know librespot is actually running; otherwise the UI would poll a

@@ -2,6 +2,7 @@ package librespot
 
 import (
 	"bytes"
+	"io"
 	"slices"
 	"strings"
 	"testing"
@@ -219,16 +220,60 @@ func TestPipeLog_EmptyInput(t *testing.T) {
 	}
 }
 
+func TestPipeLog_LineLongerThanDefaultScannerBuffer(t *testing.T) {
+	long := strings.Repeat("x", 100*1024) // over bufio's 64 KiB default
+	r := strings.NewReader(long + "\nAuthenticated as user\n")
+
+	var lines []string
+	pipeLog("[test]", r, func(line string) { lines = append(lines, line) })
+
+	if len(lines) != 2 || lines[1] != "Authenticated as user" {
+		t.Fatalf("got %d lines, want the long line and the one after it", len(lines))
+	}
+}
+
+// A line over maxLogLine stops scanning. pipeLog must keep draining the
+// pipe afterwards, or the writer (librespot) would block forever.
+func TestPipeLog_DrainsAfterScanError(t *testing.T) {
+	pr, pw := io.Pipe()
+	writerDone := make(chan error, 1)
+	go func() {
+		_, err := io.WriteString(pw, strings.Repeat("x", maxLogLine+1)+"\n")
+		if err == nil {
+			_, err = io.WriteString(pw, "more output\n")
+		}
+		pw.Close()
+		writerDone <- err
+	}()
+
+	pipeDone := make(chan struct{})
+	go func() {
+		pipeLog("[test]", pr, nil)
+		close(pipeDone)
+	}()
+
+	select {
+	case err := <-writerDone:
+		if err != nil {
+			t.Fatalf("writer: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("writer blocked: pipeLog stopped draining after the scan error")
+	}
+	select {
+	case <-pipeDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("pipeLog did not return after the writer closed")
+	}
+}
+
 func TestStopIdempotent(t *testing.T) {
 	p := NewProcess(Config{})
 
-	// Stop without ever starting should be safe
-	if err := p.Stop(); err != nil {
-		t.Fatalf("first Stop: %v", err)
-	}
-	if err := p.Stop(); err != nil {
-		t.Fatalf("second Stop: %v", err)
-	}
+	// Stop without ever starting, and a second Stop, must return
+	// promptly without panicking (e.g. on a double close of stopCh).
+	p.Stop()
+	p.Stop()
 }
 
 // --- restartDelay tests ---
