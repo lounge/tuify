@@ -62,11 +62,25 @@ func clampF64(v, lo, hi float64) float64 {
 	return v
 }
 
-func hslToRGB(h, s, l float64) (int, int, int) {
-	h = math.Mod(h, 360)
-	if h < 0 {
-		h += 360
+// wrapUnit wraps x into [0, period). Nearly every value is already in
+// range (a hue nudged by a fraction of a degree, a sample point near its
+// own pixel), so it skips math.Mod for those: that call was ~15% of a
+// Milkdrop frame, and hslToRGB runs twice per rendered cell. Out-of-range
+// values take the same math.Mod path as before, so results are
+// bit-identical.
+func wrapUnit(x, period float64) float64 {
+	if x >= 0 && x < period {
+		return x
 	}
+	x = math.Mod(x, period)
+	if x < 0 {
+		x += period
+	}
+	return x
+}
+
+func hslToRGB(h, s, l float64) (int, int, int) {
+	h = wrapUnit(h, 360)
 	c := (1 - math.Abs(2*l-1)) * s
 	x := c * (1 - math.Abs(math.Mod(h/60, 2)-1))
 	m := l - c/2

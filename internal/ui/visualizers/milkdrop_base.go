@@ -98,11 +98,7 @@ func (m *MilkdropPreset) Advance() {
 			p.l *= mdDecayL
 			p.s *= mdDecayS
 
-			p.h += mdHueSpeed * m.energy * mdDt
-			p.h = math.Mod(p.h, 360)
-			if p.h < 0 {
-				p.h += 360
-			}
+			p.h = wrapUnit(p.h+mdHueSpeed*m.energy*mdDt, 360)
 
 			m.fb[py*m.fbW+px] = p
 		}
@@ -153,14 +149,8 @@ func (m *MilkdropPreset) sampleBilinear(sx, sy float64) pixel {
 	fw := float64(m.fbW)
 	fh := float64(m.fbH)
 
-	px = math.Mod(px, fw)
-	if px < 0 {
-		px += fw
-	}
-	py = math.Mod(py, fh)
-	if py < 0 {
-		py += fh
-	}
+	px = wrapUnit(px, fw)
+	py = wrapUnit(py, fh)
 
 	x0 := int(px)
 	y0 := int(py)
