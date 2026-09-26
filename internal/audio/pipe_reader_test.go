@@ -61,7 +61,7 @@ func TestPipeReader_LatestNilBeforeStart(t *testing.T) {
 	t.Parallel()
 
 	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	pr.newPlayer = newNoopPlayer
 
 	if fd := pr.Latest(); fd != nil {
 		t.Errorf("Latest before Start: got %+v, want nil", fd)
@@ -72,7 +72,7 @@ func TestPipeReader_LatestNilWhenStale(t *testing.T) {
 	t.Parallel()
 
 	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	pr.newPlayer = newNoopPlayer
 
 	// Manually set a stale timestamp (200ms ago).
 	pr.lastUpdate.Store(time.Now().Add(-200 * time.Millisecond).UnixNano())
@@ -99,7 +99,7 @@ func TestPipeReader_ReceivesFFTData(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
-		pr.NewPlayer = newNoopPlayer
+		pr.newPlayer = newNoopPlayer
 		defer pr.Stop()
 
 		pr.Start(io.NopCloser(bytes.NewReader(generateSineBytes(440.0, 4))))
@@ -122,13 +122,13 @@ func TestPipeReader_StopIdempotent(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		// Stop without Start.
 		pr := NewPipeReader()
-		pr.NewPlayer = newNoopPlayer
+		pr.newPlayer = newNoopPlayer
 		pr.Stop()
 		pr.Stop()
 
 		// Stop after Start, once the read loop is running.
 		pr2 := NewPipeReader()
-		pr2.NewPlayer = newNoopPlayer
+		pr2.newPlayer = newNoopPlayer
 		pr2.Start(io.NopCloser(bytes.NewReader(generateSineBytes(440.0, 2))))
 		synctest.Wait()
 		pr2.Stop()
@@ -141,7 +141,7 @@ func TestPipeReader_ReentrantStart(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
-		pr.NewPlayer = newNoopPlayer
+		pr.newPlayer = newNoopPlayer
 		defer pr.Stop()
 
 		pr.Start(io.NopCloser(bytes.NewReader(generateSineBytes(440.0, 2))))
@@ -178,7 +178,7 @@ func TestPipeReader_StartAfterStopIgnored(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
-		pr.NewPlayer = newNoopPlayer
+		pr.newPlayer = newNoopPlayer
 		pr.Stop()
 
 		// Start after Stop should be a no-op that closes the pipe.
@@ -200,7 +200,7 @@ func TestPipeReader_ProgressMsAdvances(t *testing.T) {
 
 	synctest.Test(t, func(t *testing.T) {
 		pr := NewPipeReader()
-		pr.NewPlayer = newNoopPlayer
+		pr.newPlayer = newNoopPlayer
 		defer pr.Stop()
 
 		// 8 chunks at 44100 Hz = 8 * 2048 / 44100 ≈ 371 ms of audio.
@@ -228,7 +228,7 @@ func TestPipeReader_Latest_VolumeGainAt50Percent(t *testing.T) {
 	t.Parallel()
 
 	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	pr.newPlayer = newNoopPlayer
 	pr.SetVolumePercent(50)
 
 	base := &FrequencyData{
@@ -268,7 +268,7 @@ func TestPipeReader_Latest_VolumeGainCapsAt4x(t *testing.T) {
 	t.Parallel()
 
 	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	pr.newPlayer = newNoopPlayer
 	pr.SetVolumePercent(10) // 100/10 = 10x uncapped, must clamp to 4x
 
 	base := &FrequencyData{Peak: 0.1, Bass: 0.2, Mid: 0.3, High: 0.05}
@@ -305,7 +305,7 @@ func TestPipeReader_Latest_ReturnsCallerOwnedCopy(t *testing.T) {
 	// visualizers keep the pointer across ticks, and a write through it
 	// must never reach the shared published frame.
 	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	pr.newPlayer = newNoopPlayer
 	pr.SetVolumePercent(100)
 
 	base := &FrequencyData{Peak: 0.42}
@@ -333,7 +333,7 @@ func TestPipeReader_Latest_ConcurrentSetVolume(t *testing.T) {
 	t.Parallel()
 
 	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	pr.newPlayer = newNoopPlayer
 
 	base := &FrequencyData{Peak: 0.5, Bass: 0.3, Mid: 0.2, High: 0.1}
 	for i := range base.Bands {

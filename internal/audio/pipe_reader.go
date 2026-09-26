@@ -29,8 +29,8 @@ type PipeReader struct {
 	done     chan struct{}
 	stopped  bool
 
-	// NewPlayer creates an audio player. Defaults to oto. Override in tests.
-	NewPlayer playerFactory
+	// newPlayer creates an audio player. Defaults to oto. Override in tests.
+	newPlayer playerFactory
 }
 
 // maxVolumeGain caps the inverse-volume gain so very low volumes don't
@@ -41,7 +41,7 @@ const maxVolumeGain = 4.0
 // NewPipeReader creates a PipeReader ready to accept pipes via Start().
 func NewPipeReader() *PipeReader {
 	pr := &PipeReader{
-		NewPlayer: defaultPlayerFactory,
+		newPlayer: defaultPlayerFactory,
 	}
 	pr.volumePercent.Store(100)
 	return pr
@@ -186,7 +186,7 @@ func (pr *PipeReader) readLoop(pipe io.ReadCloser, quit <-chan struct{}, done ch
 		store:    pr.storeFrame,
 	}
 
-	p, err := pr.NewPlayer(bridge, format)
+	p, err := pr.newPlayer(bridge, format)
 	if err != nil {
 		pipe.Close()
 		log.Printf("[pipe-reader] failed to create audio player: %v", err)
