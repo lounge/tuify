@@ -75,11 +75,11 @@ func assertReturnsNil(t *testing.T, done <-chan tea.Msg) {
 
 func newTestModelWithClient(preferred string) Model {
 	client := &spotify.Client{PreferredDevice: preferred}
-	np := newNowPlaying(client)
+	np := newNowPlaying(context.Background(), client)
 	return Model{
 		nowPlaying: np,
 		client:     client,
-		viewStack:  []view{newHomeView(0, 0)},
+		viewStack:  []view{newHomeView(0, 0, false)},
 	}
 }
 
@@ -121,7 +121,7 @@ func TestUpdate_TransferDeviceMsg_NonPreferredSetsOverride(t *testing.T) {
 func newIntentTestModel() Model {
 	m := newTestModelWithClient("")
 	m.rootCtx = context.Background()
-	m.visualizer = newVisualizerModel(false)
+	m.visualizer = newVisualizerModel(m.rootCtx, nil)
 	return m
 }
 

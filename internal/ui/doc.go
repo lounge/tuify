@@ -70,8 +70,10 @@
 // # Lifetime
 //
 // NewModel takes a root context from bootstrap.Run that cancels on app
-// exit. That context is propagated to nowPlayingModel, visualizerModel,
-// and every view constructor so long-running operations (polls, HTTP
-// fetches, image/lyrics downloads) cancel cleanly at shutdown rather
-// than running to their per-op timeout.
+// exit. It collects the ModelOptions first, then constructs
+// nowPlayingModel, visualizerModel and the home view once, passing that
+// context (and the audio source, vim mode) to their constructors. Every
+// fetching view constructor gets it too, so long-running operations
+// (polls, HTTP fetches, image/lyrics downloads) cancel cleanly at shutdown
+// rather than running to their per-op timeout.
 package ui

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -18,16 +19,14 @@ func (f *fakeAudioSource) Latest() *audio.FrequencyData { return f.frame }
 
 // newTestVizModel builds a visualizerModel with the full audio-reactive
 // vizList and the given audio source already attached. The list layout
-// is the one newVisualizerModel(true) ships:
+// is the one newVisualizerModel ships when given an audio source:
 //
 //	0  AlbumArt   (not AudioAware)
 //	1  Lyrics     (not AudioAware)
 //	2  Starfield  (AudioAware)
 //	3+ Spectrum, Oscillogram, Spectrogram, VUMeter, Milkdrop* (all AudioAware)
 func newTestVizModel(src AudioSource) *visualizerModel {
-	m := newVisualizerModel(true)
-	m.audioSrc = src
-	return m
+	return newVisualizerModel(context.Background(), src)
 }
 
 func TestVisualizer_CycleSkipsAudioVizWhenNoFlow(t *testing.T) {
@@ -94,8 +93,9 @@ func TestVisualizer_AudioFlowingFalseBeforeFirstFrame(t *testing.T) {
 }
 
 func TestVisualizer_AudioFlowingFalseWithoutSource(t *testing.T) {
-	m := newVisualizerModel(true)
-	// no audioSrc attached
+	// Full audio visualizer list, then the source detached.
+	m := newTestVizModel(&fakeAudioSource{})
+	m.audioSrc = nil
 	m.audioSeenAt = time.Now() // even with a stale timestamp it should be false
 	if m.audioFlowing() {
 		t.Error("audioFlowing should be false when audioSrc is nil regardless of timestamp")
@@ -142,7 +142,8 @@ func TestVisualizer_ShouldSkipEpisodeLyrics(t *testing.T) {
 func TestVisualizer_CycleNeverInfiniteLoops(t *testing.T) {
 	// Construct a model with no audio source and force isEpisode so Lyrics
 	// is also skipped. Even with most viz unreachable, cycle must return.
-	m := newVisualizerModel(true)
+	m := newTestVizModel(&fakeAudioSource{})
+	m.audioSrc = nil
 	m.isEpisode = true
 	// audioSrc nil → all AudioAware viz are skipped. Only AlbumArt remains
 	// reachable in the cycle.

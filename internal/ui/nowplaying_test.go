@@ -11,7 +11,7 @@ import (
 
 func newTestNowPlaying(t *testing.T) *nowPlayingModel {
 	t.Helper()
-	return newNowPlaying(&spotify.Client{})
+	return newNowPlaying(t.Context(), &spotify.Client{})
 }
 
 func TestNowPlaying_SetSpinningInfo_SetsFlag(t *testing.T) {

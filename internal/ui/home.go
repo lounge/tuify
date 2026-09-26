@@ -23,8 +23,8 @@ type homeView struct {
 	vimMode bool
 }
 
-func newHomeView(width, height int) *homeView {
-	return &homeView{width: width, height: height}
+func newHomeView(width, height int, vimMode bool) *homeView {
+	return &homeView{width: width, height: height, vimMode: vimMode}
 }
 
 func (v *homeView) Update(msg tea.Msg) tea.Cmd {

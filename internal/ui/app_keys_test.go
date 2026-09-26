@@ -168,7 +168,7 @@ func TestHandleNavigationKey_VizToggleBlockedInMiniMode(t *testing.T) {
 	m := Model{
 		miniMode:   true,
 		nowPlaying: &nowPlayingModel{hasTrack: true, trackURI: "spotify:track:abc"},
-		visualizer: newVisualizerModel(true),
+		visualizer: newVisualizerModel(t.Context(), &fakeAudioSource{}),
 	}
 	after, cmd, handled := m.handleNavigationKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("v")})
 

@@ -137,13 +137,10 @@ func (m *nowPlayingModel) setDeviceOverride(overridden bool, reason string) {
 	}
 }
 
-// newNowPlaying creates a fresh nowPlayingModel. The ctx field is left
-// zero; NewModel sets it from Model.rootCtx after options apply. Anything
-// that triggers a ctx-using path (pollState, etc.) must go through
-// NewModel — direct construction is reserved for tests that don't
-// exercise those paths.
-func newNowPlaying(client *spotify.Client) *nowPlayingModel {
+// newNowPlaying creates a fresh nowPlayingModel. ctx bounds its polls.
+func newNowPlaying(ctx context.Context, client *spotify.Client) *nowPlayingModel {
 	return &nowPlayingModel{
+		ctx:             ctx,
 		client:          client,
 		preferredDevice: client.PreferredDevice,
 		progressCache:   make(map[string]int),

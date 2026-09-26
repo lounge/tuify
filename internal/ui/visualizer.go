@@ -38,9 +38,12 @@ type visualizerModel struct {
 // 150ms FFT-staleness threshold and through brief frame-arrival jitter.
 const audioStickyWindow = 3 * time.Second
 
-func newVisualizerModel(hasAudio bool) *visualizerModel {
+// newVisualizerModel builds the visualizer submodel. ctx bounds its album
+// art and lyrics fetches. src may be nil: without audio only the album art
+// and lyrics visualizers are offered.
+func newVisualizerModel(ctx context.Context, src AudioSource) *visualizerModel {
 	var vizList []visualizers.Visualizer
-	if hasAudio {
+	if src != nil {
 		vizList = []visualizers.Visualizer{
 			visualizers.NewAlbumArt(),
 			visualizers.NewLyrics(),
@@ -60,11 +63,9 @@ func newVisualizerModel(hasAudio bool) *visualizerModel {
 			visualizers.NewLyrics(),
 		}
 	}
-	// ctx is left zero; NewModel sets it from Model.rootCtx after options
-	// apply. Any code path that triggers loadImage or loadLyrics must go
-	// through NewModel — direct construction is for tests that don't
-	// exercise those paths.
 	return &visualizerModel{
+		ctx:         ctx,
+		audioSrc:    src,
 		vizList:     vizList,
 		httpClient:  newFetchClient(),
 		images:      newAsyncLoader[fetchResult](),

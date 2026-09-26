@@ -21,7 +21,7 @@ func newTickerTestModel(t *testing.T) Model {
 	return Model{
 		nowPlaying: np,
 		client:     &spotify.Client{},
-		viewStack:  []view{newHomeView(80, 20)},
+		viewStack:  []view{newHomeView(80, 20, false)},
 		width:      80,
 		height:     24,
 	}

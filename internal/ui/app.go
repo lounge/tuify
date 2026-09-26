@@ -83,25 +83,23 @@ func NewModel(ctx context.Context, client *spotify.Client, opts ...ModelOption) 
 	if client == nil {
 		panic("ui.NewModel: client must not be nil")
 	}
-	home := newHomeView(0, 0)
-	m := Model{
-		rootCtx:    ctx,
-		viewStack:  []view{home},
-		nowPlaying: newNowPlaying(client),
-		visualizer: newVisualizerModel(false),
-		client:     client,
-	}
+	var o modelOptions
 	for _, opt := range opts {
-		opt(&m)
+		opt(&o)
 	}
-	// Propagate root ctx to sub-models so their async ops (poll,
-	// image/lyrics fetch) see shutdown cancellation.
-	m.nowPlaying.ctx = ctx
-	m.visualizer.ctx = ctx
-	if m.vimMode {
-		home.vimMode = true
+	// Submodels get the root ctx at construction so their async ops
+	// (poll, image/lyrics fetch) see shutdown cancellation.
+	return Model{
+		rootCtx:             ctx,
+		viewStack:           []view{newHomeView(0, 0, o.vimMode)},
+		nowPlaying:          newNowPlaying(ctx, client),
+		visualizer:          newVisualizerModel(ctx, o.audioSrc),
+		client:              client,
+		vimMode:             o.vimMode,
+		librespotInactiveCh: o.librespotInactiveCh,
+		tokenSaveErrCh:      o.tokenSaveErrCh,
+		tokenRevokedCh:      o.tokenRevokedCh,
 	}
-	return m
 }
 
 func (m Model) Init() tea.Cmd {
