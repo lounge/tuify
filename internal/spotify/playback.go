@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/lounge/tuify/internal/termsafe"
 	sp "github.com/zmb3/spotify/v2"
 )
 
@@ -60,14 +61,14 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 	ps := &PlayerState{
 		Playing:       state.Playing,
 		Shuffling:     state.Shuffling,
-		TrackName:     state.Item.Name,
+		TrackName:     termsafe.Clean(state.Item.Name),
 		TrackURI:      state.Item.URI,
 		ProgressMs:    state.ProgressMs,
 		DurationMs:    state.Item.DurationMs,
 		VolumePercent: 100,
 	}
 	if state.Device != nil {
-		ps.DeviceName = state.Device.Name
+		ps.DeviceName = termsafe.Clean(state.Device.Name)
 		if state.Device.VolumePercent != nil {
 			ps.VolumePercent = *state.Device.VolumePercent
 		}
@@ -76,9 +77,9 @@ func (c *Client) GetPlayerState(ctx context.Context) (*PlayerState, error) {
 		ps.ContextURI = state.Context.URI
 	}
 	if len(state.Item.Artists) > 0 {
-		ps.ArtistName = state.Item.Artists[0].Name
+		ps.ArtistName = termsafe.Clean(state.Item.Artists[0].Name)
 	} else if state.Item.Show != nil {
-		ps.ArtistName = state.Item.Show.Name
+		ps.ArtistName = termsafe.Clean(state.Item.Show.Name)
 	}
 	if state.Item.Album != nil && len(state.Item.Album.Images) > 0 {
 		images := state.Item.Album.Images

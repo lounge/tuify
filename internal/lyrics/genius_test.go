@@ -391,3 +391,21 @@ func TestSearch_CaseInsensitiveMatch(t *testing.T) {
 		t.Errorf("unexpected lyrics: %q", text)
 	}
 }
+
+// Genius lyrics are crowd-edited, and html.Parse decodes numeric entities
+// into raw control bytes. None may survive into the text we render.
+func TestExtractLyrics_StripsTerminalEscapes(t *testing.T) {
+	t.Parallel()
+
+	page := `<div data-lyrics-container="true">a&#27;]52;c;SGVsbG8=&#7;b<br>raw ` + "\x1b[2J" + `line</div>`
+	got, err := extractLyrics(strings.NewReader(page))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.ContainsAny(got, "\x1b\x07") {
+		t.Errorf("escape bytes survived: %q", got)
+	}
+	if want := "a]52;c;SGVsbG8=b\nraw [2Jline"; got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}

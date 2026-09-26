@@ -1,6 +1,10 @@
 package spotify
 
-import "time"
+import (
+	"time"
+
+	"github.com/lounge/tuify/internal/termsafe"
+)
 
 // Domain types returned by the Client. These are the flattened,
 // UI-friendly versions of Spotify's JSON payloads.
@@ -93,7 +97,7 @@ type rawArtistRef struct {
 
 func firstArtist(artists []rawArtistRef) string {
 	if len(artists) > 0 {
-		return artists[0].Name
+		return termsafe.Clean(artists[0].Name)
 	}
 	return ""
 }
@@ -159,9 +163,9 @@ func convertAlbums(raw []rawAlbum) []Album {
 		albums = append(albums, Album{
 			ID:          a.ID,
 			URI:         a.URI,
-			Name:        a.Name,
+			Name:        termsafe.Clean(a.Name),
 			Artist:      firstArtist(a.Artists),
-			ReleaseDate: a.ReleaseDate,
+			ReleaseDate: termsafe.Clean(a.ReleaseDate),
 			TrackCount:  a.TotalTracks,
 		})
 	}
@@ -174,9 +178,9 @@ func convertTracks(raw []rawTrack) []Track {
 		tracks = append(tracks, Track{
 			ID:       t.ID,
 			URI:      t.URI,
-			Name:     t.Name,
+			Name:     termsafe.Clean(t.Name),
 			Artist:   firstArtist(t.Artists),
-			Album:    t.Album.Name,
+			Album:    termsafe.Clean(t.Album.Name),
 			Duration: time.Duration(t.Duration) * time.Millisecond,
 		})
 	}
@@ -189,8 +193,8 @@ func convertEpisodes(raw []rawEpisode) []Episode {
 		episodes = append(episodes, Episode{
 			ID:          e.ID,
 			URI:         e.URI,
-			Name:        e.Name,
-			ReleaseDate: e.ReleaseDate,
+			Name:        termsafe.Clean(e.Name),
+			ReleaseDate: termsafe.Clean(e.ReleaseDate),
 			Duration:    time.Duration(e.DurationMs) * time.Millisecond,
 		})
 	}
@@ -203,7 +207,7 @@ func convertArtists(raw []rawArtist) []Artist {
 		artists = append(artists, Artist{
 			ID:     a.ID,
 			URI:    a.URI,
-			Name:   a.Name,
+			Name:   termsafe.Clean(a.Name),
 			Genres: a.Genres,
 		})
 	}
@@ -216,7 +220,7 @@ func convertShows(raw []rawShow) []Show {
 		shows = append(shows, Show{
 			ID:            s.ID,
 			URI:           s.URI,
-			Name:          s.Name,
+			Name:          termsafe.Clean(s.Name),
 			TotalEpisodes: s.TotalEpisodes,
 		})
 	}

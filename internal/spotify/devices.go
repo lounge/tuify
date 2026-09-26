@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/lounge/tuify/internal/termsafe"
 	sp "github.com/zmb3/spotify/v2"
 )
 
@@ -17,7 +18,7 @@ func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 	for _, d := range devices {
 		out = append(out, Device{
 			ID:     string(d.ID),
-			Name:   d.Name,
+			Name:   termsafe.Clean(d.Name),
 			Type:   d.Type,
 			Active: d.Active,
 			Volume: int(d.Volume),

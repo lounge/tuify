@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/lounge/tuify/internal/termsafe"
 	"golang.org/x/net/html"
 )
 
@@ -215,7 +216,9 @@ func normalizeLyrics(s string) string {
 	lines := strings.Split(s, "\n")
 	var out []string
 	for _, line := range lines {
-		line = strings.TrimSpace(line)
+		// Lyrics are crowd-edited; html.Parse decodes &#27; into a real
+		// ESC, which the terminal would execute.
+		line = strings.TrimSpace(termsafe.Clean(line))
 		out = append(out, line)
 	}
 	// Collapse multiple blank lines into one.

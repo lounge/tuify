@@ -271,3 +271,35 @@ func TestPlayOpts_EmptyDeviceID(t *testing.T) {
 		t.Error("DeviceID should be nil for empty string")
 	}
 }
+
+// Names come from other Spotify users (playlist and podcast titles, device
+// names) and are rendered straight into the terminal. JSON can carry any
+// control character as \u001b and friends; none may reach callers.
+func TestGetPlayerState_StripsTerminalEscapes(t *testing.T) {
+	t.Parallel()
+
+	const evil = "evil\u001b]52;c;SGVsbG8=\u0007\u009b2J"
+	response := map[string]any{
+		"is_playing": true,
+		"item": map[string]any{
+			"name":        evil,
+			"uri":         "spotify:track:1",
+			"duration_ms": 1000,
+			"artists":     []map[string]any{{"name": evil}},
+		},
+		"device": map[string]any{"name": evil},
+	}
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(response)
+	})
+
+	state, err := c.GetPlayerState(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for field, got := range map[string]string{"TrackName": state.TrackName, "ArtistName": state.ArtistName, "DeviceName": state.DeviceName} {
+		if got != "evil]52;c;SGVsbG8=2J" {
+			t.Errorf("%s = %q, control characters not stripped", field, got)
+		}
+	}
+}

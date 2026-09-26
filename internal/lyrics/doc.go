@@ -1,13 +1,17 @@
 // Package lyrics fetches song lyrics for the visualizer's lyrics panel.
 //
-// Strategy: scrape genius.com's search results for the best matching
-// track, follow the result URL, and extract lyric text from the rendered
-// HTML. No API key is required (Genius's public API demands one for any
-// useful endpoint, so scraping is the pragmatic choice for a user-local
-// TUI).
+// Strategy: query genius.com's keyless JSON search endpoint
+// (genius.com/api/search) for the best matching song, then fetch that
+// song's page and extract the lyric text from the rendered HTML. Genius's
+// documented API needs a key for any useful endpoint, so this is the
+// pragmatic choice for a user-local TUI.
 //
-// Search returns ErrInstrumental when Genius's page indicates the track
-// has no lyrics (e.g. instrumental releases), so callers can render an
-// "Instrumental" marker instead of "Lyrics not found". Network and parse
-// failures surface as ordinary errors.
+// Search returns ErrInstrumental when the search result marks the song as
+// instrumental, so callers can render an "Instrumental" marker instead of
+// "Lyrics not found". Network and parse failures surface as ordinary
+// errors.
+//
+// Returned lyrics have been passed through termsafe.Clean line by line:
+// Genius text is crowd-edited, and HTML entities decode to raw control
+// characters.
 package lyrics

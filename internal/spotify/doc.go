@@ -27,5 +27,10 @@
 // interval past the deadline. Consecutive 429s escalate
 // the cooldown exponentially (up to one hour) so a persistent throttle
 // backs off instead of retrying at a fixed interval; the streak resets
-// on the first non-429 response.
+// on the first non-429 response. 429s for requests that were in flight
+// together count as one throttle.
+//
+// Text: every name the package returns (tracks, artists, albums,
+// playlists and their owners, shows, episodes, devices) has been passed
+// through termsafe.Clean, so callers can render it without escaping.
 package spotify

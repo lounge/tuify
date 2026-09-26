@@ -3,6 +3,8 @@ package spotify
 import (
 	"context"
 	"fmt"
+
+	"github.com/lounge/tuify/internal/termsafe"
 )
 
 // GetPlaylists returns the user's own playlists. The second return value (rawCount)
@@ -36,8 +38,8 @@ func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) (playlists
 		}
 		result = append(result, Playlist{
 			ID:         p.ID,
-			Name:       p.Name,
-			OwnerName:  p.Owner.DisplayName,
+			Name:       termsafe.Clean(p.Name),
+			OwnerName:  termsafe.Clean(p.Owner.DisplayName),
 			TrackCount: p.Items.Total,
 		})
 	}
