@@ -3,6 +3,7 @@ package visualizers
 import (
 	"image"
 	"image/color"
+	"math"
 	"strings"
 	"testing"
 
@@ -448,5 +449,23 @@ func TestSpectrogram_DecaysToFloor(t *testing.T) {
 		if v > 0.001 {
 			t.Fatalf("newest frame [%d]=%.4f should have decayed to ~0", b, v)
 		}
+	}
+}
+
+// TestInfernoColor_MatchesExactGamma pins the folded gamma table to the
+// exact math.Pow-then-lookup mapping it replaced, within 5/255 per channel.
+func TestInfernoColor_MatchesExactGamma(t *testing.T) {
+	for k := 0; k <= 100000; k++ {
+		amp := float32(k) / 100000
+		c := infernoLUT[int(math.Pow(float64(amp), spectroGamma)*255)]
+		r, g, b := infernoColor(amp)
+		for ch, d := range []int{r - int(c[0]), g - int(c[1]), b - int(c[2])} {
+			if d > 5 || d < -5 {
+				t.Fatalf("infernoColor(%g) channel %d off by %d", amp, ch, d)
+			}
+		}
+	}
+	for _, amp := range []float32{-1, 2} {
+		infernoColor(amp) // out-of-range input must clamp, not index out of bounds
 	}
 }

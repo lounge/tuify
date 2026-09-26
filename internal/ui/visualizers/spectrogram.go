@@ -239,11 +239,23 @@ var infernoStops = []paletteStop{
 // piecewise-linear math per pixel is worth the 768 bytes of static table.
 var infernoLUT = buildPaletteLUT256(infernoStops)
 
+// infernoGammaLUT folds spectroGamma into infernoLUT so a cell's colour
+// is one table index instead of a math.Pow per cell. It is indexed by
+// linear amplitude; 1024 entries keep every colour within 5/255 per channel
+// of the exact gamma-then-lookup result, where 256 entries would crush the
+// steep low end of the gamma curve (off by up to 14).
+var infernoGammaLUT = func() (t [1024][3]uint8) {
+	for i := range t {
+		a := math.Pow(float64(i)/float64(len(t)-1), spectroGamma)
+		t[i] = infernoLUT[int(a*255)]
+	}
+	return t
+}()
+
 // infernoColor maps a normalized amplitude (0–1) to an inferno-palette RGB.
-// Applies spectroGamma first so most of the palette's range lands on the
-// mid-amplitudes where real audio lives.
+// spectroGamma is baked into infernoGammaLUT, so most of the palette's
+// range lands on the mid-amplitudes where real audio lives.
 func infernoColor(amp float32) (int, int, int) {
-	a := math.Pow(clampF64(float64(amp), 0, 1), spectroGamma)
-	c := infernoLUT[int(a*255)]
+	c := infernoGammaLUT[int(clampF64(float64(amp), 0, 1)*float64(len(infernoGammaLUT)-1))]
 	return int(c[0]), int(c[1]), int(c[2])
 }
