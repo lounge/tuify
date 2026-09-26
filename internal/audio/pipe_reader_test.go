@@ -7,6 +7,7 @@ import (
 	"math"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -78,141 +79,127 @@ func TestPipeReader_LatestNilWhenStale(t *testing.T) {
 	}
 }
 
+// The pipe tests run in a synctest bubble: the pipe is in memory and the
+// noop player drains it, so synctest.Wait returns once the read loop has
+// published every frame and is idle. The fake clock also stands still, so
+// Latest never sees those frames go stale mid-assertion.
+
+// progressAfter is the ProgressMs of the last frame of a chunks-long pipe.
+func progressAfter(chunks int) int32 {
+	return int32(chunks * WindowSize * 1000 / DefaultFormat.SampleRate)
+}
+
 func TestPipeReader_ReceivesFFTData(t *testing.T) {
-	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	synctest.Test(t, func(t *testing.T) {
+		pr := NewPipeReader()
+		pr.NewPlayer = newNoopPlayer
+		defer pr.Stop()
 
-	// Generate enough PCM for several FFT chunks.
-	pcm := generateSineBytes(440.0, 4)
-	pipe := io.NopCloser(bytes.NewReader(pcm))
+		pr.Start(io.NopCloser(bytes.NewReader(generateSineBytes(440.0, 4))))
+		synctest.Wait()
 
-	pr.Start(pipe)
-
-	// Wait for processing to complete (pipe will EOF).
-	deadline := time.After(2 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timed out waiting for FFT data")
-		default:
+		fd := pr.Latest()
+		if fd == nil {
+			t.Fatal("no FFT data after the pipe was drained")
 		}
-		if fd := pr.Latest(); fd != nil {
-			// 440 Hz should produce non-zero energy.
-			if fd.Peak <= 0 {
-				t.Errorf("Peak should be > 0, got %f", fd.Peak)
-			}
-			pr.Stop()
-			return
+		// 440 Hz should produce non-zero energy.
+		if fd.Peak <= 0 {
+			t.Errorf("Peak should be > 0, got %f", fd.Peak)
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	})
 }
 
 func TestPipeReader_StopIdempotent(t *testing.T) {
-	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	synctest.Test(t, func(t *testing.T) {
+		// Stop without Start.
+		pr := NewPipeReader()
+		pr.NewPlayer = newNoopPlayer
+		pr.Stop()
+		pr.Stop()
 
-	// Stop without Start.
-	pr.Stop()
-	pr.Stop()
-
-	// Stop after Start.
-	pcm := generateSineBytes(440.0, 2)
-	pipe := io.NopCloser(bytes.NewReader(pcm))
-
-	pr2 := NewPipeReader()
-	pr2.NewPlayer = newNoopPlayer
-	pr2.Start(pipe)
-	time.Sleep(50 * time.Millisecond)
-	pr2.Stop()
-	pr2.Stop()
+		// Stop after Start, once the read loop is running.
+		pr2 := NewPipeReader()
+		pr2.NewPlayer = newNoopPlayer
+		pr2.Start(io.NopCloser(bytes.NewReader(generateSineBytes(440.0, 2))))
+		synctest.Wait()
+		pr2.Stop()
+		pr2.Stop()
+	})
 }
 
 func TestPipeReader_ReentrantStart(t *testing.T) {
-	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	synctest.Test(t, func(t *testing.T) {
+		pr := NewPipeReader()
+		pr.NewPlayer = newNoopPlayer
+		defer pr.Stop()
 
-	// Start with first pipe.
-	pcm1 := generateSineBytes(440.0, 2)
-	pipe1 := io.NopCloser(bytes.NewReader(pcm1))
-	pr.Start(pipe1)
-	time.Sleep(50 * time.Millisecond)
+		pr.Start(io.NopCloser(bytes.NewReader(generateSineBytes(440.0, 2))))
+		synctest.Wait()
 
-	// Start with second pipe — should cancel first.
-	pcm2 := generateSineBytes(880.0, 4)
-	pipe2 := io.NopCloser(bytes.NewReader(pcm2))
-	pr.Start(pipe2)
+		// Start with a second, longer pipe — must cancel the first loop
+		// and publish frames from the second one.
+		pr.Start(io.NopCloser(bytes.NewReader(generateSineBytes(880.0, 4))))
+		synctest.Wait()
 
-	// Wait for second pipe to produce data.
-	deadline := time.After(2 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timed out waiting for FFT data from second pipe")
-		default:
+		fd := pr.Latest()
+		if fd == nil {
+			t.Fatal("no FFT data from the second pipe")
 		}
-		if fd := pr.Latest(); fd != nil {
-			pr.Stop()
-			return
+		if want := progressAfter(4); fd.ProgressMs != want {
+			t.Errorf("ProgressMs = %d, want %d (the second pipe's last frame)", fd.ProgressMs, want)
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	})
+}
+
+// closeTracker records whether Close was called.
+type closeTracker struct {
+	io.Reader
+	closed atomic.Bool
+}
+
+func (c *closeTracker) Close() error {
+	c.closed.Store(true)
+	return nil
 }
 
 func TestPipeReader_StartAfterStopIgnored(t *testing.T) {
-	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	synctest.Test(t, func(t *testing.T) {
+		pr := NewPipeReader()
+		pr.NewPlayer = newNoopPlayer
+		pr.Stop()
 
-	pr.Stop()
+		// Start after Stop should be a no-op that closes the pipe.
+		pipe := &closeTracker{Reader: bytes.NewReader(generateSineBytes(440.0, 2))}
+		pr.Start(pipe)
+		synctest.Wait()
 
-	// Start after Stop should be a no-op (pipe gets closed).
-	pcm := generateSineBytes(440.0, 2)
-	pipe := io.NopCloser(bytes.NewReader(pcm))
-	pr.Start(pipe)
-
-	// Should have no data since Start was ignored.
-	time.Sleep(100 * time.Millisecond)
-	if fd := pr.Latest(); fd != nil {
-		t.Error("expected nil after Start on stopped PipeReader")
-	}
+		if fd := pr.Latest(); fd != nil {
+			t.Error("expected nil after Start on stopped PipeReader")
+		}
+		if !pipe.closed.Load() {
+			t.Error("Start on a stopped PipeReader should close the pipe")
+		}
+	})
 }
 
 func TestPipeReader_ProgressMsAdvances(t *testing.T) {
-	pr := NewPipeReader()
-	pr.NewPlayer = newNoopPlayer
+	synctest.Test(t, func(t *testing.T) {
+		pr := NewPipeReader()
+		pr.NewPlayer = newNoopPlayer
+		defer pr.Stop()
 
-	// 8 chunks at 44100 Hz = 8 * 2048 / 44100 ≈ 371 ms of audio.
-	numChunks := 8
-	pcm := generateSineBytes(440.0, numChunks)
-	pipe := io.NopCloser(bytes.NewReader(pcm))
+		// 8 chunks at 44100 Hz = 8 * 2048 / 44100 ≈ 371 ms of audio.
+		pr.Start(io.NopCloser(bytes.NewReader(generateSineBytes(440.0, 8))))
+		synctest.Wait()
 
-	pr.Start(pipe)
-
-	// After 8 chunks (8 * 2048 mono samples at 44100), final progress
-	// should be ~371 ms. We accept half that to allow for the reader
-	// being mid-stream when we observe it — but we keep polling until
-	// it reaches that threshold (or the deadline expires) so a slow
-	// runner doesn't catch only the first chunk.
-	expectedMs := int32(numChunks * WindowSize * 1000 / DefaultFormat.SampleRate)
-	threshold := expectedMs / 2
-	deadline := time.After(2 * time.Second)
-	var last int32
-	for {
-		select {
-		case <-deadline:
-			pr.Stop()
-			t.Fatalf("ProgressMs = %d after deadline, want at least %d", last, threshold)
-		default:
+		fd := pr.Latest()
+		if fd == nil {
+			t.Fatal("no FFT data after the pipe was drained")
 		}
-		if fd := pr.Latest(); fd != nil {
-			last = fd.ProgressMs
-			if last >= threshold {
-				pr.Stop()
-				return
-			}
+		if want := progressAfter(8); fd.ProgressMs != want {
+			t.Errorf("ProgressMs = %d, want %d", fd.ProgressMs, want)
 		}
-		time.Sleep(10 * time.Millisecond)
-	}
+	})
 }
 
 // seedFreshFrame stores a FrequencyData with a fresh timestamp so Latest()
@@ -331,31 +318,30 @@ func TestPipeReader_Latest_ConcurrentSetVolume(t *testing.T) {
 	}
 	seedFreshFrame(pr, base)
 
-	var stop atomic.Bool
+	// A fixed iteration count rather than a wall-clock window keeps the
+	// amount of overlap independent of machine speed.
+	const iterations = 20000
 	done := make(chan struct{}, 2)
 
 	go func() {
-		for v := 1; !stop.Load(); v = (v % 100) + 1 {
-			pr.SetVolumePercent(v)
+		for i := range iterations {
+			pr.SetVolumePercent(i%100 + 1)
 		}
 		done <- struct{}{}
 	}()
 
 	go func() {
-		for !stop.Load() {
+		for range iterations {
 			if fd := pr.Latest(); fd != nil {
 				// Touch fields so the race detector sees the read.
 				_ = fd.Peak + fd.Bass + fd.Mid + fd.High
 			}
-			// Also refresh the timestamp occasionally so Latest keeps
-			// returning non-nil.
+			// Keep the frame fresh so Latest keeps returning non-nil.
 			pr.lastUpdate.Store(time.Now().UnixNano())
 		}
 		done <- struct{}{}
 	}()
 
-	time.Sleep(200 * time.Millisecond)
-	stop.Store(true)
 	<-done
 	<-done
 }
