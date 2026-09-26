@@ -59,8 +59,11 @@ func Authenticate(ctx context.Context, rc RuntimeConfig) (*AuthSession, error) {
 	}
 
 	client := spotify.New(httpClient)
+	// Warm the user-ID cache. On failure GetPlaylists retries the fetch
+	// itself, so this only needs a trace; a stderr print here would be
+	// hidden by the alt screen immediately.
 	if err := client.FetchUserID(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "Warning: could not fetch user ID: %v\n", err)
+		log.Printf("[auth] could not fetch user ID at startup, will retry on demand: %v", err)
 	}
 
 	return &AuthSession{

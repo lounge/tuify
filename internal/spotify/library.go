@@ -29,8 +29,9 @@ func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) (playlists
 		return nil, 0, false, err
 	}
 	var result []Playlist
+	userID := c.ownUserID(ctx)
 	for _, p := range page.Items {
-		if c.userID != "" && p.Owner.ID != c.userID {
+		if userID != "" && p.Owner.ID != userID {
 			continue
 		}
 		result = append(result, Playlist{

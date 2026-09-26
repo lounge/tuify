@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 )
 
@@ -97,17 +98,57 @@ func TestGetPlaylists_NoUserID(t *testing.T) {
 	}
 
 	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/me" {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
 		json.NewEncoder(w).Encode(response)
 	})
 	defer cleanup()
 
-	// No userID set — should return all playlists
+	// No userID and /me fails: degrade to returning all playlists.
 	playlists, _, _, err := c.GetPlaylists(context.Background(), 0, 50)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if len(playlists) != 2 {
 		t.Fatalf("expected 2 playlists (no filtering), got %d", len(playlists))
+	}
+}
+
+func TestGetPlaylists_FetchesUserIDOnDemand(t *testing.T) {
+	response := map[string]any{
+		"offset": 0,
+		"total":  2,
+		"items": []map[string]any{
+			{"id": "p1", "name": "Mine", "owner": map[string]any{"id": "me", "display_name": "Me"}, "items": map[string]any{"total": 1}},
+			{"id": "p2", "name": "Followed", "owner": map[string]any{"id": "other", "display_name": "Other"}, "items": map[string]any{"total": 1}},
+		},
+	}
+	var meCalls atomic.Int32
+	c, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/me" {
+			meCalls.Add(1)
+			json.NewEncoder(w).Encode(map[string]string{"id": "me"})
+			return
+		}
+		json.NewEncoder(w).Encode(response)
+	})
+	defer cleanup()
+
+	// The startup FetchUserID was skipped or failed; the first
+	// GetPlaylists fetches the ID and filters out followed playlists.
+	for range 2 {
+		playlists, _, _, err := c.GetPlaylists(context.Background(), 0, 50)
+		if err != nil {
+			t.Fatalf("GetPlaylists: %v", err)
+		}
+		if len(playlists) != 1 || playlists[0].ID != "p1" {
+			t.Fatalf("got %+v, want only the user's own playlist", playlists)
+		}
+	}
+	if n := meCalls.Load(); n != 1 {
+		t.Errorf("/v1/me fetched %d times, want once (then cached)", n)
 	}
 }
 

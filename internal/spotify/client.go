@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -40,6 +42,7 @@ type Client struct {
 	sp              *sp.Client
 	httpClient      *http.Client
 	rl              *rateLimitTransport
+	userMu          sync.Mutex // guards userID
 	userID          string
 	PreferredDevice string // if set, FindDevice prefers this device name
 
@@ -82,7 +85,8 @@ func (c *Client) IsRateLimited() bool {
 
 // FetchUserID caches the authenticated user's ID on the client so later
 // calls (e.g. GetPlaylists) can filter by ownership without an extra
-// round trip. Safe to skip; dependent methods degrade gracefully.
+// round trip. Optional: if it was skipped or failed, the first method that
+// needs the ID fetches it itself.
 func (c *Client) FetchUserID(ctx context.Context) error {
 	var me struct {
 		ID string `json:"id"`
@@ -90,8 +94,29 @@ func (c *Client) FetchUserID(ctx context.Context) error {
 	if err := c.apiGet(ctx, "https://api.spotify.com/v1/me", &me); err != nil {
 		return err
 	}
+	c.userMu.Lock()
 	c.userID = me.ID
+	c.userMu.Unlock()
 	return nil
+}
+
+// ownUserID returns the cached user ID, fetching it on first use if the
+// startup fetch failed. Returns "" if it still can't be fetched, in which
+// case callers skip ownership filtering rather than fail.
+func (c *Client) ownUserID(ctx context.Context) string {
+	c.userMu.Lock()
+	id := c.userID
+	c.userMu.Unlock()
+	if id != "" {
+		return id
+	}
+	if err := c.FetchUserID(ctx); err != nil {
+		log.Printf("[spotify] could not fetch user ID, not filtering by owner: %v", err)
+		return ""
+	}
+	c.userMu.Lock()
+	defer c.userMu.Unlock()
+	return c.userID
 }
 
 // APIError is returned by every Client method for non-2xx responses from
