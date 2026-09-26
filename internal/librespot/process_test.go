@@ -427,7 +427,7 @@ type slowLog struct {
 }
 
 func (b *slowLog) Write(p []byte) (int, error) {
-	time.Sleep(100 * time.Microsecond)
+	time.Sleep(time.Millisecond)
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.Write(p)
@@ -449,7 +449,7 @@ func TestLaunch_LogsOutputWrittenBeforeExit(t *testing.T) {
 		t.Skip("uses a shell script as the fake librespot")
 	}
 	script := filepath.Join(t.TempDir(), "librespot")
-	body := "#!/bin/sh\ni=0\nwhile [ $i -lt 3000 ]; do echo \"line $i\" >&2; i=$((i+1)); done\necho 'FATAL: last words' >&2\nexit 1\n"
+	body := "#!/bin/sh\ni=0\nwhile [ $i -lt 300 ]; do echo \"line $i\" >&2; i=$((i+1)); done\necho 'FATAL: last words' >&2\nexit 1\n"
 	if err := os.WriteFile(script, []byte(body), 0o700); err != nil { //nolint:gosec // the fake binary must be executable
 		t.Fatal(err)
 	}
