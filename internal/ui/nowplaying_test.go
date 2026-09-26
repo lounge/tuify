@@ -35,7 +35,7 @@ func TestNowPlaying_ClearStatusMsg_ResetsSpinning(t *testing.T) {
 	np := newTestNowPlaying(t)
 	np.setSpinningInfo("Switching to X")
 
-	if cmd := np.Update(clearStatusMsg{}); cmd != nil {
+	if cmd := np.Update(clearStatusMsg{seq: np.statusSeq}); cmd != nil {
 		t.Errorf("clearStatusMsg shouldn't return a command, got %v", cmd)
 	}
 	if np.statusSpinning {
@@ -69,5 +69,23 @@ func TestNowPlaying_SetError_ResetsSpinning(t *testing.T) {
 	}
 	if !np.statusIsError {
 		t.Error("setError should set statusIsError")
+	}
+}
+
+// The clear scheduled by an earlier message must not remove a newer one.
+func TestNowPlaying_StaleClearKeepsNewerStatus(t *testing.T) {
+	np := newTestNowPlaying(t)
+	np.setInfo("Copied link")
+	stale := clearStatusMsg{seq: np.statusSeq}
+	np.setError("Playback failed")
+
+	np.Update(stale)
+	if np.statusMsg != "Playback failed" {
+		t.Errorf("statusMsg = %q; the first message's timer cleared the newer error", np.statusMsg)
+	}
+
+	np.Update(clearStatusMsg{seq: np.statusSeq})
+	if np.statusMsg != "" {
+		t.Errorf("statusMsg = %q, want it cleared by its own timer", np.statusMsg)
 	}
 }

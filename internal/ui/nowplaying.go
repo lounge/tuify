@@ -37,7 +37,7 @@ type (
 	nowPlayingTickMsg time.Time
 	progressTickMsg   time.Time
 	labelScrollMsg    time.Time
-	clearStatusMsg    struct{}
+	clearStatusMsg    struct{ seq uint64 }
 	delayedPollMsg    struct{}
 	episodeResumeMsg  struct{ posMs int }
 )
@@ -106,6 +106,8 @@ type nowPlayingModel struct {
 	// rendered from the package-level loadingSpinner, which ticks once for
 	// the whole UI — no per-model spinner state or tick chain required.
 	statusSpinning bool
+	// statusSeq numbers each status message; see setStatus.
+	statusSeq uint64
 }
 
 // advanceLabelScroll moves the marquee one cell and wraps within the
@@ -166,8 +168,10 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 	case delayedPollMsg:
 		return m.pollState()
 	case clearStatusMsg:
-		m.statusMsg = ""
-		m.statusSpinning = false
+		if msg.seq == m.statusSeq {
+			m.statusMsg = ""
+			m.statusSpinning = false
+		}
 		return nil
 	}
 	return nil
@@ -309,21 +313,11 @@ func (m *nowPlayingModel) advanceProgress() bool {
 // Status display
 
 func (m *nowPlayingModel) setError(msg string) tea.Cmd {
-	m.statusMsg = msg
-	m.statusIsError = true
-	m.statusSpinning = false
-	return tea.Tick(5*time.Second, func(t time.Time) tea.Msg {
-		return clearStatusMsg{}
-	})
+	return m.setStatus(msg, true, false, 5*time.Second)
 }
 
 func (m *nowPlayingModel) setInfo(msg string) tea.Cmd {
-	m.statusMsg = msg
-	m.statusIsError = false
-	m.statusSpinning = false
-	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-		return clearStatusMsg{}
-	})
+	return m.setStatus(msg, false, false, 3*time.Second)
 }
 
 // setSpinningInfo shows msg prefixed with the global spinner until the
@@ -333,10 +327,19 @@ func (m *nowPlayingModel) setInfo(msg string) tea.Cmd {
 // shell restarts the idle spinner tick on the Update that sets this (see
 // app_tickers.go).
 func (m *nowPlayingModel) setSpinningInfo(msg string) tea.Cmd {
+	return m.setStatus(msg, false, true, 3*time.Second)
+}
+
+// setStatus shows msg and schedules its removal after ttl. The clear
+// carries a sequence number so a timer left over from an earlier message
+// can't wipe a newer one early.
+func (m *nowPlayingModel) setStatus(msg string, isError, spinning bool, ttl time.Duration) tea.Cmd {
 	m.statusMsg = msg
-	m.statusIsError = false
-	m.statusSpinning = true
-	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
-		return clearStatusMsg{}
+	m.statusIsError = isError
+	m.statusSpinning = spinning
+	m.statusSeq++
+	seq := m.statusSeq
+	return tea.Tick(ttl, func(t time.Time) tea.Msg {
+		return clearStatusMsg{seq: seq}
 	})
 }
