@@ -16,18 +16,18 @@ import (
 	"github.com/lounge/tuify/internal/ui"
 )
 
-// LibrespotServices holds the result of librespot/audio startup.
-type LibrespotServices struct {
+// librespotServices holds the result of librespot/audio startup.
+type librespotServices struct {
 	Options []ui.ModelOption
 	Cleanup func()
 }
 
-// StartLibrespot starts the librespot process and audio pipe reader if enabled
+// startLibrespot starts the librespot process and audio pipe reader if enabled
 // by the config. Returns UI model options and a cleanup function, or an error
 // if librespot was enabled but failed to start. If librespot is not enabled,
 // returns (nil, nil). ctx is the app's root context, used so the reconnect
 // handler's transfer requests are cancellable at shutdown.
-func StartLibrespot(ctx context.Context, rc RuntimeConfig, client *spotify.Client) (*LibrespotServices, error) {
+func startLibrespot(ctx context.Context, rc runtimeConfig, client *spotify.Client) (*librespotServices, error) {
 	if !rc.EnableLibrespot {
 		return nil, nil
 	}
@@ -96,7 +96,7 @@ func StartLibrespot(ctx context.Context, rc RuntimeConfig, client *spotify.Clien
 	}
 	opts = append(opts, ui.WithLibrespotInactive(inactiveCh))
 
-	return &LibrespotServices{
+	return &librespotServices{
 		Options: opts,
 		Cleanup: func() {
 			// Cleanup in reverse order (librespot before pipe reader).

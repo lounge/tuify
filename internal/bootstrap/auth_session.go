@@ -20,19 +20,19 @@ const refreshTokenLifetime = 6 // months, applied via t.AddDate(0, months, 0)
 // start logging a heads-up at startup.
 const reauthWarningWindow = 30 * 24 * time.Hour
 
-// AuthSession holds the result of authentication.
-type AuthSession struct {
+// authSession holds the result of authentication.
+type authSession struct {
 	Client    *spotify.Client
 	Cleanup   func()
 	SaveErrCh <-chan error    // emits non-fatal auth problems (token save, startup refresh)
 	RevokedCh <-chan struct{} // fires once if the refresh token is permanently invalid
 }
 
-// Authenticate connects to Spotify and returns a ready-to-use session.
+// authenticate connects to Spotify and returns a ready-to-use session.
 // If no saved token exists, it runs the interactive login flow. ctx is the
 // parent lifetime — cancelling it aborts login and stops the proactive
 // token-refresh goroutine owned by the returned session.
-func Authenticate(ctx context.Context, rc RuntimeConfig) (*AuthSession, error) {
+func authenticate(ctx context.Context, rc runtimeConfig) (*authSession, error) {
 	token, authorizedAt, err := auth.LoadTokenWithAuth()
 	if err != nil {
 		return nil, fmt.Errorf("loading token: %w", err)
@@ -66,7 +66,7 @@ func Authenticate(ctx context.Context, rc RuntimeConfig) (*AuthSession, error) {
 		log.Printf("[auth] could not fetch user ID at startup, will retry on demand: %v", err)
 	}
 
-	return &AuthSession{
+	return &authSession{
 		Client:    client,
 		Cleanup:   cleanup,
 		SaveErrCh: saveErrCh,

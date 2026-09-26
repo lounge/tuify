@@ -12,7 +12,7 @@ import (
 	"github.com/lounge/tuify/internal/theme"
 )
 
-// --- LoadOrSetupConfig tests ---
+// --- loadOrSetupConfig tests ---
 
 func TestLoadOrSetupConfig_ExistingConfig(t *testing.T) {
 	tmp := t.TempDir()
@@ -24,9 +24,9 @@ func TestLoadOrSetupConfig_ExistingConfig(t *testing.T) {
 		t.Fatalf("Save: %v", err)
 	}
 
-	got, err := LoadOrSetupConfig(nil, nil)
+	got, err := loadOrSetupConfig(nil, nil)
 	if err != nil {
-		t.Fatalf("LoadOrSetupConfig: %v", err)
+		t.Fatalf("loadOrSetupConfig: %v", err)
 	}
 	if got.ClientID != "existing-id" {
 		t.Errorf("ClientID: got %q, want %q", got.ClientID, "existing-id")
@@ -41,9 +41,9 @@ func TestLoadOrSetupConfig_TriggersSetup(t *testing.T) {
 	input := strings.NewReader("my-new-id\n")
 	var output strings.Builder
 
-	got, err := LoadOrSetupConfig(input, &output)
+	got, err := loadOrSetupConfig(input, &output)
 	if err != nil {
-		t.Fatalf("LoadOrSetupConfig: %v", err)
+		t.Fatalf("loadOrSetupConfig: %v", err)
 	}
 	if got.ClientID != "my-new-id" {
 		t.Errorf("ClientID: got %q, want %q", got.ClientID, "my-new-id")
@@ -71,7 +71,7 @@ func TestLoadOrSetupConfig_EmptyInput(t *testing.T) {
 	input := strings.NewReader("\n")
 	var output strings.Builder
 
-	_, err := LoadOrSetupConfig(input, &output)
+	_, err := loadOrSetupConfig(input, &output)
 	if err == nil {
 		t.Fatal("expected error for empty client ID")
 	}
@@ -88,20 +88,20 @@ func TestLoadOrSetupConfig_InvalidJSON(t *testing.T) {
 	os.MkdirAll(dir, 0o700)
 	os.WriteFile(filepath.Join(dir, "config.json"), []byte("bad json"), 0o600)
 
-	_, err := LoadOrSetupConfig(nil, nil)
+	_, err := loadOrSetupConfig(nil, nil)
 	if err == nil {
 		t.Fatal("expected error for invalid JSON")
 	}
 }
 
-// --- ResolveRuntime tests ---
+// --- resolveRuntime tests ---
 
 func TestResolveRuntime_Defaults(t *testing.T) {
 	cfg := &config.Config{
 		ClientID:        "id",
 		EnableLibrespot: true,
 	}
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 
 	if rc.ResolvedRedirectURL != config.DefaultRedirectURL {
 		t.Errorf("RedirectURL: got %q, want %q", rc.ResolvedRedirectURL, config.DefaultRedirectURL)
@@ -118,7 +118,7 @@ func TestResolveRuntime_CustomValues(t *testing.T) {
 		RedirectURL:     "http://custom:9999/cb",
 		DeviceName:      "my-speaker",
 	}
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 
 	if rc.ResolvedRedirectURL != "http://custom:9999/cb" {
 		t.Errorf("RedirectURL: got %q", rc.ResolvedRedirectURL)
@@ -133,7 +133,7 @@ func TestResolveRuntime_NoLibrespot(t *testing.T) {
 		ClientID:        "id",
 		EnableLibrespot: false,
 	}
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 
 	// DeviceName should be empty when librespot is disabled.
 	if rc.ResolvedDeviceName != "" {
@@ -141,17 +141,17 @@ func TestResolveRuntime_NoLibrespot(t *testing.T) {
 	}
 }
 
-// --- StartLibrespot tests ---
+// --- startLibrespot tests ---
 
 func TestStartLibrespot_Disabled(t *testing.T) {
 	cfg := &config.Config{
 		ClientID:        "id",
 		EnableLibrespot: false,
 	}
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, err := StartLibrespot(context.Background(), rc, client)
+	svc, err := startLibrespot(context.Background(), rc, client)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -170,10 +170,10 @@ func TestStartLibrespot_SetsPreferredDevice(t *testing.T) {
 		DeviceName:      "test-device",
 		LibrespotPath:   "/bin/true",
 	}
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, _ := StartLibrespot(context.Background(), rc, client)
+	svc, _ := startLibrespot(context.Background(), rc, client)
 	if svc != nil {
 		defer svc.Cleanup()
 	}
@@ -192,10 +192,10 @@ func TestStartLibrespot_ReturnsOptions(t *testing.T) {
 		EnableLibrespot: true,
 		LibrespotPath:   "/bin/true",
 	}
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, err := StartLibrespot(context.Background(), rc, client)
+	svc, err := startLibrespot(context.Background(), rc, client)
 	if err != nil {
 		t.Skipf("librespot binary unavailable: %v", err)
 	}
@@ -212,10 +212,10 @@ func TestStartLibrespot_ErrorOnBinaryMissing(t *testing.T) {
 		EnableLibrespot: true,
 		LibrespotPath:   "/no/such/binary-that-definitely-does-not-exist",
 	}
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 	client := &spotify.Client{}
 
-	svc, err := StartLibrespot(context.Background(), rc, client)
+	svc, err := startLibrespot(context.Background(), rc, client)
 	if err == nil {
 		if svc != nil {
 			svc.Cleanup()
@@ -244,9 +244,9 @@ func TestBackfillThemeDefaults_FillsEmptyThemeAndPersists(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	got, err := LoadOrSetupConfig(nil, nil)
+	got, err := loadOrSetupConfig(nil, nil)
 	if err != nil {
-		t.Fatalf("LoadOrSetupConfig: %v", err)
+		t.Fatalf("loadOrSetupConfig: %v", err)
 	}
 
 	// In-memory cfg must have the defaults populated.
@@ -287,9 +287,9 @@ func TestBackfillThemeDefaults_LeavesPartialThemeAlone(t *testing.T) {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	got, err := LoadOrSetupConfig(nil, nil)
+	got, err := loadOrSetupConfig(nil, nil)
 	if err != nil {
-		t.Fatalf("LoadOrSetupConfig: %v", err)
+		t.Fatalf("loadOrSetupConfig: %v", err)
 	}
 
 	if got.Theme.Primary.Dark != "#ff0000" {

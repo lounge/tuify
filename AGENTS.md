@@ -24,8 +24,8 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.26+.
 `Run` owns a root `context.Context` that is cancelled on return. That context is threaded into auth (token refresh), spotify (polls), librespot (reconnect/transfer), and the UI model so every background goroutine unwinds at shutdown rather than running to its per-op timeout. Order matters:
 
 1. Load/setup config → `theme.Apply(cfg.Theme)` → `ui.RebuildStyles()` **before** any rendering (see Hard rule on Lipgloss style construction).
-2. `Authenticate` returns a `*spotify.Client` plus channels for revoked-token + token-save errors that are wired into the UI via `ModelOption`s.
-3. `StartLibrespot` is optional; when active it provides additional `ModelOption`s (audio pipe → FFT, device reconnect callbacks).
+2. `authenticate` returns a `*spotify.Client` plus channels for revoked-token + token-save errors that are wired into the UI via `ModelOption`s.
+3. `startLibrespot` is optional; when active it provides additional `ModelOption`s (audio pipe → FFT, device reconnect callbacks).
 4. `zone.NewGlobal()` then `tea.NewProgram(..., WithAltScreen(), WithMouseCellMotion())`.
 
 ### UI shell + screens + submodels (`internal/ui`)

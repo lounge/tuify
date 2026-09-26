@@ -14,21 +14,21 @@ import (
 	"github.com/lounge/tuify/internal/theme"
 )
 
-// RuntimeConfig holds the resolved configuration with defaults applied.
+// runtimeConfig holds the resolved configuration with defaults applied.
 // ResolvedRedirectURL and ResolvedDeviceName are the final values after
 // applying defaults — use these instead of the raw Config fields.
-type RuntimeConfig struct {
+type runtimeConfig struct {
 	*config.Config
 	ResolvedRedirectURL string
 	ResolvedDeviceName  string
 }
 
-// SetupLog configures the global logger to write to debug.log in the config
+// setupLog configures the global logger to write to debug.log in the config
 // directory. Returns a cleanup function that closes the log file. If the log
 // file can't be opened (missing home dir, read-only fs, etc.) the reason is
 // printed to stderr so subsequent debug sessions aren't blind to why log
 // output is missing.
-func SetupLog() func() {
+func setupLog() func() {
 	dir, err := config.Dir()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tuify: debug log disabled: %v\n", err)
@@ -48,10 +48,10 @@ func SetupLog() func() {
 	return func() { f.Close() }
 }
 
-// LoadOrSetupConfig loads the config file. If no config exists, it runs
+// loadOrSetupConfig loads the config file. If no config exists, it runs
 // first-time setup by prompting the user via the provided reader and writer.
 // Pass nil for r/w to use os.Stdin/os.Stdout.
-func LoadOrSetupConfig(r io.Reader, w io.Writer) (*config.Config, error) {
+func loadOrSetupConfig(r io.Reader, w io.Writer) (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
@@ -121,10 +121,10 @@ func runSetup(r io.Reader, w io.Writer) (*config.Config, error) {
 	return cfg, nil
 }
 
-// ResolveRuntime applies defaults to the raw config and returns a RuntimeConfig
+// resolveRuntime applies defaults to the raw config and returns a runtimeConfig
 // ready for use by the rest of the application.
-func ResolveRuntime(cfg *config.Config) RuntimeConfig {
-	rc := RuntimeConfig{Config: cfg}
+func resolveRuntime(cfg *config.Config) runtimeConfig {
+	rc := runtimeConfig{Config: cfg}
 
 	rc.ResolvedRedirectURL = cfg.RedirectURL
 	if rc.ResolvedRedirectURL == "" {

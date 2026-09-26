@@ -22,7 +22,7 @@ import (
 // resolve), auth_session.go (Spotify auth), librespot.go (optional local
 // playback subprocess + audio pipe).
 func Run() error {
-	closeLog := SetupLog()
+	closeLog := setupLog()
 	defer closeLog()
 
 	// Root context for the whole app run. Cancelled as soon as the UI
@@ -32,7 +32,7 @@ func Run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := LoadOrSetupConfig(nil, nil)
+	cfg, err := loadOrSetupConfig(nil, nil)
 	if err != nil {
 		return err
 	}
@@ -57,9 +57,9 @@ func Run() error {
 	theme.Apply(cfg.Theme)
 	ui.RebuildStyles()
 
-	rc := ResolveRuntime(cfg)
+	rc := resolveRuntime(cfg)
 
-	session, err := Authenticate(ctx, rc)
+	session, err := authenticate(ctx, rc)
 	if err != nil {
 		return err
 	}
@@ -96,7 +96,7 @@ func Run() error {
 		opts = append(opts, ui.WithTokenRevoked(uiCh))
 	}
 
-	svc, err := StartLibrespot(ctx, rc, session.Client)
+	svc, err := startLibrespot(ctx, rc, session.Client)
 	if err != nil {
 		return err
 	}
