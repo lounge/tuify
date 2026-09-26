@@ -24,7 +24,8 @@ type runtimeConfig struct {
 }
 
 // setupLog configures the global logger to write to debug.log in the config
-// directory. Returns a cleanup function that closes the log file. If the log
+// directory, first moving the previous run's log to debug.log.1. Returns a
+// cleanup function that closes the log file. If the log
 // file can't be opened (missing home dir, read-only fs, etc.) the reason is
 // printed to stderr so subsequent debug sessions aren't blind to why log
 // output is missing.
@@ -39,7 +40,14 @@ func setupLog() func() {
 		return func() {}
 	}
 	logPath := filepath.Join(dir, "debug.log")
-	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	// Keep the previous run's log: after a crash, relaunching would
+	// otherwise truncate the one log that explains it.
+	if err := os.Rename(logPath, logPath+".1"); err == nil {
+		_ = os.Chmod(logPath+".1", 0o600)
+	}
+	// 0600: the log holds the librespot command line (username) and
+	// Spotify error bodies.
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "tuify: debug log disabled: open %s: %v\n", logPath, err)
 		return func() {}
@@ -98,10 +106,17 @@ func runSetup(r io.Reader, w io.Writer) (*config.Config, error) {
 	fmt.Fprintln(w)
 	fmt.Fprint(w, "Enter your Client ID: ")
 
-	clientID, _ := reader.ReadString('\n')
-	clientID = strings.TrimSpace(clientID)
+	line, readErr := reader.ReadString('\n')
+	clientID := strings.TrimSpace(line)
 
 	if clientID == "" {
+		if readErr != nil {
+			// No input at all (stdin is not a terminal, or closed): the
+			// user never got to answer, so "required" would mislead.
+			fmt.Fprintln(w)
+			path, _ := config.Path()
+			return nil, fmt.Errorf(`no config found and no input to set one up: run tuify in a terminal, or create %s containing {"client_id": "<your client id>"}`, path)
+		}
 		return nil, fmt.Errorf("client ID is required")
 	}
 

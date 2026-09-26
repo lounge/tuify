@@ -2,8 +2,10 @@ package bootstrap
 
 import (
 	"context"
+	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -77,6 +79,57 @@ func TestLoadOrSetupConfig_EmptyInput(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "client ID") {
 		t.Errorf("error should mention client ID, got: %v", err)
+	}
+}
+
+// With stdin closed or not a terminal there is no answer to read. The
+// error must say how to get a config instead of claiming the user left
+// the client ID empty.
+func TestLoadOrSetupConfig_NoInput(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+
+	_, err := loadOrSetupConfig(strings.NewReader(""), &strings.Builder{})
+	if err == nil {
+		t.Fatal("expected an error with no input")
+	}
+	want := filepath.Join(tmp, "tuify", "config.json")
+	if !strings.Contains(err.Error(), "run tuify in a terminal") || !strings.Contains(err.Error(), want) {
+		t.Errorf("error should explain how to create %s, got: %v", want, err)
+	}
+}
+
+func TestSetupLog_KeepsPreviousRunAndIsPrivate(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	dir := filepath.Join(tmp, "tuify")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "debug.log"), []byte("crash details"), 0o644); err != nil { //nolint:gosec // the old default mode, to check it gets tightened
+		t.Fatal(err)
+	}
+	prev := log.Writer()
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	closeLog := setupLog()
+	closeLog()
+
+	old, err := os.ReadFile(filepath.Join(dir, "debug.log.1"))
+	if err != nil || string(old) != "crash details" {
+		t.Errorf("previous log not kept as debug.log.1: %q, %v", old, err)
+	}
+	if runtime.GOOS == "windows" {
+		return
+	}
+	for _, name := range []string{"debug.log", "debug.log.1"} {
+		info, err := os.Stat(filepath.Join(dir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if perm := info.Mode().Perm(); perm != 0o600 {
+			t.Errorf("%s permissions = %o, want 600", name, perm)
+		}
 	}
 }
 

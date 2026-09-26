@@ -369,8 +369,8 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 	)
 	openBrowser(authURL)
-	fmt.Println("Waiting for authentication...")
-	fmt.Printf("If the browser doesn't open, visit:\n  %s\n", authURL)
+	fmt.Fprintln(os.Stderr, "Waiting for authentication...")
+	fmt.Fprintf(os.Stderr, "If the browser doesn't open, visit:\n  %s\n", authURL)
 
 	select {
 	case token := <-tokenCh:

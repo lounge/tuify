@@ -13,5 +13,7 @@
 // librespot (token refresh, reconnect transfers). SIGHUP (the terminal
 // closing) cancels the program the same way SIGINT/SIGTERM do, so the
 // terminal is restored and librespot is stopped instead of orphaned.
-
+//
+// Logging: setupLog moves the previous run's debug.log to debug.log.1 and
+// opens a fresh 0600 debug.log in the config directory.
 package bootstrap

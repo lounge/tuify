@@ -44,7 +44,10 @@ func Run() error {
 		return err
 	}
 	if err := cfg.Validate(); err != nil {
-		return fmt.Errorf("config error: %w", err)
+		if path, perr := config.Path(); perr == nil {
+			return fmt.Errorf("invalid config %s: %w", path, err)
+		}
+		return fmt.Errorf("invalid config: %w", err)
 	}
 
 	// Force or autodetect terminal background mode before any rendering.

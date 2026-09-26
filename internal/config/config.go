@@ -65,12 +65,23 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-func Load() (*Config, error) {
+// Path returns the location of config.json inside Dir.
+func Path() (string, error) {
 	dir, err := Dir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "config.json"), nil
+}
+
+// Load reads and parses config.json. It returns (nil, nil) when the file
+// doesn't exist yet, which callers treat as "run first-time setup".
+// Unknown keys are an error. Load does not call Validate.
+func Load() (*Config, error) {
+	path, err := Path()
 	if err != nil {
 		return nil, err
 	}
-	path := filepath.Join(dir, "config.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -91,6 +102,8 @@ func Load() (*Config, error) {
 	return &cfg, nil
 }
 
+// Save writes cfg to config.json with WriteFileAtomic, creating the config
+// directory (0700) if needed.
 func Save(cfg *Config) error {
 	dir, err := Dir()
 	if err != nil {
