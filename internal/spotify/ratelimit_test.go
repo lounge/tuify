@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -229,6 +230,48 @@ func TestRateLimitTransport_ResetsConsecutiveOnSuccess(t *testing.T) {
 		get(t, rl)
 		if got := rl.wait(); got != rateLimitMinBackoff {
 			t.Errorf("post-reset cooldown %v, want base %v", got, rateLimitMinBackoff)
+		}
+	})
+}
+
+// barrierTransport holds every request until n have arrived, then answers
+// them all with 429, so their responses race back in one burst.
+type barrierTransport struct {
+	n       int32
+	arrived atomic.Int32
+	release chan struct{}
+}
+
+func (b *barrierTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if b.arrived.Add(1) == b.n {
+		close(b.release)
+	}
+	<-b.release
+	return &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{}, Body: http.NoBody, Request: req}, nil
+}
+
+// TestRateLimitTransport_ParallelBurstArmsBaseCooldown: requests that were
+// in flight together and all got 429 are one throttle, not three
+// consecutive ones. Counting each response escalated the first cooldown
+// to 2 minutes.
+func TestRateLimitTransport_ParallelBurstArmsBaseCooldown(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		const n = 3
+		rl := newRateLimitTransport(&barrierTransport{n: n, release: make(chan struct{})})
+
+		var wg sync.WaitGroup
+		for range n {
+			wg.Go(func() { get(t, rl) })
+		}
+		wg.Wait()
+
+		if got := rl.wait(); got != rateLimitMinBackoff {
+			t.Errorf("cooldown after a burst of %d parallel 429s = %v, want %v", n, got, rateLimitMinBackoff)
+		}
+		if got := rl.consecutive.Load(); got != 1 {
+			t.Errorf("consecutive = %d, want 1", got)
 		}
 	})
 }

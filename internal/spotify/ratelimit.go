@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -55,6 +56,10 @@ type rateLimitTransport struct {
 	base        http.RoundTripper
 	until       atomic.Int64 // unix nanos; 0 means not rate limited
 	consecutive atomic.Int32 // consecutive 429s since the last non-429
+
+	// armMu serializes arming a cooldown so that concurrent 429s from one
+	// burst escalate the streak once, not once per response.
+	armMu sync.Mutex
 }
 
 func newRateLimitTransport(base http.RoundTripper) *rateLimitTransport {
@@ -65,8 +70,12 @@ func newRateLimitTransport(base http.RoundTripper) *rateLimitTransport {
 }
 
 func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	if u := t.until.Load(); u > 0 {
-		deadline := time.Unix(0, u)
+	// sentUntil is the deadline in force when this request left. If it has
+	// changed by the time a 429 comes back, a parallel request of the same
+	// burst already armed the cooldown.
+	sentUntil := t.until.Load()
+	if sentUntil > 0 {
+		deadline := time.Unix(0, sentUntil)
 		if time.Now().Before(deadline) {
 			return nil, &RateLimitedError{Until: deadline}
 		}
@@ -97,6 +106,14 @@ func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error
 		return resp, nil
 	}
 	cooldown := max(time.Duration(wait)*time.Second, rateLimitMinBackoff)
+	t.armMu.Lock()
+	defer t.armMu.Unlock()
+	if t.until.Load() != sentUntil {
+		// Same burst: honour this response's own Retry-After but don't
+		// count it as another consecutive throttle.
+		t.setUntil(time.Now().Add(min(cooldown, rateLimitMaxBackoff)))
+		return resp, nil
+	}
 	// Exponential backoff: each consecutive 429 doubles the base cooldown.
 	// Shift capped so overflow can't produce a negative Duration; the
 	// result is clamped to rateLimitMaxBackoff regardless.
