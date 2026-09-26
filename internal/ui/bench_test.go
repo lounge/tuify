@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -47,5 +48,27 @@ func BenchmarkHomeView(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		m.View()
+	}
+}
+
+// BenchmarkVisualizerFrame renders whole frames (visualizer plus the
+// now-playing bar, through Model.View) at 120x40 and a large 250x70
+// terminal. It covers what the per-visualizer benchmarks don't: the frame
+// assembly and whether zone.Scan runs over it.
+func BenchmarkVisualizerFrame(b *testing.B) {
+	for _, sz := range []struct{ w, h int }{{120, 40}, {250, 70}} {
+		b.Run(fmt.Sprintf("%dx%d", sz.w, sz.h), func(b *testing.B) {
+			m := newIntentTestModel()
+			m.nowPlaying = benchNowPlaying()
+			m.visualizer = newVisualizerModel(m.rootCtx, &fakeAudioSource{})
+			m.visualizer.active = true
+			m.visualizer.trackID = "abc"
+			updated, _ := m.Update(tea.WindowSizeMsg{Width: sz.w, Height: sz.h})
+			m = updated.(Model)
+			b.ReportAllocs()
+			for b.Loop() {
+				m.View()
+			}
+		})
 	}
 }

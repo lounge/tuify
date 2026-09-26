@@ -31,6 +31,9 @@ const (
 	breadcrumbHeight = 2
 )
 
+// Model is the root bubbletea model: the view stack, the long-lived
+// submodels (now playing, visualizer, device selector) and the channels
+// bootstrap wires in. Build it with NewModel.
 type Model struct {
 	// rootCtx is the app-level context passed down from bootstrap.Run.
 	// All Spotify API calls wrap it with a per-operation timeout rather

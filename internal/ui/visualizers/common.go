@@ -9,12 +9,16 @@ import (
 	"github.com/lounge/tuify/internal/audio"
 )
 
+// Visualizer is one full-screen visualization. Init starts it for a new
+// track (seed is the track ID, so a track always looks the same), Advance
+// steps it one frame, and View renders the current frame at the given size.
 type Visualizer interface {
 	Init(seed string, durationMs int)
 	Advance()
 	View(width, height int) string
 }
 
+// ImageAware is implemented by visualizers that draw the track's cover art.
 type ImageAware interface {
 	SetImage(img image.Image)
 }
