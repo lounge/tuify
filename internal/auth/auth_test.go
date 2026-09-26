@@ -662,71 +662,100 @@ func (f tokenSourceFunc) Token() (*oauth2.Token, error) { return f() }
 
 // --- Login callback tests ---
 
-func TestLogin_StateMismatch(t *testing.T) {
-	// Start a test server that simulates a bad callback with wrong state.
-	mux := http.NewServeMux()
-	var callbackErr error
-	errCh := make(chan error, 1)
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		// This handler simulates what Login sets up — we test the state check.
-		if r.URL.Query().Get("state") != "expected-state" {
-			callbackErr = errors.New("state mismatch")
-			errCh <- callbackErr
-			return
+// callbackRig runs callbackHandler against a stub token exchange.
+type callbackRig struct {
+	srv       *httptest.Server
+	tokenCh   chan *oauth2.Token
+	errCh     chan error
+	exchanged atomic.Int32
+}
+
+func newCallbackRig(t *testing.T, exchangeErr error) *callbackRig {
+	t.Helper()
+	rig := &callbackRig{tokenCh: make(chan *oauth2.Token, 1), errCh: make(chan error, 1)}
+	exchange := func(_ context.Context, code string) (*oauth2.Token, error) {
+		rig.exchanged.Add(1)
+		if exchangeErr != nil {
+			return nil, exchangeErr
 		}
-	})
+		return &oauth2.Token{AccessToken: "token-for-" + code}, nil
+	}
+	rig.srv = httptest.NewServer(callbackHandler("expected-state", exchange, rig.tokenCh, rig.errCh))
+	t.Cleanup(rig.srv.Close)
+	return rig
+}
 
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	// Hit the callback with wrong state.
-	resp, err := http.Get(srv.URL + "/callback?state=wrong-state&code=some-code")
+func (rig *callbackRig) hit(t *testing.T, query string) int {
+	t.Helper()
+	resp, err := http.Get(rig.srv.URL + "/callback?" + query)
 	if err != nil {
 		t.Fatalf("GET: %v", err)
 	}
 	resp.Body.Close()
+	return resp.StatusCode
+}
 
-	select {
-	case err := <-errCh:
-		if err == nil || err.Error() != "state mismatch" {
-			t.Errorf("expected state mismatch error, got %v", err)
+// A request without the login's state is not Spotify's redirect. It must
+// be refused without ending the login, or any local page could abort it.
+func TestCallbackHandler_WrongStateKeepsWaiting(t *testing.T) {
+	rig := newCallbackRig(t, nil)
+
+	for _, q := range []string{"state=wrong&code=c1", "code=c1", "state=wrong&error=access_denied"} {
+		if status := rig.hit(t, q); status != http.StatusBadRequest {
+			t.Errorf("%s: status %d, want 400", q, status)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("expected error from state mismatch")
+	}
+	select {
+	case err := <-rig.errCh:
+		t.Fatalf("stray request ended the login: %v", err)
+	case tok := <-rig.tokenCh:
+		t.Fatalf("stray request produced a token: %v", tok)
+	default:
+	}
+	if n := rig.exchanged.Load(); n != 0 {
+		t.Errorf("exchanged %d codes from requests with the wrong state", n)
+	}
+
+	// The real redirect still completes the login afterwards.
+	if status := rig.hit(t, "state=expected-state&code=good"); status != http.StatusOK {
+		t.Fatalf("real callback: status %d", status)
+	}
+	if tok := <-rig.tokenCh; tok.AccessToken != "token-for-good" {
+		t.Errorf("token = %q", tok.AccessToken)
 	}
 }
 
-func TestLogin_EmptyCode(t *testing.T) {
-	mux := http.NewServeMux()
-	errCh := make(chan error, 1)
-	mux.HandleFunc("/callback", func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("state") != "test-state" {
-			errCh <- errors.New("state mismatch")
-			return
-		}
-		code := r.URL.Query().Get("code")
-		if code == "" {
-			errCh <- fmt.Errorf("auth error: %s", r.URL.Query().Get("error"))
-			return
-		}
-	})
-
-	srv := httptest.NewServer(mux)
-	defer srv.Close()
-
-	resp, err := http.Get(srv.URL + "/callback?state=test-state&error=access_denied")
-	if err != nil {
-		t.Fatalf("GET: %v", err)
+func TestCallbackHandler_DeniedEndsLogin(t *testing.T) {
+	rig := newCallbackRig(t, nil)
+	if status := rig.hit(t, "state=expected-state&error=access_denied"); status != http.StatusBadRequest {
+		t.Errorf("status %d, want 400", status)
 	}
-	resp.Body.Close()
+	if err := <-rig.errCh; err == nil || err.Error() != "auth error: access_denied" {
+		t.Errorf("err = %v, want auth error: access_denied", err)
+	}
+}
 
-	select {
-	case err := <-errCh:
-		if err == nil || err.Error() != "auth error: access_denied" {
-			t.Errorf("expected auth error, got %v", err)
+func TestCallbackHandler_ExchangeFailureEndsLogin(t *testing.T) {
+	rig := newCallbackRig(t, errors.New("invalid_grant"))
+	if status := rig.hit(t, "state=expected-state&code=c"); status != http.StatusBadGateway {
+		t.Errorf("status %d, want 502", status)
+	}
+	if err := <-rig.errCh; err == nil || err.Error() != "invalid_grant" {
+		t.Errorf("err = %v", err)
+	}
+}
+
+// A second hit (reloading the success tab) must not block the handler:
+// the channel already holds the first result and Login reads only one.
+func TestCallbackHandler_RepeatHitDoesNotBlock(t *testing.T) {
+	rig := newCallbackRig(t, nil)
+	for range 3 {
+		if status := rig.hit(t, "state=expected-state&code=c"); status != http.StatusOK {
+			t.Fatalf("status %d", status)
 		}
-	case <-time.After(time.Second):
-		t.Fatal("expected error from empty code")
+	}
+	if len(rig.tokenCh) != 1 {
+		t.Errorf("tokenCh holds %d tokens, want 1", len(rig.tokenCh))
 	}
 }
 

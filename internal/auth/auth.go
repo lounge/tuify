@@ -341,45 +341,17 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	// Login reads exactly one result, but the callback can be hit more
-	// than once (browser prefetch, reloading the success tab, a stray
-	// request). Sends are non-blocking so extra hits can't park a handler
-	// goroutine forever and stall server.Shutdown.
-	sendErr := func(err error) {
-		select {
-		case errCh <- err:
-		default:
-		}
+	exchange := func(ctx context.Context, code string) (*oauth2.Token, error) {
+		return a.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", verifier))
 	}
-	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Query().Get("state") != state {
-			sendErr(errors.New("state mismatch"))
-			return
-		}
-		code := r.URL.Query().Get("code")
-		if code == "" {
-			sendErr(fmt.Errorf("auth error: %s", r.URL.Query().Get("error")))
-			return
-		}
-		token, err := a.Exchange(
-			r.Context(),
-			code,
-			oauth2.SetAuthURLParam("code_verifier", verifier),
-		)
-		if err != nil {
-			sendErr(err)
-			return
-		}
-		fmt.Fprint(w, "<html><body><h1>Success!</h1><p>You can close this window.</p></body></html>")
-		select {
-		case tokenCh <- token:
-		default:
-		}
-	})
+	mux.Handle(callbackPath, callbackHandler(state, exchange, tokenCh, errCh))
 
 	go func() {
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			sendErr(fmt.Errorf("failed to start auth server: %w", err))
+			select {
+			case errCh <- fmt.Errorf("failed to start auth server: %w", err):
+			default:
+			}
 		}
 	}()
 	defer func() {
@@ -403,6 +375,58 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		return nil, err
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	}
+}
+
+// callbackHandler serves the OAuth redirect. It ends the login by sending
+// exactly one result on tokenCh or errCh, and only for a request carrying
+// the state this login generated.
+//
+// A request with a missing or wrong state is answered with 400 and
+// otherwise ignored. It isn't Spotify redirecting back: it could be a
+// callback tab left over from an earlier attempt being reloaded, or any
+// local process or web page (an <img> tag will do) hitting the loopback
+// port. Letting it fail the login would let anyone abort it.
+//
+// The callback can also be hit more than once (browser prefetch,
+// reloading the success tab). Sends are non-blocking so extra hits can't
+// park a handler goroutine and stall server.Shutdown.
+func callbackHandler(
+	state string,
+	exchange func(ctx context.Context, code string) (*oauth2.Token, error),
+	tokenCh chan<- *oauth2.Token,
+	errCh chan<- error,
+) http.HandlerFunc {
+	fail := func(w http.ResponseWriter, status int, err error) {
+		select {
+		case errCh <- err:
+		default:
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(status)
+		fmt.Fprint(w, "<html><body><h1>Login failed</h1><p>Return to the terminal for details.</p></body></html>")
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		if q.Get("state") != state {
+			http.Error(w, "invalid or missing state", http.StatusBadRequest)
+			return
+		}
+		code := q.Get("code")
+		if code == "" {
+			fail(w, http.StatusBadRequest, fmt.Errorf("auth error: %s", q.Get("error")))
+			return
+		}
+		token, err := exchange(r.Context(), code)
+		if err != nil {
+			fail(w, http.StatusBadGateway, err)
+			return
+		}
+		fmt.Fprint(w, "<html><body><h1>Success!</h1><p>You can close this window.</p></body></html>")
+		select {
+		case tokenCh <- token:
+		default:
+		}
 	}
 }
 
