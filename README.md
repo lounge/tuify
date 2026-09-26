@@ -61,6 +61,8 @@ Pre-built binaries for all platforms are available on the [Releases](https://git
 5. Run `tuify` — it will ask for your Client ID on first launch
 6. A browser window will open to authorize with Spotify
 
+`tuify --version` (`-v`) prints the version and `tuify --help` (`-h`) lists the flags; there are no others.
+
 ## Keybindings
 
 | Key | Action |
@@ -143,7 +145,7 @@ Add these to `~/.config/tuify/config.json`:
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `enable_librespot` | `true` | Enable librespot integration |
+| `enable_librespot` | `false` | Enable librespot integration |
 | `librespot_path` | `"librespot"` | Path to librespot binary |
 | `device_name` | `"tuify"` | Spotify Connect device name |
 | `bitrate` | `320` | Audio bitrate (96, 160, or 320 kbps) |
@@ -221,7 +223,7 @@ What each role drives:
 
 ## Logs
 
-Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. The log is overwritten every time you start tuify. Check this file if something isn't working as expected. Error banners in the app show a short summary; the full Spotify response behind each one is written to this log.
+Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. Starting tuify moves the previous run's log to `debug.log.1`, so the log from a crashed session survives one relaunch. Check this file if something isn't working as expected. Error banners in the app show a short summary; the full Spotify response behind each one is written to this log.
 
 ---
 
@@ -236,7 +238,8 @@ git clone https://github.com/lounge/tuify.git
 cd tuify
 go build
 go test ./...
-golangci-lint run ./...   # matches CI; catches formatting + lint issues
+gofmt -l .                # CI fails if this lists anything
+golangci-lint run ./...   # matches CI lint job
 ```
 
 ### Architecture
@@ -251,6 +254,7 @@ golangci-lint run ./...   # matches CI; catches formatting + lint issues
 | `internal/lyrics` | Genius.com lyrics scraping |
 | `internal/auth` | OAuth2 PKCE authentication |
 | `internal/config` | Configuration management |
+| `internal/termsafe` | Strips terminal control characters from Spotify and Genius text |
 | `internal/theme` | Color palette + user theme overrides applied at startup |
 | `internal/testutil` | Test-only helpers shared across packages (HTTP stubbing) |
 

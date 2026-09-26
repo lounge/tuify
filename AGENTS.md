@@ -17,14 +17,14 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.26+.
 
 ## Architecture
 
-`main.go` is a one-liner into `bootstrap.Run`. Everything lives under `internal/`. Each internal package has a `doc.go` — read it before touching the package; the package-level comment is the source of truth for intent and invariants.
+`main.go` handles `--version`/`--help` (anything else exits 2) and calls `bootstrap.Run`, mapping its `ErrInterrupted` to exit status 130. Everything lives under `internal/`. Each internal package has a `doc.go` — read it before touching the package; the package-level comment is the source of truth for intent and invariants.
 
 ### Startup sequence (`internal/bootstrap`)
 
 `Run` owns a root `context.Context` that is cancelled on return. That context is threaded into auth (token refresh), spotify (polls), librespot (reconnect/transfer), and the UI model so every background goroutine unwinds at shutdown rather than running to its per-op timeout. Order matters:
 
 1. Load/setup config → `theme.Apply(cfg.Theme)` → `ui.RebuildStyles()` **before** any rendering (see Hard rule on Lipgloss style construction).
-2. `authenticate` returns a `*spotify.Client` plus channels for revoked-token + token-save errors that are wired into the UI via `ModelOption`s.
+2. `authenticate` returns an `*authSession`: the `*spotify.Client` plus channels for revoked-token + token-save errors that are wired into the UI via `ModelOption`s, and a cleanup func.
 3. `startLibrespot` is optional; when active it provides additional `ModelOption`s (audio pipe → FFT, device reconnect callbacks).
 4. `zone.NewGlobal()` then `tea.NewProgram(..., WithAltScreen(), WithMouseCellMotion())`.
 
@@ -75,7 +75,7 @@ When a request is ambiguous about scope, ask before building.
 
 - **Lint config is intentional.** `staticcheck` is restricted to `SA*` (pre-v2 baseline). `gosec` excludes G115/G204/G117/G118 — see `.golangci.yml` for the reasoning before adding new exceptions or re-enabling.
 - **`doc.go` is the package contract.** When you change exported API, behavior, or examples in a package, update its `doc.go` in the same change.
-- **Top-level declaration order** in each Go file: `package → imports → const → type → var → init → func`. Keep gofmt + golangci-lint clean.
+- **File organization** follows the Go convention: package doc, imports, constants, then each type grouped with its constructor and methods, then helpers. Keep gofmt + golangci-lint clean.
 - **Tests stub HTTP**, not the SDK. Use `testutil.RewriteTransport` to redirect outbound requests to an `httptest.Server`.
 
 ## Issue and PR Guidelines

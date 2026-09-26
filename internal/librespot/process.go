@@ -14,7 +14,12 @@ import (
 )
 
 const (
-	DefaultBackend    = "pipe"
+	// DefaultBackend is the audio backend used when none is configured:
+	// raw PCM on stdout, which tuify reads for the visualizers and plays
+	// itself.
+	DefaultBackend = "pipe"
+	// DefaultDeviceName is the Spotify Connect name librespot registers
+	// under when none is configured.
 	DefaultDeviceName = "tuify"
 )
 

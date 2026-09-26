@@ -199,6 +199,10 @@ func (s *savingTokenSource) startProactiveRefresh(ctx context.Context) {
 	}()
 }
 
+// NewAuthenticator returns a PKCE authenticator for clientID with the
+// scopes tuify needs: reading and controlling playback, and reading the
+// user's playlists and saved shows. redirectURL must match one registered
+// for the app in the Spotify dashboard.
 func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 	return spotifyauth.New(
 		spotifyauth.WithClientID(clientID),
@@ -214,19 +218,27 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 }
 
 // NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
-// and persists them to disk on each refresh. The returned cleanup function
-// stops the proactive-refresh goroutine; callers must invoke it on shutdown.
-// saveErrCh emits non-fatal problems (buffered, lossy on full) so the
-// caller can surface them to the user: token.json write failures, and a
-// failed refresh at startup that is not a revocation. revokedCh fires exactly once if
-// Spotify rejects the refresh token as permanently invalid ("invalid_grant"
-// — most commonly Spotify's 6-month refresh-token lifetime (measured from
-// original authorization, not extended by refresh), or the user revoking
-// the app in their account settings); the stale token file is deleted
-// before the signal so the next launch runs login cleanly.
+// and persists them to disk on each refresh.
+//
+// cleanup stops the proactive-refresh goroutine; callers must invoke it on
+// shutdown. saveErrCh emits non-fatal problems (buffered, lossy on full) so
+// the caller can surface them to the user: token.json write failures, and
+// a failed refresh at startup that is not a revocation. revokedCh fires
+// exactly once if Spotify rejects the refresh token as permanently invalid
+// ("invalid_grant": most commonly Spotify's 6-month refresh-token lifetime,
+// measured from the original authorization and not extended by refreshes,
+// or the user revoking the app in their account settings); the stale token
+// file is deleted before the signal so the next launch runs login cleanly.
+//
 // ctx is the parent lifetime: when it is cancelled, the proactive-refresh
 // goroutine exits and in-flight oauth2 refresh requests are cancelled too.
-func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token) (*http.Client, <-chan error, <-chan struct{}, func(), error) {
+func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token) (
+	client *http.Client,
+	saveErrCh <-chan error,
+	revokedCh <-chan struct{},
+	cleanup func(),
+	err error,
+) {
 	// Provide a timeout-configured client for oauth2 token refresh requests.
 	// Without this, token refreshes use http.DefaultClient (no timeouts) and
 	// a hanging refresh blocks ALL API calls behind the oauth2 mutex.
