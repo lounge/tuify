@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"image"
+	"net/http"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,6 +28,9 @@ type visualizerModel struct {
 	lyricsCache boundedCache[string, cachedLyrics]
 	audioSrc    AudioSource
 	audioSeenAt time.Time // sticky flag for "audio was flowing recently"
+	// httpClient fetches album art and lyrics. A field rather than a
+	// package var so tests can point it at an httptest server.
+	httpClient *http.Client
 }
 
 // audioStickyWindow keeps audioFlowing() true for this long after the
@@ -62,6 +66,7 @@ func newVisualizerModel(hasAudio bool) *visualizerModel {
 	// exercise those paths.
 	return &visualizerModel{
 		vizList:     vizList,
+		httpClient:  newFetchClient(),
 		images:      newAsyncLoader[fetchResult](),
 		imageCache:  newBoundedCache[string, image.Image](20),
 		lyrics:      newAsyncLoader[lyricsFetchResult](),

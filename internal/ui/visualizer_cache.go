@@ -6,12 +6,22 @@ import (
 	"time"
 )
 
-var httpClient = &http.Client{Timeout: 10 * time.Second}
+// newFetchClient returns the HTTP client for album art and lyrics, which
+// talk to CDNs and genius.com rather than the Spotify API.
+func newFetchClient() *http.Client {
+	return &http.Client{Timeout: 10 * time.Second}
+}
 
 // maxAlbumArtBytes caps image downloads so a hostile or malformed URL can't
 // stream unbounded data into image.Decode. Spotify artwork fits comfortably
 // under this; anything larger is almost certainly not the expected content.
 const maxAlbumArtBytes = 5 * 1024 * 1024
+
+// maxAlbumArtSide caps each dimension of a decoded image. The byte cap
+// alone isn't enough: PNG and JPEG decoders allocate the full pixel buffer
+// from the header, and a 1.5 MB PNG can declare 20000x20000 (1.6 GB).
+// Spotify's largest artwork is 640x640.
+const maxAlbumArtSide = 4096
 
 // asyncLoader manages the result channel and cancellation for a background
 // fetch. Both the image and lyrics loaders share this lifecycle.

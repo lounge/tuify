@@ -36,9 +36,10 @@ func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
 	}
 
 	ctx, cancel, ch := m.lyrics.begin(m.ctx, 15*time.Second)
+	client := m.httpClient
 	go func() {
 		defer cancel()
-		text, err := lyrics.Search(ctx, httpClient, track, artist)
+		text, err := lyrics.Search(ctx, client, track, artist)
 		res := lyricsFetchResult{trackID: trackID, err: err}
 		if errors.Is(err, lyrics.ErrInstrumental) {
 			res.instrumental = true

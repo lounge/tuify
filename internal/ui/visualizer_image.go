@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"bytes"
 	"context"
+	"fmt"
 	"image"
-	_ "image/jpeg"
+	_ "image/jpeg" // register the decoders album art arrives in
 	_ "image/png"
 	"io"
 	"log"
@@ -36,26 +38,49 @@ func (m *visualizerModel) loadImage(imageURL string) {
 
 	ctx, cancel, ch := m.images.begin(m.ctx, 10*time.Second)
 	url := imageURL
+	client := m.httpClient
 	go func() {
 		defer cancel()
 		// Exactly one send on this operation's own 1-slot channel, so it
 		// never blocks.
-		ch <- fetchImage(ctx, url)
+		ch <- fetchImage(ctx, client, url)
 	}()
 }
 
-func fetchImage(ctx context.Context, url string) fetchResult {
+func fetchImage(ctx context.Context, client *http.Client, url string) fetchResult {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fetchResult{err: err, url: url}
 	}
-	resp, err := httpClient.Do(req)
+	resp, err := client.Do(req)
 	if err != nil {
 		return fetchResult{err: err, url: url}
 	}
 	defer resp.Body.Close()
-	img, _, err := image.Decode(io.LimitReader(resp.Body, maxAlbumArtBytes))
+	if resp.StatusCode != http.StatusOK {
+		return fetchResult{err: fmt.Errorf("album art: HTTP %d", resp.StatusCode), url: url}
+	}
+	img, err := decodeAlbumArt(io.LimitReader(resp.Body, maxAlbumArtBytes))
 	return fetchResult{img: img, url: url, err: err}
+}
+
+// decodeAlbumArt decodes an image after checking the dimensions its header
+// declares, so an oversized image is rejected before the decoder allocates
+// its pixel buffer.
+func decodeAlbumArt(r io.Reader) (image.Image, error) {
+	data, err := io.ReadAll(r)
+	if err != nil {
+		return nil, err
+	}
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if cfg.Width > maxAlbumArtSide || cfg.Height > maxAlbumArtSide {
+		return nil, fmt.Errorf("album art too large: %dx%d", cfg.Width, cfg.Height)
+	}
+	img, _, err := image.Decode(bytes.NewReader(data))
+	return img, err
 }
 
 func (m *visualizerModel) drainImages() {
