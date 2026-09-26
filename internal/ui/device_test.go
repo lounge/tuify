@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
 )
 
@@ -179,46 +180,49 @@ func TestHandleLoaded_NoActiveDevice(t *testing.T) {
 	}
 }
 
-func TestTransferring_BlocksOpen(t *testing.T) {
-	d := deviceSelectorModel{}
-	d.transferring = true
+// While a transfer is in flight, Tab must not open the device selector.
+func TestUpdate_TabIgnoredWhileTransferring(t *testing.T) {
+	m := newIntentTestModel()
+	m.deviceSelector.transferring = true
 
-	// Simulates the tab key guard in handleKeyMsg.
-	if !d.transferring {
-		t.Error("transferring should be true")
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	after := updated.(Model)
+
+	if after.showDeviceSelector {
+		t.Error("Tab opened the device selector during a transfer")
+	}
+	if cmd != nil {
+		t.Errorf("Tab during a transfer returned a cmd (device fetch?): %v", cmd)
 	}
 }
 
-func TestTransferring_ClearedOnTargetMatch(t *testing.T) {
-	d := deviceSelectorModel{
-		transferring:     true,
-		transferTarget:   "tuify",
-		transferDeadline: time.Now().Add(15 * time.Second),
+// The transfer lock clears once a player-state poll reports the target
+// device, or once its deadline passes; until then it holds.
+func TestUpdate_PlayerStateClearsTransferLock(t *testing.T) {
+	tests := []struct {
+		name     string
+		device   string
+		deadline time.Duration
+		want     bool // still transferring afterwards
+	}{
+		{"target confirmed", "tuify", time.Minute, false},
+		{"deadline passed", "Phone", -time.Second, false},
+		{"still waiting", "Phone", time.Minute, true},
 	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			m := newIntentTestModel()
+			m.deviceSelector.transferring = true
+			m.deviceSelector.transferTarget = "tuify"
+			m.deviceSelector.transferDeadline = time.Now().Add(tc.deadline)
 
-	// Simulate poller confirming the device switched.
-	deviceName := "tuify"
-	if deviceName == d.transferTarget {
-		d.transferring = false
-	}
-	if d.transferring {
-		t.Error("transferring should be cleared when target matches")
-	}
-}
-
-func TestTransferring_ClearedOnDeadline(t *testing.T) {
-	d := deviceSelectorModel{
-		transferring:     true,
-		transferTarget:   "tuify",
-		transferDeadline: time.Now().Add(-1 * time.Second),
-	}
-
-	// Simulate deadline check in handleStateUpdate.
-	if time.Now().After(d.transferDeadline) {
-		d.transferring = false
-	}
-	if d.transferring {
-		t.Error("transferring should be cleared after deadline")
+			updated, _ := m.Update(playerStateMsg{state: &spotify.PlayerState{
+				TrackURI: "spotify:track:1", DurationMs: 1000, DeviceName: tc.device,
+			}})
+			if got := updated.(Model).deviceSelector.transferring; got != tc.want {
+				t.Errorf("transferring = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
