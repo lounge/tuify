@@ -118,24 +118,54 @@ func (p *Process) launch() error {
 	args := p.args()
 	p.cmd = exec.Command(p.config.BinaryPath, args...)
 	p.done = make(chan struct{})
+	// Bounds how long Wait keeps copying output after librespot exits, in
+	// case a child it spawned (e.g. an --onevent hook) still holds the
+	// pipes open.
+	p.cmd.WaitDelay = logDrainTimeout
 
-	stdout, err := p.cmd.StdoutPipe()
-	if err != nil {
-		p.cmd = nil
-		return fmt.Errorf("failed to get librespot stdout: %w", err)
+	// Log output goes through io.Pipes instead of StdoutPipe/StderrPipe.
+	// Those are closed by Wait as soon as the process is reaped, dropping
+	// whatever was still unread, typically the lines explaining a crash.
+	// With an io.Pipe, Wait returns only after exec has copied everything
+	// into it, and the logger drains it before the exit is logged.
+	var logsDone []<-chan struct{}
+	var logWriters []*io.PipeWriter
+	logTo := func(prefix string, onLine func(string)) io.Writer {
+		pr, pw := io.Pipe()
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			pipeLog(prefix, pr, onLine)
+		}()
+		logsDone = append(logsDone, done)
+		logWriters = append(logWriters, pw)
+		return pw
 	}
-	stderr, err := p.cmd.StderrPipe()
-	if err != nil {
-		stdout.Close()
-		p.cmd = nil
-		return fmt.Errorf("failed to get librespot stderr: %w", err)
+	closeLogs := func() {
+		for _, pw := range logWriters {
+			pw.Close()
+		}
 	}
+
+	var stdout io.ReadCloser
+	if p.OnStdout != nil {
+		var err error
+		if stdout, err = p.cmd.StdoutPipe(); err != nil {
+			p.cmd = nil
+			return fmt.Errorf("failed to get librespot stdout: %w", err)
+		}
+	} else {
+		p.cmd.Stdout = logTo("[librespot:out]", nil)
+	}
+	p.cmd.Stderr = logTo("[librespot:err]", p.monitorStderr)
 
 	log.Printf("[librespot] starting: %s %v", p.config.BinaryPath, args)
 
 	if err := p.cmd.Start(); err != nil {
-		stdout.Close()
-		stderr.Close()
+		if stdout != nil {
+			stdout.Close()
+		}
+		closeLogs()
 		p.cmd = nil
 		return fmt.Errorf("failed to start librespot: %w", err)
 	}
@@ -145,10 +175,7 @@ func (p *Process) launch() error {
 
 	if p.OnStdout != nil {
 		go p.OnStdout(stdout)
-	} else {
-		go pipeLog("[librespot:out]", stdout, nil)
 	}
-	go pipeLog("[librespot:err]", stderr, p.monitorStderr)
 
 	startedAt := time.Now()
 	done := p.done
@@ -159,6 +186,8 @@ func (p *Process) launch() error {
 
 	go func() {
 		err := cmd.Wait()
+		closeLogs()
+		drainLogs(logsDone)
 		if err != nil {
 			log.Printf("[librespot] exited: %v", err)
 		} else {
@@ -181,6 +210,9 @@ const (
 	// maxLogLine caps one line of librespot output. bufio.Scanner's default
 	// is 64 KiB; librespot occasionally dumps large debug payloads.
 	maxLogLine = 1024 * 1024
+	// logDrainTimeout bounds how long an exit waits for librespot's last
+	// output to be copied and logged.
+	logDrainTimeout = 2 * time.Second
 
 	restartBaseDelay = 2 * time.Second
 	restartMaxDelay  = 30 * time.Second
@@ -322,6 +354,20 @@ func (p *Process) monitorStderr(line string) {
 // If scanning fails (e.g. a line longer than maxLogLine), the error is logged
 // and the rest of r is discarded rather than abandoned: an undrained pipe
 // would block librespot on its next write to stdout/stderr.
+// drainLogs waits for the log readers to finish the output librespot wrote
+// before exiting, giving up after logDrainTimeout so a stuck reader can't
+// hold up the restart.
+func drainLogs(done []<-chan struct{}) {
+	timeout := time.After(logDrainTimeout)
+	for _, d := range done {
+		select {
+		case <-d:
+		case <-timeout:
+			return
+		}
+	}
+}
+
 func pipeLog(prefix string, r io.Reader, onLine func(string)) {
 	scanner := bufio.NewScanner(r)
 	scanner.Buffer(make([]byte, 0, 64*1024), maxLogLine)

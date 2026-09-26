@@ -3,8 +3,13 @@ package librespot
 import (
 	"bytes"
 	"io"
+	"log"
+	"os"
+	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -412,4 +417,72 @@ func assertHasFlag(t *testing.T, args []string, flag string) {
 		return
 	}
 	t.Errorf("expected args to contain %s, got %v", flag, args)
+}
+
+// slowLog is a log sink that takes a moment per line, standing in for a
+// busy machine, so librespot exits while its output is still being read.
+type slowLog struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *slowLog) Write(p []byte) (int, error) {
+	time.Sleep(100 * time.Microsecond)
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *slowLog) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// The output librespot writes right before it dies is what explains the
+// crash, so it must be logged before the exit is. Wait used to close the
+// stderr pipe while it was still being read and drop that tail.
+//
+// Not parallel: it redirects the global logger.
+func TestLaunch_LogsOutputWrittenBeforeExit(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a shell script as the fake librespot")
+	}
+	script := filepath.Join(t.TempDir(), "librespot")
+	body := "#!/bin/sh\ni=0\nwhile [ $i -lt 3000 ]; do echo \"line $i\" >&2; i=$((i+1)); done\necho 'FATAL: last words' >&2\nexit 1\n"
+	if err := os.WriteFile(script, []byte(body), 0o700); err != nil { //nolint:gosec // the fake binary must be executable
+		t.Fatal(err)
+	}
+
+	var logs slowLog
+	prev := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	p := NewProcess(Config{BinaryPath: script, Backend: "pulseaudio"})
+	if err := p.Start(); err != nil {
+		t.Fatal(err)
+	}
+	p.mu.Lock()
+	done := p.done
+	p.mu.Unlock()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("fake librespot did not exit")
+	}
+	p.Stop() // cancel the scheduled restart
+
+	out := logs.String()
+	last := strings.Index(out, "FATAL: last words")
+	exited := strings.Index(out, "[librespot] exited")
+	if last < 0 {
+		t.Fatalf("last stderr line was never logged:\n%s", out[max(0, len(out)-500):])
+	}
+	if exited < last {
+		t.Error("exit was logged before librespot's final output")
+	}
+	if strings.Contains(out, "file already closed") {
+		t.Error("stderr reader hit a closed pipe")
+	}
 }
