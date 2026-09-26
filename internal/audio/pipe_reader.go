@@ -234,8 +234,9 @@ type pipeReaderBridge struct {
 	pipe        io.Reader
 	analyzer    *Analyzer
 	format      PCMFormat
-	totalFrames int64 // mono samples read so far
-	accum       []byte
+	totalFrames int64   // mono samples read so far
+	accum       []byte  // bytes not yet analyzed; compacted in place, never re-sliced from the front
+	samples     []int16 // decoded chunk, reused across chunks
 	store       func(*FrequencyData)
 }
 
@@ -256,19 +257,27 @@ func (b *pipeReaderBridge) Read(p []byte) (int, error) {
 	b.accum = append(b.accum, p[:n]...)
 
 	// Process all complete chunks in the accumulation buffer.
-	for len(b.accum) >= ChunkBytes {
-		chunk := b.accum[:ChunkBytes]
-		samples := make([]int16, WindowSize*2) // stereo
-		for i := range WindowSize * 2 {
-			samples[i] = int16(binary.LittleEndian.Uint16(chunk[i*2 : i*2+2]))
+	if b.samples == nil {
+		b.samples = make([]int16, WindowSize*2) // stereo
+	}
+	off := 0
+	for len(b.accum)-off >= ChunkBytes {
+		chunk := b.accum[off : off+ChunkBytes]
+		for i := range b.samples {
+			b.samples[i] = int16(binary.LittleEndian.Uint16(chunk[i*2 : i*2+2]))
 		}
 
-		fd := b.analyzer.Analyze(samples)
+		fd := b.analyzer.Analyze(b.samples)
 		fd.ProgressMs = int32(b.totalFrames * 1000 / int64(b.format.SampleRate))
 
 		b.store(&fd)
 
-		b.accum = b.accum[ChunkBytes:]
+		off += ChunkBytes
+	}
+	// Move the partial chunk to the front so accum keeps its capacity and
+	// the next append doesn't reallocate.
+	if off > 0 {
+		b.accum = b.accum[:copy(b.accum, b.accum[off:])]
 	}
 
 	return n, err

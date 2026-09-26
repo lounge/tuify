@@ -359,3 +359,47 @@ func TestPipeReader_Latest_ConcurrentSetVolume(t *testing.T) {
 	<-done
 	<-done
 }
+
+// TestBridgeRead_OddReadSizesMatchWholeChunks feeds the bridge reads that
+// never line up with a chunk boundary, so partial chunks carry over
+// between reads, and checks it publishes the same frames as analyzing
+// each whole chunk directly.
+func TestBridgeRead_OddReadSizesMatchWholeChunks(t *testing.T) {
+	const chunks = 5
+	raw := generateSineBytes(440, chunks)
+
+	var got []FrequencyData
+	br := &pipeReaderBridge{
+		pipe:     bytes.NewReader(raw),
+		analyzer: NewAnalyzer(WindowSize),
+		format:   DefaultFormat,
+		store:    func(fd *FrequencyData) { got = append(got, *fd) },
+	}
+	p := make([]byte, 3001)
+	for {
+		if _, err := br.Read(p); err == io.EOF {
+			break
+		} else if err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(got) != chunks {
+		t.Fatalf("published %d frames, want %d", len(got), chunks)
+	}
+
+	ref := NewAnalyzer(WindowSize)
+	samples := make([]int16, WindowSize*2)
+	for c := range chunks {
+		chunk := raw[c*ChunkBytes : (c+1)*ChunkBytes]
+		for i := range samples {
+			samples[i] = int16(binary.LittleEndian.Uint16(chunk[i*2:]))
+		}
+		want := ref.Analyze(samples)
+		if got[c].Bands != want.Bands {
+			t.Errorf("frame %d bands differ from a direct Analyze of the same chunk", c)
+		}
+		if wantMs := int32(int64(c+1) * WindowSize * 1000 / int64(DefaultFormat.SampleRate)); got[c].ProgressMs > wantMs+100 || got[c].ProgressMs < wantMs {
+			t.Errorf("frame %d ProgressMs = %d, want about %d", c, got[c].ProgressMs, wantMs)
+		}
+	}
+}
