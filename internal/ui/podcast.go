@@ -39,7 +39,7 @@ func newPodcastView(ctx context.Context, client *spotify.Client, width, height i
 	return &podcastView{lazyList: newLazyList(ctx, load, width, height, vimMode)}
 }
 
-func (v *podcastView) OnEnter() tea.Cmd {
+func (v *podcastView) onEnter() tea.Cmd {
 	if pi, ok := v.list.SelectedItem().(podcastItem); ok {
 		return emitIntent(openEpisodesIntent{showID: pi.id, showName: pi.name})
 	}
@@ -47,4 +47,4 @@ func (v *podcastView) OnEnter() tea.Cmd {
 	return cmd
 }
 
-func (v *podcastView) Breadcrumb() string { return "Home > Podcasts" }
+func (v *podcastView) breadcrumb() string { return "Home > Podcasts" }

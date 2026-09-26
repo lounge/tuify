@@ -210,11 +210,11 @@ func (v *searchView) SetSize(width, height int) {
 	v.list.SetSize(width, height)
 }
 
-func (v *searchView) List() *list.Model {
+func (v *searchView) listModel() *list.Model {
 	return &v.list
 }
 
-// scrollUp / scrollDown / clickAt / Back / SearchState satisfy the
+// scrollUp / scrollDown / clickAt / back / searchState satisfy the
 // capability interfaces in common.go so Model.Update doesn't have to
 // type-assert against *searchView.
 
@@ -235,7 +235,7 @@ func (v *searchView) clickAt(msg tea.MouseMsg) string {
 	return ""
 }
 
-func (v *searchView) Back() (tea.Cmd, bool) {
+func (v *searchView) back() (tea.Cmd, bool) {
 	if v.depth == 0 {
 		return nil, false
 	}
@@ -245,9 +245,9 @@ func (v *searchView) Back() (tea.Cmd, bool) {
 	return nil, false
 }
 
-func (v *searchView) SearchState() (bool, string) { return v.searching, v.searchQuery }
+func (v *searchView) searchState() (bool, string) { return v.searching, v.searchQuery }
 
-func (v *searchView) SyncURI(uri string) tea.Cmd {
+func (v *searchView) syncTo(uri string) tea.Cmd {
 	if !v.isPlayable() {
 		return nil
 	}

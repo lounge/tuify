@@ -93,7 +93,7 @@ func (m Model) handleSearchInput(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 			close: func() { sl.closeSearch() },
 			play: func(item list.Item) tea.Cmd {
 				if e, ok := m.currentView().(enterable); ok {
-					return e.OnEnter()
+					return e.onEnter()
 				}
 				return nil
 			},

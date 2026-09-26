@@ -36,7 +36,7 @@ func (m Model) View() string {
 		b.WriteString(m.visualizer.View(m.width, contentHeight))
 	default:
 		listShown = true
-		if crumbs := m.currentView().Breadcrumb(); crumbs != "" {
+		if crumbs := m.currentView().breadcrumb(); crumbs != "" {
 			b.WriteString(breadcrumbStyle.Render(crumbs))
 			b.WriteString("\n")
 		}
@@ -48,7 +48,7 @@ func (m Model) View() string {
 	var searchActive bool
 	var searchQuery string
 	if s, ok := m.currentView().(searchAware); ok {
-		searchActive, searchQuery = s.SearchState()
+		searchActive, searchQuery = s.searchState()
 	}
 	b.WriteString(m.nowPlaying.View(searchActive, searchQuery))
 

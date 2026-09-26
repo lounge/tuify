@@ -49,7 +49,7 @@ func newEpisodeView(ctx context.Context, client *spotify.Client, showID, showNam
 	}
 }
 
-func (v *episodeView) OnEnter() tea.Cmd {
+func (v *episodeView) onEnter() tea.Cmd {
 	if ei, ok := v.list.SelectedItem().(episodeItem); ok {
 		return emitIntent(playItemIntent{
 			itemURI:    ei.uri,
@@ -60,11 +60,11 @@ func (v *episodeView) OnEnter() tea.Cmd {
 	return cmd
 }
 
-func (v *episodeView) Breadcrumb() string {
+func (v *episodeView) breadcrumb() string {
 	return fmt.Sprintf("Home > Podcasts > %s", v.showName)
 }
 
-func (v *episodeView) SyncURI(uri string) tea.Cmd {
+func (v *episodeView) syncTo(uri string) tea.Cmd {
 	if v.selectByURI(uri) {
 		return v.fetchMore()
 	}

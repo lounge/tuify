@@ -339,7 +339,7 @@ func TestPlaylistAndPodcastSearch_KeepsFetchingWhileFiltering(t *testing.T) {
 		name string
 		v    interface {
 			view
-			SearchableList() *lazyList
+			searchableList() *lazyList
 		}
 		item list.Item
 	}{
@@ -348,7 +348,7 @@ func TestPlaylistAndPodcastSearch_KeepsFetchingWhileFiltering(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			ll := tc.v.SearchableList()
+			ll := tc.v.searchableList()
 			ll.searching = true
 			loaded := pageLoadedMsg{listID: ll.id, items: []list.Item{tc.item}, fetched: 1, hasMore: true}
 			if cmd := tc.v.Update(loaded); cmd == nil {

@@ -197,7 +197,7 @@ func TestSearchView_DrillDownThenBackRestoresResults(t *testing.T) {
 	}
 
 	v.list.Select(2)
-	cmd := v.OnEnter()
+	cmd := v.onEnter()
 	if cmd == nil {
 		t.Fatal("Enter on an artist did not start a drill-down fetch")
 	}
@@ -208,11 +208,11 @@ func TestSearchView_DrillDownThenBackRestoresResults(t *testing.T) {
 	if got := uris(v.items); len(got) != 4 || got[0] != "spotify:album:artist2-album0" {
 		t.Fatalf("albums = %v, want artist2's albums", got)
 	}
-	if bc := v.Breadcrumb(); bc != "Home > Search > Artist artist2" {
+	if bc := v.breadcrumb(); bc != "Home > Search > Artist artist2" {
 		t.Errorf("breadcrumb = %q", bc)
 	}
 
-	back, handled := v.Back()
+	back, handled := v.back()
 	if !handled || back == nil {
 		t.Fatalf("Back at depth 1: handled=%v cmd=%v, want a refetch", handled, back != nil)
 	}
@@ -233,7 +233,7 @@ func TestSearchView_DrillDownThenBackRestoresResults(t *testing.T) {
 		t.Errorf("selected after Back = %#v, want artist2", v.list.SelectedItem())
 	}
 
-	if _, handled := v.Back(); handled {
+	if _, handled := v.back(); handled {
 		t.Error("Back at depth 0 must be left to the shell (pop the view)")
 	}
 }

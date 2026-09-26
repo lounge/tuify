@@ -134,12 +134,9 @@ func (l *lazyList) retryOnError() (cmd tea.Cmd, handled bool) {
 	return nil, false
 }
 
-// SearchableList exposes the list for local filtering. Satisfies
+// searchableList exposes the list for local filtering. Satisfies
 // searchableListProvider.
-func (l *lazyList) SearchableList() *lazyList { return l }
-
-// FetchMore loads the next page. Satisfies searchableListProvider.
-func (l *lazyList) FetchMore() tea.Cmd { return l.fetchMore() }
+func (l *lazyList) searchableList() *lazyList { return l }
 
 // onLoaded clears the loading indicator. Call at the start of a loaded-msg handler.
 func (l *lazyList) onLoaded() {
@@ -226,7 +223,7 @@ func (l *lazyList) SetSize(width, height int) {
 }
 
 // List returns a pointer to the inner list.
-func (l *lazyList) List() *list.Model {
+func (l *lazyList) listModel() *list.Model {
 	return &l.list
 }
 
@@ -257,7 +254,7 @@ func (l *lazyList) clickAt(msg tea.MouseMsg) string {
 
 // SearchState reports whether the view is in filter-search mode.
 // Satisfies searchAware.
-func (l *lazyList) SearchState() (bool, string) { return l.searching, l.searchQuery }
+func (l *lazyList) searchState() (bool, string) { return l.searching, l.searchQuery }
 
 // openSearch enters search mode. Returns true if the caller should trigger
 // a fetch to load remaining items.

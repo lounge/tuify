@@ -184,7 +184,7 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // have no owner and are dropped.
 func (m Model) routePage(msg pageLoadedMsg) tea.Cmd {
 	for _, v := range m.viewStack {
-		if p, ok := v.(searchableListProvider); ok && p.SearchableList().id == msg.listID {
+		if p, ok := v.(searchableListProvider); ok && p.searchableList().id == msg.listID {
 			return v.Update(msg)
 		}
 	}
@@ -233,7 +233,7 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Sync list selection when the playing item changes
 	if m.nowPlaying.trackURI != prevURI {
 		if sv, ok := m.currentView().(syncableView); ok {
-			if cmd := sv.SyncURI(m.nowPlaying.trackURI); cmd != nil {
+			if cmd := sv.syncTo(m.nowPlaying.trackURI); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -255,7 +255,7 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if b, ok := m.currentView().(backable); ok {
-		if cmd, handled := b.Back(); handled {
+		if cmd, handled := b.back(); handled {
 			return m, cmd
 		}
 	}
@@ -265,7 +265,7 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	if e, ok := m.currentView().(enterable); ok {
-		return m, e.OnEnter()
+		return m, e.onEnter()
 	}
 	return m, nil
 }

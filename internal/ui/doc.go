@@ -33,9 +33,9 @@
 // constructing the target view or dispatching the corresponding command,
 // so the view → shell dependency is strictly one-way. Concretely:
 //
-//   - User presses Enter on a playlist → playlistView.OnEnter emits
+//   - User presses Enter on a playlist → playlistView.onEnter emits
 //     openTracksIntent{id, name} → shell creates trackView and pushes.
-//   - User selects a track in trackView → OnEnter emits playItemIntent
+//   - User selects a track in trackView → onEnter emits playItemIntent
 //     → shell dispatches withDevice-wrapped Spotify Play call.
 //
 // # Capability interfaces
@@ -43,7 +43,9 @@
 // The shell dispatches work via small capability interfaces rather than
 // type-asserting against concrete view types (see common.go):
 //
-//   - view (Init/Update/View/SetSize/Breadcrumb) — every screen
+//   - view (Update/View/SetSize/breadcrumb) — every screen. Screens that
+//     load data also have an Init, which the shell calls when it pushes
+//     them (lazyList provides it for the paged lists).
 //   - listProvider, searchableListProvider — for shared key handling
 //   - syncableView — for "sync selection to playing track"
 //   - enterable — for Enter-key activation
@@ -55,7 +57,12 @@
 //     through the session it returns
 //
 // Adding a new screen means implementing the capabilities it cares about;
-// no edits to handleMouse/handleBack/handleKeyMsg are needed.
+// no edits to handleMouse/handleBack/handleKeyMsg are needed. The methods
+// mirroring bubbletea (Init/Update/View) and bubbles (SetSize) keep their
+// exported names; the rest are package-internal and lowercase. List each
+// new screen's capabilities in the compile-time checks at the end of
+// common.go: the shell finds them by type assertion, so a missing method
+// would otherwise only show up as a key or click that does nothing.
 //
 // # Rendering
 //

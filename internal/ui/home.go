@@ -80,7 +80,7 @@ func (v *homeView) clickAt(msg tea.MouseMsg) string {
 	return ""
 }
 
-func (v *homeView) OnEnter() tea.Cmd {
+func (v *homeView) onEnter() tea.Cmd {
 	switch v.selectedItem().name {
 	case "Search":
 		return emitIntent(openSearchIntent{})
@@ -97,7 +97,7 @@ func (v *homeView) SetSize(width, height int) {
 	v.height = height
 }
 
-func (v *homeView) Breadcrumb() string { return "" }
+func (v *homeView) breadcrumb() string { return "" }
 
 func (v *homeView) View() string {
 	var tabs []string

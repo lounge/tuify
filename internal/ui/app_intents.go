@@ -42,7 +42,7 @@ type playQueueIntent struct {
 	uris []string
 }
 
-// emitIntent wraps an intent message in a tea.Cmd so OnEnter/playSelected
+// emitIntent wraps an intent message in a tea.Cmd so onEnter/playSelected
 // can return it as their Cmd result. Bubbletea will deliver the message
 // to Model.Update on the next tick.
 func emitIntent(msg tea.Msg) tea.Cmd {

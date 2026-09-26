@@ -142,21 +142,21 @@ func (m Model) listHeight() int {
 
 func (m Model) currentList() *list.Model {
 	if lp, ok := m.currentView().(listProvider); ok {
-		return lp.List()
+		return lp.listModel()
 	}
 	return nil
 }
 
 func (m *Model) searchableList() *lazyList {
 	if sp, ok := m.currentView().(searchableListProvider); ok {
-		return sp.SearchableList()
+		return sp.searchableList()
 	}
 	return nil
 }
 
 func (m Model) fetchSearchableView() tea.Cmd {
 	if sp, ok := m.currentView().(searchableListProvider); ok {
-		return sp.FetchMore()
+		return sp.fetchMore()
 	}
 	return nil
 }

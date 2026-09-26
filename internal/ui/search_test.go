@@ -239,9 +239,9 @@ func TestSearchView_Breadcrumb(t *testing.T) {
 	}
 
 	for _, tt := range tests {
-		got := tt.v.Breadcrumb()
+		got := tt.v.breadcrumb()
 		if got != tt.want {
-			t.Errorf("%s: Breadcrumb() = %q, want %q", tt.name, got, tt.want)
+			t.Errorf("%s: breadcrumb() = %q, want %q", tt.name, got, tt.want)
 		}
 	}
 }

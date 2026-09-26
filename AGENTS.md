@@ -33,7 +33,7 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.26+.
 - **Shell** (`app*.go`) owns the `Model`, view stack, event loop, and every side effect (Spotify calls, clipboard, device transfer).
 - **Screens** (home/playlist/track/podcast/episode/search) own local state and render themselves. They communicate with the shell via *intent messages* (`app_intents.go`).
 - **Submodels** (`nowPlayingModel`, `visualizerModel`, `deviceSelectorModel`) are long-lived state on `Model` that transcends the view stack.
-- The shell dispatches via small **capability interfaces** in `common.go` (`listProvider`, `scrollable`, `clickable`, `enterable`, `searchAware`, `syncableView`, `backable`, …). Adding a new screen means implementing the capabilities it cares about.
+- The shell dispatches via small **capability interfaces** in `common.go` (`listProvider`, `scrollable`, `clickable`, `enterable`, `searchAware`, `syncableView`, `backable`, …). Adding a new screen means implementing the capabilities it cares about and listing them in the compile-time checks at the end of `common.go` (the shell finds capabilities by type assertion, so a missing or misnamed method fails silently otherwise). Capability methods are lowercase except those mirroring bubbletea/bubbles (`Init`, `Update`, `View`, `SetSize`).
 - Every frame that shows a list is wrapped in `bubblezone.Scan`; list rows are marked by Spotify URI via `zoneListDelegate` (in `styles.go`) so clicks resolve back to specific items. Overlays and the visualizer skip the scan, and `handleMouse` ignores the pointer while they are up.
 
 ### Audio pipeline (`internal/audio` + `internal/librespot`)

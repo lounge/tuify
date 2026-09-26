@@ -47,19 +47,19 @@ func TestHandleSeekFire_CurrentSequenceFires(t *testing.T) {
 // render panics before.
 
 type heightCaptureView struct {
-	breadcrumb string
-	gotWidth   int
-	gotHeight  int
+	crumb     string
+	gotWidth  int
+	gotHeight int
 }
 
 func (v *heightCaptureView) Update(msg tea.Msg) tea.Cmd { return nil }
 func (v *heightCaptureView) View() string               { return "" }
 func (v *heightCaptureView) SetSize(width, height int)  { v.gotWidth = width; v.gotHeight = height }
-func (v *heightCaptureView) Breadcrumb() string         { return v.breadcrumb }
+func (v *heightCaptureView) breadcrumb() string         { return v.crumb }
 
 func TestHandleResize_SubtractsBreadcrumbOnlyWhenPresent(t *testing.T) {
-	withCrumb := &heightCaptureView{breadcrumb: "Home > Playlists"}
-	noCrumb := &heightCaptureView{breadcrumb: ""}
+	withCrumb := &heightCaptureView{crumb: "Home > Playlists"}
+	noCrumb := &heightCaptureView{crumb: ""}
 	m := Model{
 		nowPlaying: &nowPlayingModel{},
 		viewStack:  []view{noCrumb, withCrumb},

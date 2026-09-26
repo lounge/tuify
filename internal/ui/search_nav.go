@@ -102,7 +102,7 @@ func (v *searchView) goBack() bool {
 	return true
 }
 
-func (v *searchView) OnEnter() tea.Cmd {
+func (v *searchView) onEnter() tea.Cmd {
 	selected := v.list.SelectedItem()
 	if si, ok := selected.(statusItem); ok && si.isError {
 		return v.retry()
@@ -165,8 +165,8 @@ func (v *searchView) contextURI() string {
 	return ""
 }
 
-// Breadcrumb returns the search-specific breadcrumb segments (after "Home > Search").
-func (v *searchView) Breadcrumb() string {
+// breadcrumb returns the search-specific breadcrumb segments (after "Home > Search").
+func (v *searchView) breadcrumb() string {
 	crumbs := "Home > Search"
 	switch v.prefix {
 	case prefixArtist:

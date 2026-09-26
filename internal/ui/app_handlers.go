@@ -19,7 +19,7 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.nowPlaying.width = msg.Width
 	for _, v := range m.viewStack {
 		h := m.height - nowPlayingHeight
-		if v.Breadcrumb() != "" {
+		if v.breadcrumb() != "" {
 			h -= breadcrumbHeight
 		}
 		v.SetSize(msg.Width, h)

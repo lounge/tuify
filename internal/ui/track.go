@@ -50,7 +50,7 @@ func newTrackView(ctx context.Context, client *spotify.Client, playlistID, playl
 	}
 }
 
-func (v *trackView) OnEnter() tea.Cmd {
+func (v *trackView) onEnter() tea.Cmd {
 	if ti, ok := v.list.SelectedItem().(trackItem); ok {
 		return emitIntent(playItemIntent{
 			itemURI:    ti.uri,
@@ -61,11 +61,11 @@ func (v *trackView) OnEnter() tea.Cmd {
 	return cmd
 }
 
-func (v *trackView) Breadcrumb() string {
+func (v *trackView) breadcrumb() string {
 	return fmt.Sprintf("Home > Playlists > %s", v.playlistName)
 }
 
-func (v *trackView) SyncURI(uri string) tea.Cmd {
+func (v *trackView) syncTo(uri string) tea.Cmd {
 	if v.selectByURI(uri) {
 		return v.fetchMore()
 	}

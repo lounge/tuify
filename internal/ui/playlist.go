@@ -56,7 +56,7 @@ func playlistLoader(client *spotify.Client) pageLoader {
 	}
 }
 
-func (v *playlistView) OnEnter() tea.Cmd {
+func (v *playlistView) onEnter() tea.Cmd {
 	if pi, ok := v.list.SelectedItem().(playlistItem); ok {
 		return emitIntent(openTracksIntent{playlistID: pi.id, playlistName: pi.name})
 	}
@@ -64,4 +64,4 @@ func (v *playlistView) OnEnter() tea.Cmd {
 	return cmd
 }
 
-func (v *playlistView) Breadcrumb() string { return "Home > Playlists" }
+func (v *playlistView) breadcrumb() string { return "Home > Playlists" }

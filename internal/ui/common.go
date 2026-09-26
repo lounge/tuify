@@ -40,18 +40,18 @@ type view interface {
 	Update(msg tea.Msg) tea.Cmd
 	View() string
 	SetSize(width, height int)
-	Breadcrumb() string
+	breadcrumb() string
 }
 
 // listProvider is implemented by views that expose a bubbles list.
 type listProvider interface {
-	List() *list.Model
+	listModel() *list.Model
 }
 
 // searchableListProvider is implemented by views that support local search.
 type searchableListProvider interface {
-	SearchableList() *lazyList
-	FetchMore() tea.Cmd
+	searchableList() *lazyList
+	fetchMore() tea.Cmd
 }
 
 // inputSearcher is implemented by views that own a search input session
@@ -65,14 +65,14 @@ type inputSearcher interface {
 
 // syncableView is implemented by views that sync selection to the playing track.
 type syncableView interface {
-	SyncURI(uri string) tea.Cmd
+	syncTo(uri string) tea.Cmd
 }
 
 // enterable is implemented by views that handle the Enter key.
 // Returns a tea.Cmd that produces an intent message (see app_intents.go).
 // Views don't touch the Model directly — the shell interprets intents.
 type enterable interface {
-	OnEnter() tea.Cmd
+	onEnter() tea.Cmd
 }
 
 // scrollable is implemented by views that respond to mouse-wheel
@@ -95,14 +95,14 @@ type clickable interface {
 // (e.g. drill-down retreat in search). When handled is false, the
 // caller should pop to the previous view instead.
 type backable interface {
-	Back() (cmd tea.Cmd, handled bool)
+	back() (cmd tea.Cmd, handled bool)
 }
 
 // searchAware is implemented by views that host a search-input mode
 // (dedicated search view, or any lazyList-based view with local filter).
 // The returned query drives the prompt shown in the now-playing bar.
 type searchAware interface {
-	SearchState() (active bool, query string)
+	searchState() (active bool, query string)
 }
 
 // uriItem is implemented by list items that have a Spotify URI.
@@ -200,3 +200,64 @@ func spotifyURL(uri string) string {
 	}
 	return ""
 }
+
+// Compile-time checks that each screen still implements the capabilities
+// the shell looks for. The shell finds them with type assertions, which
+// a renamed or dropped method would fail silently at run time.
+var (
+	_ interface {
+		view
+		enterable
+		scrollable
+		clickable
+	} = (*homeView)(nil)
+	_ interface {
+		view
+		enterable
+		listProvider
+		searchableListProvider
+		scrollable
+		clickable
+		searchAware
+	} = (*playlistView)(nil)
+	_ interface {
+		view
+		enterable
+		listProvider
+		searchableListProvider
+		scrollable
+		clickable
+		searchAware
+	} = (*podcastView)(nil)
+	_ interface {
+		view
+		enterable
+		listProvider
+		searchableListProvider
+		syncableView
+		scrollable
+		clickable
+		searchAware
+	} = (*trackView)(nil)
+	_ interface {
+		view
+		enterable
+		listProvider
+		searchableListProvider
+		syncableView
+		scrollable
+		clickable
+		searchAware
+	} = (*episodeView)(nil)
+	_ interface {
+		view
+		enterable
+		listProvider
+		inputSearcher
+		syncableView
+		scrollable
+		clickable
+		backable
+		searchAware
+	} = (*searchView)(nil)
+)
