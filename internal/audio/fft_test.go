@@ -164,3 +164,93 @@ func TestNewAnalyzer_PanicsOnNonPowerOfTwo(t *testing.T) {
 		}()
 	}
 }
+
+// bandEdgeHz is the lower edge of band b (and upper edge of band b-1) for
+// 64 log-spaced bands over 20 Hz – 20 kHz, restated independently of
+// newAnalyzer so a drift in the analyzer's mapping shows up as a mismatch.
+func bandEdgeHz(b int) float64 {
+	return 20 * math.Pow(1000, float64(b)/NumBands)
+}
+
+// TestAnalyzeSinePeakBand pins the exact band a pure tone lands in. Each
+// tone sits on an FFT bin centre (so the Hann main lobe covers only k±1)
+// and at least one bin inside its band's Hz edges, so the peak band is
+// unambiguous; the expected band comes from the log-spacing formula, not
+// from the analyzer's own loBin/hiBin tables.
+func TestAnalyzeSinePeakBand(t *testing.T) {
+	t.Parallel()
+
+	binHz := float64(defaultFormat.SampleRate) / WindowSize
+	tests := []struct {
+		name string
+		bin  int // FFT bin whose centre frequency is played
+	}{
+		{"431Hz", 20},
+		{"1012Hz", 47},
+		{"2433Hz", 113},
+		{"5190Hz", 241},
+		{"12317Hz", 572},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			freq := float64(tt.bin) * binHz
+			want := int(math.Floor(NumBands * math.Log(freq/20) / math.Log(1000)))
+			lo, hi := bandEdgeHz(want), bandEdgeHz(want+1)
+			if freq-lo < 0.9*binHz || hi-freq < 0.9*binHz {
+				t.Fatalf("test tone %.1f Hz is too close to band %d edges [%.1f, %.1f] to be unambiguous", freq, want, lo, hi)
+			}
+
+			a := newAnalyzer(WindowSize)
+			samples := make([]int16, WindowSize*2)
+			for i := range WindowSize {
+				val := int16(32000 * math.Sin(2*math.Pi*freq*float64(i)/float64(defaultFormat.SampleRate)))
+				samples[i*2] = val
+				samples[i*2+1] = val
+			}
+			fd := a.Analyze(samples)
+
+			peakBand := 0
+			for i, b := range fd.Bands {
+				if b > fd.Bands[peakBand] {
+					peakBand = i
+				}
+			}
+			if peakBand != want {
+				t.Errorf("%.1f Hz peaked in band %d, want band %d [%.1f, %.1f) Hz", freq, peakBand, want, lo, hi)
+			}
+			if fd.Bands[peakBand] < 0.999 {
+				t.Errorf("peak band value = %f, want ≈1 (first frame normalizes to its own peak)", fd.Bands[peakBand])
+			}
+		})
+	}
+}
+
+// TestNewAnalyzer_BandBins pins the band→bin map: bands are ordered,
+// adjacent bands share exactly their boundary bin (edges are computed from
+// the same expression), and together they span 20 Hz – 20 kHz.
+func TestNewAnalyzer_BandBins(t *testing.T) {
+	t.Parallel()
+
+	a := newAnalyzer(WindowSize)
+	binHz := float64(defaultFormat.SampleRate) / WindowSize
+
+	if a.loBin[0] != int(20/binHz) {
+		t.Errorf("loBin[0] = %d, want %d (20 Hz)", a.loBin[0], int(20/binHz))
+	}
+	if wantHi := min(int(20000/binHz), WindowSize/2-1); a.hiBin[NumBands-1] != wantHi {
+		t.Errorf("hiBin[%d] = %d, want %d (20 kHz)", NumBands-1, a.hiBin[NumBands-1], wantHi)
+	}
+	for b := range NumBands {
+		if a.loBin[b] > a.hiBin[b] {
+			t.Errorf("band %d: loBin %d > hiBin %d", b, a.loBin[b], a.hiBin[b])
+		}
+		if want := int(bandEdgeHz(b) / binHz); a.loBin[b] != want {
+			t.Errorf("band %d: loBin = %d, want %d (%.1f Hz)", b, a.loBin[b], want, bandEdgeHz(b))
+		}
+		if b > 0 && a.loBin[b] != a.hiBin[b-1] {
+			t.Errorf("band %d: loBin %d != hiBin[%d] %d (bands must be contiguous)", b, a.loBin[b], b-1, a.hiBin[b-1])
+		}
+	}
+}
