@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -264,5 +265,12 @@ func TestFetchCmd_AppliesListFetchTimeout(t *testing.T) {
 	// The deadline is set inside cmd, so it falls in [start, end] + timeout.
 	if gotDeadline.Before(start.Add(listFetchTimeout)) || gotDeadline.After(end.Add(listFetchTimeout)) {
 		t.Errorf("deadline %v, want listFetchTimeout (%v) after the fetch started", gotDeadline.Sub(start), listFetchTimeout)
+	}
+}
+
+func TestSearchHintText_UsesThemeStyles(t *testing.T) {
+	withTrueColor(t)
+	if got := searchHintText(); !strings.Contains(got, "\x1b[") {
+		t.Errorf("search hint has no colour escapes; styles were captured before RebuildStyles: %q", got)
 	}
 }

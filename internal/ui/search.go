@@ -256,7 +256,7 @@ func (v *searchView) SyncURI(uri string) tea.Cmd {
 
 func (v searchView) View() string {
 	if v.depth == 0 && v.query == "" && len(v.items) == 0 && v.pending == 0 {
-		box := searchHintBoxStyle.Render(searchHintText)
+		box := searchHintBoxStyle.Render(searchHintText())
 		return lipgloss.Place(v.list.Width(), v.list.Height(), lipgloss.Center, lipgloss.Center, box)
 	}
 	return v.list.View()

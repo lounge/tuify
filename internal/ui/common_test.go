@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func TestFormatDuration(t *testing.T) {
@@ -140,4 +141,19 @@ func TestRenderStatusLine_Error(t *testing.T) {
 	if got != errorStyle.Render("Failed to copy") {
 		t.Errorf("error styling mismatch; got %q want %q", got, errorStyle.Render("Failed to copy"))
 	}
+}
+
+// withTrueColor forces lipgloss to emit 24-bit colour for the rest of the
+// test and rebuilds the package styles under it, restoring both afterwards.
+// Tests that assert on colour output need it: under `go test` stdout is not
+// a terminal, so lipgloss would otherwise render plain text.
+func withTrueColor(t *testing.T) {
+	t.Helper()
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	RebuildStyles()
+	t.Cleanup(func() {
+		lipgloss.SetColorProfile(prev)
+		RebuildStyles()
+	})
 }

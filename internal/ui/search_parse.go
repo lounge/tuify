@@ -17,14 +17,6 @@ const (
 	prefixShow                        // "s:"
 )
 
-var searchHintText = strings.Join([]string{
-	helpCmdStyle.Render("t:") + helpDescStyle.Render("  track search (default)"),
-	helpCmdStyle.Render("e:") + helpDescStyle.Render("  episode search"),
-	helpCmdStyle.Render("a:") + helpDescStyle.Render("  artist → album → track"),
-	helpCmdStyle.Render("l:") + helpDescStyle.Render("  album → track"),
-	helpCmdStyle.Render("s:") + helpDescStyle.Render("  show → episode"),
-}, "\n")
-
 // parseSearch splits input into prefix + term. Returns prefixTrack for
 // unrecognised prefixes (the whole string becomes the term).
 func parseSearch(input string) (searchPrefix, string) {
@@ -63,4 +55,17 @@ type searchResultMsg struct {
 // selectedRef is a drill-down selection pinned across depth levels.
 type selectedRef struct {
 	id, uri, name string
+}
+
+// searchHintText renders the prefix cheat sheet shown under an empty search
+// input. It is rendered on demand rather than stored in a package var so it
+// picks up the styles RebuildStyles builds after theme.Apply.
+func searchHintText() string {
+	return strings.Join([]string{
+		helpCmdStyle.Render("t:") + helpDescStyle.Render("  track search (default)"),
+		helpCmdStyle.Render("e:") + helpDescStyle.Render("  episode search"),
+		helpCmdStyle.Render("a:") + helpDescStyle.Render("  artist → album → track"),
+		helpCmdStyle.Render("l:") + helpDescStyle.Render("  album → track"),
+		helpCmdStyle.Render("s:") + helpDescStyle.Render("  show → episode"),
+	}, "\n")
 }
