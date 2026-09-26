@@ -47,7 +47,14 @@ func (m nowPlayingModel) pollInterval() time.Duration {
 	return 10 * time.Second
 }
 
-func (m nowPlayingModel) pollState() tea.Cmd {
+// pollState returns a Cmd that fetches the player state. Polls overlap (the
+// regular tick, the delayed polls after a command, the end-of-track poll),
+// so each is numbered and handlePlayerState drops a reply that is older
+// than one it already applied; otherwise a slow poll started before "next"
+// could land last and flip the UI back to the previous track.
+func (m *nowPlayingModel) pollState() tea.Cmd {
+	m.pollSeq++
+	seq := m.pollSeq
 	client := m.client
 	parent := m.ctx
 	return func() tea.Msg {
@@ -55,12 +62,12 @@ func (m nowPlayingModel) pollState() tea.Cmd {
 		// rescheduled for after the deadline. Returning a sentinel skipped
 		// message keeps handlePlayerState from clearing hasTrack.
 		if client.IsRateLimited() {
-			return playerStateMsg{skipped: true}
+			return playerStateMsg{seq: seq, skipped: true}
 		}
 		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
 		state, err := client.GetPlayerState(ctx)
-		return playerStateMsg{state: state, err: err}
+		return playerStateMsg{seq: seq, state: state, err: err}
 	}
 }
 

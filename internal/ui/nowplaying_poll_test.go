@@ -243,3 +243,19 @@ func waitEntered(t *testing.T, entered <-chan struct{}) {
 		t.Fatal("request never reached the server")
 	}
 }
+
+// A poll that started earlier but finished later must not roll the UI back
+// to the state it saw.
+func TestHandlePlayerState_DropsReplyOlderThanApplied(t *testing.T) {
+	np := newTestNowPlaying(t)
+	np.ctx = t.Context()
+	np.pollState() // seq 1: slow poll, still sees the old track
+	np.pollState() // seq 2: fast poll after "next"
+
+	np.handlePlayerState(playerStateMsg{seq: 2, state: &spotify.PlayerState{TrackURI: "spotify:track:new", TrackName: "New", DurationMs: 1000}})
+	np.handlePlayerState(playerStateMsg{seq: 1, state: &spotify.PlayerState{TrackURI: "spotify:track:old", TrackName: "Old", DurationMs: 1000}})
+
+	if np.trackURI != "spotify:track:new" {
+		t.Errorf("trackURI = %q; the older poll's reply was applied over the newer one", np.trackURI)
+	}
+}

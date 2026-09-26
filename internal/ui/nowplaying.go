@@ -27,6 +27,7 @@ const (
 // Messages
 
 type playerStateMsg struct {
+	seq     uint64 // pollState's sequence number; see appliedPollSeq
 	state   *spotify.PlayerState
 	err     error
 	skipped bool // true when the poll short-circuited (e.g. rate-limit cooldown)
@@ -75,6 +76,8 @@ type nowPlayingModel struct {
 
 	// Polling
 	lastUserAction time.Time // zero value means no action yet; pollInterval treats this as idle
+	pollSeq        uint64    // numbers each pollState request
+	appliedPollSeq uint64    // newest request whose reply has been applied
 
 	// Episode progress resume
 	progressCache map[string]int // trackURI → last known progressMs
@@ -148,7 +151,7 @@ func newNowPlaying(client *spotify.Client) *nowPlayingModel {
 
 // Lifecycle
 
-func (m nowPlayingModel) Init() tea.Cmd {
+func (m *nowPlayingModel) Init() tea.Cmd {
 	return tea.Batch(m.pollState(), m.tick(), m.progressTick())
 }
 
@@ -171,6 +174,10 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 }
 
 func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
+	if msg.seq < m.appliedPollSeq {
+		return nil // an older poll finishing after a newer one
+	}
+	m.appliedPollSeq = msg.seq
 	if msg.skipped {
 		return nil
 	}
