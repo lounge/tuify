@@ -3,6 +3,7 @@ package audio
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"io"
 	"math"
 	"sync/atomic"
@@ -387,7 +388,7 @@ func TestBridgeRead_OddReadSizesMatchWholeChunks(t *testing.T) {
 	}
 	p := make([]byte, 3001)
 	for {
-		if _, err := br.Read(p); err == io.EOF {
+		if _, err := br.Read(p); errors.Is(err, io.EOF) {
 			break
 		} else if err != nil {
 			t.Fatal(err)

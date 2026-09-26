@@ -16,6 +16,10 @@ linters:
     - gosec
     - misspell
     - gocritic
+    # - usestdlibvars: http.MethodGet etc. instead of string literals.
+    # - bodyclose: unclosed HTTP response bodies leak connections.
+    - usestdlibvars
+    - bodyclose
 
   settings:
     errcheck:
@@ -53,6 +57,10 @@ linters:
         - G118
 
     gocritic:
+      enabled-checks:
+        # evalOrder catches `return m, m.mutate()` on value receivers: the
+        # spec leaves unspecified whether m is read before or after the call.
+        - evalOrder
       disabled-checks:
         # singleCaseSwitch fires on `switch msg := msg.(type)` even when
         # there's genuinely one case today — the type-switch form is

@@ -3,6 +3,7 @@ package lyrics
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -342,7 +343,7 @@ func TestSearch_Instrumental(t *testing.T) {
 	defer cleanup()
 
 	_, err := Search(context.Background(), client, "Instrumental Track", "Artist")
-	if err != ErrInstrumental {
+	if !errors.Is(err, ErrInstrumental) {
 		t.Errorf("expected ErrInstrumental, got %v", err)
 	}
 }

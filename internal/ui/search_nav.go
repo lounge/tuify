@@ -54,14 +54,15 @@ func (v *searchView) drillDown(item list.Item) tea.Cmd {
 			return v.fetchResults("", 0, 10)
 		}
 	case prefixArtist:
-		if v.depth == 0 {
+		switch v.depth {
+		case 0:
 			if ai, ok := item.(artistItem); ok {
 				v.depth = 1
 				v.selectedArtist = selectedRef{id: ai.id, name: ai.name}
 				v.startLoading()
 				return v.fetchResults("", 0, 10)
 			}
-		} else if v.depth == 1 {
+		case 1:
 			if ai, ok := item.(albumItem); ok {
 				v.depth = 2
 				v.selectedAlbum = selectedRef{id: ai.id, uri: ai.uri, name: ai.name}

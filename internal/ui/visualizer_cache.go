@@ -66,12 +66,12 @@ func (l *asyncLoader[R]) cancelPending() {
 
 // boundedCache is a map that evicts all entries except the current key when full.
 type boundedCache[K comparable, V any] struct {
-	m   map[K]V
-	cap int
+	m        map[K]V
+	capacity int
 }
 
-func newBoundedCache[K comparable, V any](cap int) boundedCache[K, V] {
-	return boundedCache[K, V]{m: make(map[K]V), cap: cap}
+func newBoundedCache[K comparable, V any](capacity int) boundedCache[K, V] {
+	return boundedCache[K, V]{m: make(map[K]V), capacity: capacity}
 }
 
 func (c *boundedCache[K, V]) get(key K) (V, bool) {
@@ -82,7 +82,7 @@ func (c *boundedCache[K, V]) get(key K) (V, bool) {
 // put stores val under key. If the cache is full, all entries except keepKey
 // are evicted first.
 func (c *boundedCache[K, V]) put(key K, val V, keepKey K) {
-	if len(c.m) >= c.cap {
+	if len(c.m) >= c.capacity {
 		keep, ok := c.m[keepKey]
 		c.m = make(map[K]V)
 		if ok {

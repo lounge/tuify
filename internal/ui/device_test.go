@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -226,7 +227,7 @@ func TestHandleLoaded_Error(t *testing.T) {
 	d.open()
 	d.handleLoaded(devicesLoadedMsg{err: errTest})
 
-	if d.err != errTest {
+	if !errors.Is(d.err, errTest) {
 		t.Errorf("err: got %v, want %v", d.err, errTest)
 	}
 	if d.loading {
@@ -299,7 +300,7 @@ func TestInjectExternalDevice_NoOpOnError(t *testing.T) {
 	msg := devicesLoadedMsg{err: errTest}
 	out := injectExternalDevice(msg, "Sonos")
 
-	if len(out.devices) != 0 || out.err != errTest {
+	if len(out.devices) != 0 || !errors.Is(out.err, errTest) {
 		t.Errorf("error message should pass through unchanged; got devices=%d err=%v", len(out.devices), out.err)
 	}
 }

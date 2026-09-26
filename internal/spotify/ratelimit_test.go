@@ -28,7 +28,7 @@ func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
 	rl := newRateLimitTransport(srv.Client().Transport)
 	client := &http.Client{Transport: rl}
 
-	req, _ := http.NewRequest("GET", srv.URL, nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("first call: unexpected err: %v", err)
@@ -41,8 +41,11 @@ func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
 		t.Fatalf("first call: hits got %d want 1", hits.Load())
 	}
 
-	req2, _ := http.NewRequest("GET", srv.URL, nil)
-	_, err = client.Do(req2)
+	req2, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+	resp2, err := client.Do(req2)
+	if resp2 != nil {
+		resp2.Body.Close()
+	}
 	if err == nil {
 		t.Fatal("second call: expected RateLimitedError, got nil")
 	}
@@ -72,7 +75,7 @@ func TestRateLimitTransport_ShortRetryAfterPassesThrough(t *testing.T) {
 	rl := newRateLimitTransport(srv.Client().Transport)
 	client := &http.Client{Transport: rl}
 
-	req, _ := http.NewRequest("GET", srv.URL, nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, err := client.Do(req)
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
@@ -98,7 +101,7 @@ func TestRateLimitTransport_LargeRetryAfterCapped(t *testing.T) {
 	rl := newRateLimitTransport(srv.Client().Transport)
 	client := &http.Client{Transport: rl}
 
-	req, _ := http.NewRequest("GET", srv.URL, nil)
+	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
 	resp, _ := client.Do(req)
 	if resp != nil {
 		resp.Body.Close()
@@ -136,7 +139,7 @@ func always(status int) func() int { return func() int { return status } }
 // so callers can tell a gated call (*RateLimitedError) from a real one.
 func get(t *testing.T, rl *rateLimitTransport) error {
 	t.Helper()
-	req, _ := http.NewRequest("GET", "https://api.spotify.com/v1/me/player", nil)
+	req, _ := http.NewRequest(http.MethodGet, "https://api.spotify.com/v1/me/player", nil)
 	resp, err := rl.RoundTrip(req)
 	if resp != nil {
 		resp.Body.Close()

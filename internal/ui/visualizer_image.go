@@ -45,7 +45,7 @@ func (m *visualizerModel) loadImage(imageURL string) {
 }
 
 func fetchImage(ctx context.Context, url string) fetchResult {
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fetchResult{err: err, url: url}
 	}

@@ -52,10 +52,7 @@ func NewPipeReader() *PipeReader {
 // goroutine; applies to the next Latest() read. Out-of-range values are
 // clamped and logged so upstream data quality issues surface in the log.
 func (pr *PipeReader) SetVolumePercent(v int) {
-	clamped := max(v, 0)
-	if clamped > 100 {
-		clamped = 100
-	}
+	clamped := min(max(v, 0), 100)
 	if clamped != v {
 		log.Printf("[pipe-reader] volume %d out of range, clamped to %d", v, clamped)
 	}

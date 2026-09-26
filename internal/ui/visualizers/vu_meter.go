@@ -316,9 +316,7 @@ func buildLabelOverlay(width, arcRows int, ticks []tickDef, pivotVX, pivotVY, r,
 
 		vyTop := pivotVY - r*math.Cos(theta) - stalkVyHeight
 		syTop := int(math.Round(vyTop / vuYAspect))
-		row := max(
-			// labels sit two cell rows above the stalk top
-			syTop/2-2, 0)
+		row := max(syTop/2-2, 0) // labels sit two cell rows above the stalk top
 
 		start := colArc - len(t.label)/2
 		if start+len(t.label) > width {
@@ -327,7 +325,7 @@ func buildLabelOverlay(width, arcRows int, ticks []tickDef, pivotVX, pivotVY, r,
 		if start < 0 {
 			start = 0
 		}
-		for i := 0; i < len(t.label); i++ {
+		for i := range len(t.label) {
 			c := start + i
 			cr, cg, cb := hslToRGB(vuColumnHue(c, width), 0.8, 0.55)
 			set(row, c, t.label[i], cr, cg, cb)
@@ -424,7 +422,7 @@ func centerTextGradient(width int, text string) string {
 	for range pad {
 		bld.WriteByte(' ')
 	}
-	for i := 0; i < len(text); i++ {
+	for i := range len(text) {
 		c := pad + i
 		cr, cg, cb := hslToRGB(vuColumnHue(c, width), 0.8, 0.55)
 		writeAnsiFg(&bld, cr, cg, cb)
@@ -471,13 +469,7 @@ func packArc(grid []vuCellKind, subW, width, arcRows int, overlay map[int]labelC
 			if br != vuKindEmpty {
 				pattern |= quadrantBits[3]
 			}
-			best := max(tr, tl)
-			if bl > best {
-				best = bl
-			}
-			if br > best {
-				best = br
-			}
+			best := max(tr, tl, bl, br)
 			cr, cg, cb := hslToRGB(vuColumnHue(col, width), 0.8, vuKindLum(best))
 			writeAnsiFg(&buf, cr, cg, cb)
 			buf.WriteString(quadrantGlyphs[pattern])
@@ -627,7 +619,7 @@ func renderBarRow(width int, db float64, label string) string {
 
 	var b strings.Builder
 	// Prefix characters take the gradient hue of their column.
-	for i := 0; i < len(prefix); i++ {
+	for i := range len(prefix) {
 		cr, cg, cb := hslToRGB(vuColumnHue(i, width), 0.8, 0.55)
 		writeAnsiFg(&b, cr, cg, cb)
 		b.WriteByte(prefix[i])

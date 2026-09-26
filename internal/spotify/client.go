@@ -156,7 +156,7 @@ func (e *APIError) Unwrap() error {
 // non-2xx responses; callers can errors.As to inspect the status.
 func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
 	for range 3 {
-		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -257,11 +257,11 @@ func (c *Client) apiGet(ctx context.Context, url string, result any) error {
 // a UTF-8 rune boundary so we never emit a malformed byte sequence followed
 // by the ellipsis.
 func truncateForLog(b []byte) []byte {
-	const max = 500
-	if len(b) <= max {
+	const maxLen = 500
+	if len(b) <= maxLen {
 		return b
 	}
-	cut := max
+	cut := maxLen
 	for cut > 0 {
 		r, _ := utf8.DecodeLastRune(b[:cut])
 		if r != utf8.RuneError {
