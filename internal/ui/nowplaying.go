@@ -89,6 +89,10 @@ type nowPlayingModel struct {
 	// fit in the available width. Measured in display cells and advances
 	// once per labelScrollInterval. Resets to 0 on every track change.
 	labelScrollOffset int
+	// labelTicking is true while a labelScrollMsg is in flight. The shell
+	// only keeps the chain alive while the label overflows; see
+	// app_tickers.go.
+	labelTicking bool
 
 	// Status display (errors and info messages)
 	statusMsg     string
@@ -99,6 +103,18 @@ type nowPlayingModel struct {
 	// rendered from the package-level loadingSpinner, which ticks once for
 	// the whole UI — no per-model spinner state or tick chain required.
 	statusSpinning bool
+}
+
+// advanceLabelScroll moves the marquee one cell and wraps within the
+// composed stream width so the offset stays bounded. Keeps the offset in
+// [0, streamW) forever — no int overflow concern on long sessions and no
+// reliance on modulo normalization downstream.
+func (m *nowPlayingModel) advanceLabelScroll() {
+	if w := m.labelStreamWidth(); w > 0 {
+		m.labelScrollOffset = (m.labelScrollOffset + 1) % w
+	} else {
+		m.labelScrollOffset = 0
+	}
 }
 
 // setDeviceOverride updates the device override state in both the UI model and
@@ -133,7 +149,7 @@ func newNowPlaying(client *spotify.Client) *nowPlayingModel {
 // Lifecycle
 
 func (m nowPlayingModel) Init() tea.Cmd {
-	return tea.Batch(m.pollState(), m.tick(), m.progressTick(), m.labelScrollTick())
+	return tea.Batch(m.pollState(), m.tick(), m.progressTick())
 }
 
 func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
@@ -144,17 +160,6 @@ func (m *nowPlayingModel) Update(msg tea.Msg) tea.Cmd {
 		return tea.Batch(m.pollState(), m.tick())
 	case progressTickMsg:
 		return m.handleProgressTick()
-	case labelScrollMsg:
-		// Advance the marquee and wrap within the composed stream width
-		// so the offset stays bounded. Keeps the offset in [0, streamW)
-		// forever — no int overflow concern on long sessions and no
-		// reliance on modulo normalization downstream.
-		if w := m.labelStreamWidth(); w > 0 {
-			m.labelScrollOffset = (m.labelScrollOffset + 1) % w
-		} else {
-			m.labelScrollOffset = 0
-		}
-		return m.labelScrollTick()
 	case delayedPollMsg:
 		return m.pollState()
 	case clearStatusMsg:
@@ -318,7 +323,8 @@ func (m *nowPlayingModel) SetInfo(msg string) tea.Cmd {
 // status auto-clears (or a subsequent SetError / SetInfo replaces it).
 // Use for operations that take a moment to settle — e.g. "Switching to
 // Living Room Speaker" while the device poll confirms the transfer. The
-// spinner tick is driven by Model.Init / Model.Update at the top level.
+// shell restarts the idle spinner tick on the Update that sets this (see
+// app_tickers.go).
 func (m *nowPlayingModel) SetSpinningInfo(msg string) tea.Cmd {
 	m.statusMsg = msg
 	m.statusIsError = false

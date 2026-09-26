@@ -64,7 +64,20 @@ func (m Model) waitForTokenRevoked() tea.Cmd {
 	}
 }
 
+// Update applies msg, then restarts any idle UI ticker (loading spinner,
+// label marquee) that the new state needs. Every state change passes
+// through here, so no loading or resize path has to remember to kick
+// the tickers itself.
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	updated, cmd := m.update(msg)
+	next := updated.(Model)
+	if resume := next.resumeTickers(); resume != nil {
+		return next, tea.Batch(cmd, resume)
+	}
+	return next, cmd
+}
+
+func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		return m.handleResize(msg)
@@ -106,13 +119,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Exit the TUI; bootstrap.Run prints the re-login message on stderr.
 		return m, tea.Quit
 	case spinner.TickMsg:
-		// Advance the global loading spinner and reschedule. Every frame
-		// that references loadingSpinner.View() — list status rows, device
-		// overlay, now-playing banner — sees the new frame on the next
-		// View() call triggered by this very tick.
-		var cmd tea.Cmd
-		loadingSpinner, cmd = loadingSpinner.Update(msg)
-		return m, cmd
+		return m.handleSpinnerTick(msg)
+	case labelScrollMsg:
+		return m.handleLabelScroll()
 	case devicesLoadedMsg:
 		msg = injectExternalDevice(msg, m.nowPlaying.deviceName)
 		m.deviceSelector.handleLoaded(msg)

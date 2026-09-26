@@ -5,8 +5,9 @@
 // The package is a shell + screens + submodels composition:
 //
 //   - The shell (app.go, app_update.go, app_keys.go, app_view.go,
-//     app_handlers.go, app_commands.go) owns the Model, the view stack,
-//     the event loop, and every Spotify/clipboard/device side effect.
+//     app_handlers.go, app_commands.go, app_tickers.go) owns the Model,
+//     the view stack, the event loop, and every Spotify/clipboard/device
+//     side effect.
 //   - Screens are individual views living on the view stack — homeView,
 //     playlistView, trackView, podcastView, episodeView, searchView.
 //     Each owns its local state (cursor, fetched items, filter query)
@@ -15,6 +16,15 @@
 //     view stack: nowPlayingModel (playback + marquee scroll),
 //     visualizerModel (viz pane + async image/lyrics loaders),
 //     deviceSelectorModel.
+//
+// # On-demand tick chains
+//
+// The loading spinner and the now-playing label marquee tick only while
+// something on screen uses them. Each tick handler stops rescheduling once
+// idle, and Model.Update calls resumeTickers after every message to
+// restart a chain the new state needs, so loading and resize paths never
+// have to start a tick themselves. A new spinning UI element must be
+// covered by needsSpinner (app_tickers.go) or its spinner will not move.
 //
 // # View → shell communication
 //

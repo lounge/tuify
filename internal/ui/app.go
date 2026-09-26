@@ -36,19 +36,23 @@ type Model struct {
 	// All Spotify API calls wrap it with a per-operation timeout rather
 	// than using context.Background, so on app shutdown pending requests
 	// cancel cleanly instead of lingering past tea.Program exit.
-	rootCtx             context.Context
-	viewStack           []view
-	nowPlaying          *nowPlayingModel
-	visualizer          *visualizerModel
-	client              *spotify.Client
-	width               int
-	height              int
-	seekSeq             int
-	vimMode             bool
-	showHelp            bool
-	showDeviceSelector  bool
-	deviceSelector      deviceSelectorModel
-	miniMode            bool
+	rootCtx            context.Context
+	viewStack          []view
+	nowPlaying         *nowPlayingModel
+	visualizer         *visualizerModel
+	client             *spotify.Client
+	width              int
+	height             int
+	seekSeq            int
+	vimMode            bool
+	showHelp           bool
+	showDeviceSelector bool
+	deviceSelector     deviceSelectorModel
+	miniMode           bool
+	// spinnerTicking is true while a loadingSpinner tick is in flight.
+	// The chain stops when nothing on screen spins and resumeTickers
+	// restarts it; see app_tickers.go.
+	spinnerTicking      bool
 	librespotInactiveCh <-chan struct{}
 	tokenSaveErrCh      <-chan error
 	tokenRevokedCh      <-chan struct{}
@@ -102,10 +106,9 @@ func NewModel(ctx context.Context, client *spotify.Client, opts ...ModelOption) 
 
 func (m Model) Init() tea.Cmd {
 	cmds := []tea.Cmd{
+		// The loading spinner and label marquee ticks start on demand
+		// from Update (resumeTickers), not here.
 		m.nowPlaying.Init(),
-		// Drive the single global spinner used by list loading rows, the
-		// device selector, and the now-playing "Switching to…" banner.
-		loadingSpinner.Tick,
 	}
 	if m.librespotInactiveCh != nil {
 		cmds = append(cmds, m.waitForLibrespotInactive())

@@ -15,9 +15,9 @@ import (
 // loadingSpinner is a single spinner instance shared by every "loading" UI
 // in the package — list status rows, the device selector, and the
 // now-playing "Switching to…" banner. A global is cleaner than giving
-// each view its own spinner: the Tick chain is started once from Model.Init
-// and a single spinner.TickMsg per frame updates the current frame, which
-// every consumer reads via loadingSpinner.View().
+// each view its own spinner: one Tick chain, run on demand by the shell
+// (app_tickers.go) while anything on screen spins, updates the current
+// frame, which every consumer reads via loadingSpinner.View().
 var loadingSpinner = newLoadingSpinner()
 
 func newLoadingSpinner() spinner.Model {

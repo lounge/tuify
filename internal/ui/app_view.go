@@ -131,10 +131,7 @@ func (m Model) miniModeView() string {
 	innerWidth := m.width - nowPlayingPadding
 
 	// Track — Artist label. Fits: static two-tone. Doesn't fit: marquee.
-	labelBudget := max(
-		// 4 spaces + 4 min bar
-		innerWidth-iconLen-tsLen-8, 1)
-	labelStr := np.renderLabel(labelBudget)
+	labelStr := np.renderLabel(m.miniLabelBudget())
 	labelLen := lipgloss.Width(labelStr)
 
 	// Progress bar fills remaining space.
@@ -152,4 +149,20 @@ func (m Model) miniModeView() string {
 	}
 
 	return np.renderGradient([]string{line})
+}
+
+// miniLabelBudget returns the display cells miniModeView gives the
+// "track — artist" label. The label-scroll tick uses the same budget to
+// decide whether the marquee needs to run.
+func (m Model) miniLabelBudget() int {
+	np := m.nowPlaying
+	icon := "⏸"
+	if np.playing {
+		icon = "▶"
+	}
+	cur := formatDuration(time.Duration(np.progressMs) * time.Millisecond)
+	total := formatDuration(time.Duration(np.durationMs) * time.Millisecond)
+	innerWidth := m.width - nowPlayingPadding
+	// 4 spaces + 4 min bar
+	return max(innerWidth-lipgloss.Width(icon)-lipgloss.Width(cur+"/"+total)-8, 1)
 }

@@ -4,7 +4,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
 )
@@ -145,23 +144,5 @@ func TestNowPlaying_SetError_ResetsSpinning(t *testing.T) {
 	}
 	if !np.statusIsError {
 		t.Error("SetError should set statusIsError")
-	}
-}
-
-// Global spinner tick lifecycle — Model.Update must advance the shared
-// loadingSpinner on spinner.TickMsg so every consumer sees fresh frames.
-// We can't observe the frame directly (spinner.Model hides its state), but
-// we can verify Update returns a non-nil command — i.e. schedules the next
-// tick, keeping the chain alive.
-
-func TestModel_SpinnerTick_SchedulesNextTick(t *testing.T) {
-	m := Model{
-		nowPlaying: newTestNowPlaying(t),
-		client:     &spotify.Client{},
-		viewStack:  []view{newHomeView(0, 0)},
-	}
-	_, cmd := m.Update(spinner.TickMsg{ID: loadingSpinner.ID()})
-	if cmd == nil {
-		t.Error("spinner.TickMsg should schedule the next tick — chain dies otherwise")
 	}
 }

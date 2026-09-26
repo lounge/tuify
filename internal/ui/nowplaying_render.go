@@ -68,32 +68,14 @@ func (m nowPlayingModel) renderTrackLine() string {
 	if m.shuffling {
 		shufflePrefix = "[shuffle] "
 	}
-	devicePlain := ""
-	if m.deviceName != "" {
-		devicePlain = "◉ " + m.deviceName
-	}
-
+	labelBudget, showDevice := m.trackLineLabelBudget()
 	innerWidth := m.width - nowPlayingPadding
-	// Fixed portion consumed before the label: icon + space + shuffle prefix.
-	prefixW := lipgloss.Width(icon) + 1 + lipgloss.Width(shufflePrefix)
-	// Trailing: 2-space gap + device, dropped if it wouldn't leave room.
-	trailingW := 0
-	if devicePlain != "" {
-		trailingW = 2 + lipgloss.Width(devicePlain)
-	}
-	labelBudget := innerWidth - prefixW - trailingW
-	if labelBudget < 8 {
-		// Not enough room; drop the device and use all remaining width
-		// for the track/artist label.
-		devicePlain = ""
-		labelBudget = innerWidth - prefixW
-	}
 
 	left := nowPlayingIconStyle.Render(icon) + " " +
 		nowPlayingIconStyle.Render(shufflePrefix) +
 		m.renderLabel(labelBudget)
 
-	if devicePlain == "" {
+	if !showDevice {
 		return left
 	}
 	device := nowPlayingTrackStyle.Render("◉ ") + nowPlayingArtistStyle.Render(m.deviceName)
@@ -102,6 +84,40 @@ func (m nowPlayingModel) renderTrackLine() string {
 		return left
 	}
 	return left + strings.Repeat(" ", gap) + device
+}
+
+// trackLineLabelBudget returns the display cells renderTrackLine gives the
+// "track — artist" label, and whether the device name still fits beside
+// it. The label-scroll tick uses the same budget to decide whether the
+// marquee needs to run.
+func (m nowPlayingModel) trackLineLabelBudget() (budget int, showDevice bool) {
+	// Fixed portion consumed before the label: icon + space + shuffle prefix.
+	icon := "⏸"
+	if m.playing {
+		icon = "▶"
+	}
+	prefixW := lipgloss.Width(icon) + 1
+	if m.shuffling {
+		prefixW += lipgloss.Width("[shuffle] ")
+	}
+	innerWidth := m.width - nowPlayingPadding
+	if m.deviceName == "" {
+		return innerWidth - prefixW, false
+	}
+	// Trailing: 2-space gap + device, dropped if it wouldn't leave room.
+	budget = innerWidth - prefixW - 2 - lipgloss.Width("◉ "+m.deviceName)
+	if budget < 8 {
+		// Not enough room; drop the device and use all remaining width
+		// for the track/artist label.
+		return innerWidth - prefixW, false
+	}
+	return budget, true
+}
+
+// labelOverflows reports whether the "track — artist" label is wider than
+// budget, i.e. whether renderLabel scrolls it as a marquee.
+func (m nowPlayingModel) labelOverflows(budget int) bool {
+	return budget >= 4 && runewidth.StringWidth(m.track+" — "+m.artist) > budget
 }
 
 // labelStreamWidth returns the display width of the full marquee stream
