@@ -10,7 +10,6 @@ require (
 	github.com/ebitengine/oto/v3 v3.4.0
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/lucasb-eyer/go-colorful v1.4.0
-	github.com/madelynnblue/go-dsp v1.0.0
 	github.com/mattn/go-runewidth v0.0.21
 	github.com/zmb3/spotify/v2 v2.4.3
 	golang.org/x/net v0.55.0

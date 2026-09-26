@@ -3,6 +3,11 @@
 // samples from librespot's stdout; the FFT layer produces FrequencyData
 // with log-spaced bands plus bass/mid/high convenience averages.
 //
+// Analyzer runs an in-package radix-2 FFT, so its window size must be a
+// power of two. It reuses its own buffers and band-to-bin map across
+// frames, so Analyze does not allocate; an Analyzer is not safe for
+// concurrent use.
+//
 // FrequencyData also exposes LeftLevel and RightLevel, time-domain
 // per-channel peak amplitudes shared-AGC normalized to 0–1, for
 // visualizers (e.g. the VU meter) that need true stereo loudness rather

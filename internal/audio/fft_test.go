@@ -107,3 +107,48 @@ func TestAnalyzeLowFrequency(t *testing.T) {
 		t.Errorf("high = %f, expected near zero for 60 Hz sine", fd.High)
 	}
 }
+
+// TestFFTMatchesDFT checks the in-place radix-2 FFT against a direct O(n²)
+// DFT of the same input, bin by bin.
+func TestFFTMatchesDFT(t *testing.T) {
+	const n = 256
+	a := NewAnalyzer(n)
+	in := make([]float64, n)
+	x := uint32(1)
+	for i := range in {
+		x ^= x << 13
+		x ^= x >> 17
+		x ^= x << 5
+		in[i] = float64(int16(x))
+	}
+	clear(a.im)
+	for i, v := range in {
+		a.re[a.bitrev[i]] = v
+	}
+	a.fft()
+
+	for k := range n {
+		var wantRe, wantIm float64
+		for i, v := range in {
+			angle := -2 * math.Pi * float64(k*i) / n
+			wantRe += v * math.Cos(angle)
+			wantIm += v * math.Sin(angle)
+		}
+		if math.Abs(a.re[k]-wantRe) > 1e-6*n*32768 || math.Abs(a.im[k]-wantIm) > 1e-6*n*32768 {
+			t.Fatalf("bin %d = (%g, %g), want (%g, %g)", k, a.re[k], a.im[k], wantRe, wantIm)
+		}
+	}
+}
+
+func TestNewAnalyzer_PanicsOnNonPowerOfTwo(t *testing.T) {
+	for _, n := range []int{0, 1, 3, 1000} {
+		func() {
+			defer func() {
+				if recover() == nil {
+					t.Errorf("NewAnalyzer(%d) should panic", n)
+				}
+			}()
+			NewAnalyzer(n)
+		}()
+	}
+}

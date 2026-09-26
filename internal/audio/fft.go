@@ -2,46 +2,94 @@ package audio
 
 import (
 	"math"
-	"math/cmplx"
-
-	"github.com/madelynnblue/go-dsp/fft"
+	"math/bits"
 )
 
 // peakDecay controls how fast the running peak normalizer decays per FFT frame (~46 ms).
 const peakDecay = 0.999
 
 // Analyzer performs FFT analysis on PCM audio chunks and produces FrequencyData.
+// It owns its FFT work buffers, so Analyze does not allocate; an Analyzer
+// must not be used from more than one goroutine at a time.
 type Analyzer struct {
 	window   []float64 // precomputed Hann window coefficients
-	peakMax  float64   // running peak for spectral band normalization, with decay
-	levelMax float64   // running peak for time-domain L/R level normalization, with decay
+	re, im   []float64 // FFT work buffers, reused across frames
+	cos, sin []float64 // twiddle factors e^(-2πik/n) for k < n/2
+	bitrev   []int     // input index → bit-reversed FFT slot
+	loBin    [NumBands]int
+	hiBin    [NumBands]int // inclusive FFT bin range averaged into each band
+	peakMax  float64       // running peak for spectral band normalization, with decay
+	levelMax float64       // running peak for time-domain L/R level normalization, with decay
 }
 
-// NewAnalyzer creates an Analyzer with a precomputed Hann window of the given size.
+// NewAnalyzer creates an Analyzer with a precomputed Hann window, FFT
+// tables and band-to-bin map for the given window size. windowSize must be
+// a power of two of at least 2; NewAnalyzer panics otherwise.
 func NewAnalyzer(windowSize int) *Analyzer {
-	w := make([]float64, windowSize)
-	for i := range w {
-		w[i] = 0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(windowSize-1)))
+	n := windowSize
+	if n < 2 || n&(n-1) != 0 {
+		panic("audio.NewAnalyzer: windowSize must be a power of two >= 2")
 	}
-	return &Analyzer{window: w, peakMax: 1.0, levelMax: 1.0}
+	a := &Analyzer{
+		window:   make([]float64, n),
+		re:       make([]float64, n),
+		im:       make([]float64, n),
+		cos:      make([]float64, n/2),
+		sin:      make([]float64, n/2),
+		bitrev:   make([]int, n),
+		peakMax:  1.0,
+		levelMax: 1.0,
+	}
+	for i := range n {
+		a.window[i] = 0.5 * (1 - math.Cos(2*math.Pi*float64(i)/float64(n-1)))
+	}
+	for k := range n / 2 {
+		angle := -2 * math.Pi * float64(k) / float64(n)
+		a.cos[k], a.sin[k] = math.Cos(angle), math.Sin(angle)
+	}
+	shift := 64 - bits.TrailingZeros(uint(n))
+	for i := range n {
+		a.bitrev[i] = int(bits.Reverse64(uint64(i)) >> shift)
+	}
+
+	// Map FFT bins to 64 logarithmically spaced frequency bands (20 Hz – 20 kHz).
+	nyquist := float64(DefaultFormat.SampleRate) / 2.0
+	binHz := nyquist / float64(n/2)
+	logMin := math.Log10(20.0)
+	logMax := math.Log10(20000.0)
+	for band := range NumBands {
+		// Logarithmic band edges.
+		loFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band)/float64(NumBands))
+		hiFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band+1)/float64(NumBands))
+
+		loBin := max(int(loFreq/binHz), 0)
+		hiBin := min(int(hiFreq/binHz), n/2-1)
+		a.loBin[band] = min(loBin, hiBin)
+		a.hiBin[band] = hiBin
+	}
+	return a
 }
 
 // Analyze takes interleaved stereo int16 PCM samples and returns FrequencyData.
 // The samples slice must contain at least WindowSize*2 values (stereo pairs).
 func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 	n := len(a.window)
-	mono := make([]float64, n)
+	re, im := a.re, a.im
+	clear(im)
 
-	// Mix stereo to mono for the FFT, and track per-channel peak amplitude
-	// in the time domain so visualizers like the VU meter can read true
-	// stereo loudness instead of the post-mix spectral peak.
+	// Mix stereo to mono, apply the Hann window, and store each sample at
+	// its bit-reversed slot so the FFT below can run in place. Track
+	// per-channel peak amplitude in the time domain so visualizers like the
+	// VU meter can read true stereo loudness instead of the post-mix
+	// spectral peak.
 	var lPeak, rPeak int32
 	for i := range n {
 		si := i * 2
+		var mono float64
 		if si+1 < len(samples) {
 			l := int32(samples[si])
 			r := int32(samples[si+1])
-			mono[i] = (float64(l) + float64(r)) / 2.0
+			mono = (float64(l) + float64(r)) / 2.0
 			if l < 0 {
 				l = -l
 			}
@@ -55,55 +103,20 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 				rPeak = r
 			}
 		}
+		re[a.bitrev[i]] = mono * a.window[i]
 	}
 
-	// Apply Hann window.
-	for i := range n {
-		mono[i] *= a.window[i]
-	}
+	a.fft()
 
-	// Run FFT.
-	spectrum := fft.FFTReal(mono)
-
-	// Map FFT bins to 64 logarithmically spaced frequency bands (20 Hz – 20 kHz).
+	// Average magnitude across the bins in each band.
 	var fd FrequencyData
-	nyquist := float64(DefaultFormat.SampleRate) / 2.0
-	binHz := nyquist / float64(n/2)
-
-	minFreq := 20.0
-	maxFreq := 20000.0
-	logMin := math.Log10(minFreq)
-	logMax := math.Log10(maxFreq)
-
 	for band := range NumBands {
-		// Logarithmic band edges.
-		loFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band)/float64(NumBands))
-		hiFreq := math.Pow(10, logMin+(logMax-logMin)*float64(band+1)/float64(NumBands))
-
-		loBin := int(loFreq / binHz)
-		hiBin := int(hiFreq / binHz)
-		if loBin < 0 {
-			loBin = 0
-		}
-		halfN := n / 2
-		if hiBin >= halfN {
-			hiBin = halfN - 1
-		}
-		if loBin > hiBin {
-			loBin = hiBin
-		}
-
-		// Average magnitude across bins in this band.
+		lo, hi := a.loBin[band], a.hiBin[band]
 		var sum float64
-		count := 0
-		for bi := loBin; bi <= hiBin; bi++ {
-			mag := cmplx.Abs(spectrum[bi])
-			sum += mag
-			count++
+		for bi := lo; bi <= hi; bi++ {
+			sum += math.Sqrt(re[bi]*re[bi] + im[bi]*im[bi])
 		}
-		if count > 0 {
-			fd.Bands[band] = float32(sum / float64(count))
-		}
+		fd.Bands[band] = float32(sum / float64(hi-lo+1))
 	}
 
 	// Find peak across all bands for normalization.
@@ -160,4 +173,26 @@ func (a *Analyzer) Analyze(samples []int16) FrequencyData {
 	fd.ComputeConvenienceFields()
 
 	return fd
+}
+
+// fft runs an in-place iterative radix-2 FFT over re/im, which must
+// already hold the input in bit-reversed order.
+func (a *Analyzer) fft() {
+	re, im := a.re, a.im
+	n := len(re)
+	for size := 2; size <= n; size <<= 1 {
+		half := size >> 1
+		step := n / size
+		for start := 0; start < n; start += size {
+			for k := range half {
+				wr, wi := a.cos[k*step], a.sin[k*step]
+				j, l := start+k, start+k+half
+				tr := wr*re[l] - wi*im[l]
+				ti := wr*im[l] + wi*re[l]
+				re[l], im[l] = re[j]-tr, im[j]-ti
+				re[j] += tr
+				im[j] += ti
+			}
+		}
+	}
 }
