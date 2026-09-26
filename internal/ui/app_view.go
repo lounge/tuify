@@ -27,6 +27,7 @@ func (m Model) View() string {
 
 	var b strings.Builder
 	contentHeight := m.height - nowPlayingHeight
+	listShown := false
 
 	switch {
 	case m.showHelp:
@@ -34,6 +35,7 @@ func (m Model) View() string {
 	case m.visualizer.active:
 		b.WriteString(m.visualizer.View(m.width, contentHeight))
 	default:
+		listShown = true
 		if crumbs := m.currentView().Breadcrumb(); crumbs != "" {
 			b.WriteString(breadcrumbStyle.Render(crumbs))
 			b.WriteString("\n")
@@ -50,9 +52,16 @@ func (m Model) View() string {
 	}
 	b.WriteString(m.nowPlaying.View(searchActive, searchQuery))
 
-	// zone.Scan replaces zoneMark tokens in the rendered output with real
-	// screen coordinates. Must wrap every View() return so mouse clicks
-	// can be resolved against marked regions.
+	// zone.Scan replaces zone.Mark tokens with real screen coordinates so
+	// clicks resolve to list rows. Only list frames carry marks. Help,
+	// visualizer, mini mode and the device overlay have none, and
+	// handleMouse ignores the pointer while they are up (listHidden), so
+	// the zones left over from the last list frame can't be hit. Skipping
+	// the scan there matters: it parses every escape in the frame, which
+	// costs more than rendering a visualizer.
+	if !listShown {
+		return b.String()
+	}
 	return zone.Scan(b.String())
 }
 

@@ -34,7 +34,7 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.26+.
 - **Screens** (home/playlist/track/podcast/episode/search) own local state and render themselves. They communicate with the shell via *intent messages* (`app_intents.go`).
 - **Submodels** (`nowPlayingModel`, `visualizerModel`, `deviceSelectorModel`) are long-lived state on `Model` that transcends the view stack.
 - The shell dispatches via small **capability interfaces** in `common.go` (`listProvider`, `scrollable`, `clickable`, `enterable`, `searchAware`, `syncableView`, `backable`, …). Adding a new screen means implementing the capabilities it cares about.
-- Every rendered frame is wrapped in `bubblezone.Scan`; list rows are marked by Spotify URI via `zoneListDelegate` (in `styles.go`) so clicks resolve back to specific items.
+- Every frame that shows a list is wrapped in `bubblezone.Scan`; list rows are marked by Spotify URI via `zoneListDelegate` (in `styles.go`) so clicks resolve back to specific items. Overlays and the visualizer skip the scan, and `handleMouse` ignores the pointer while they are up.
 
 ### Audio pipeline (`internal/audio` + `internal/librespot`)
 

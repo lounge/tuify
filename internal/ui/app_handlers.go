@@ -103,6 +103,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (handled bool, model tea.Model, cmd
 	if msg.Action != tea.MouseActionPress {
 		return false, m, nil
 	}
+	// The list isn't on screen, so neither wheel nor click may reach it.
+	// Its zones from the last list frame are still registered and would
+	// otherwise resolve clicks to rows the user can't see.
+	if m.listHidden() {
+		return true, m, nil
+	}
 	switch msg.Button {
 	case tea.MouseButtonWheelUp:
 		if time.Since(m.lastWheelTime) < wheelDebounceWindow {
@@ -126,6 +132,12 @@ func (m Model) handleMouse(msg tea.MouseMsg) (handled bool, model tea.Model, cmd
 		return m.handleMouseClick(msg)
 	}
 	return false, m, nil
+}
+
+// listHidden reports whether an overlay or mode has replaced the current
+// view's list on screen.
+func (m Model) listHidden() bool {
+	return m.showHelp || m.showDeviceSelector || m.miniMode || m.visualizer.active
 }
 
 // handleMouseClick resolves a left-press via the current view's clickable

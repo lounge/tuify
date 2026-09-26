@@ -126,3 +126,46 @@ func TestHandleMouseClick_ListWithNoURIItems_ReportsUnhandled(t *testing.T) {
 // shell interprets them by constructing the target view or dispatching the
 // corresponding command. These tests pin that contract — adding a new intent
 // without wiring Model.Update to handle it will fail them.
+
+// While an overlay or mode hides the list, wheel events must not move its
+// cursor and clicks must not resolve against the stale zones of the last
+// list frame.
+func TestHandleMouse_IgnoredWhileListHidden(t *testing.T) {
+	cases := map[string]func(*Model){
+		"help":       func(m *Model) { m.showHelp = true },
+		"devices":    func(m *Model) { m.showDeviceSelector = true },
+		"mini mode":  func(m *Model) { m.miniMode = true },
+		"visualizer": func(m *Model) { m.visualizer.active = true },
+	}
+	for name, hide := range cases {
+		t.Run(name, func(t *testing.T) {
+			tv := newTrackView(context.Background(), nil, "pid", "Test Playlist", 80, 20, false)
+			tv.items = []list.Item{
+				trackItem{uri: "spotify:track:a", name: "A"},
+				trackItem{uri: "spotify:track:b", name: "B"},
+			}
+			tv.list.SetItems(tv.items)
+			m := newIntentTestModel()
+			m.viewStack = []view{tv}
+			hide(&m)
+
+			wheel := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown}
+			handled, _, cmd := m.handleMouse(wheel)
+			if !handled || cmd != nil {
+				t.Errorf("wheel: handled=%v cmd=%v, want consumed with no cmd", handled, cmd)
+			}
+			if got := tv.list.Index(); got != 0 {
+				t.Errorf("wheel moved the hidden list cursor to %d", got)
+			}
+
+			click := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft}
+			_, model, cmd := m.handleMouse(click)
+			if cmd != nil {
+				t.Errorf("click on hidden list returned a cmd: %v", cmd)
+			}
+			if got := model.(Model).lastClickURI; got != "" {
+				t.Errorf("click registered on hidden row %q", got)
+			}
+		})
+	}
+}

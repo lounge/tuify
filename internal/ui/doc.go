@@ -59,10 +59,13 @@
 //
 // # Rendering
 //
-// Every rendered frame is wrapped in bubblezone.Scan so mouse clicks can
-// be resolved back to zone-marked items (lists mark each row by Spotify
-// URI; the home view marks each menu tab by name). The list delegate
-// (zoneListDelegate in styles.go) does the per-row marking transparently.
+// Every frame that shows the current view's list is wrapped in
+// bubblezone.Scan so mouse clicks can be resolved back to zone-marked items
+// (lists mark each row by Spotify URI; the home view marks each menu tab by
+// name). The list delegate (zoneListDelegate in styles.go) does the per-row
+// marking transparently. Help, visualizer, mini mode and the device overlay
+// carry no marks and skip the scan; handleMouse drops pointer events while
+// they are up so the previous list frame's zones can't be hit.
 //
 // # Lifetime
 //
