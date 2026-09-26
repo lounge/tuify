@@ -85,10 +85,7 @@ func (m Model) stopPlayback() tea.Cmd {
 }
 
 func (m *Model) seekRelative(deltaMs int) tea.Cmd {
-	posMs := max(m.nowPlaying.progressMs+deltaMs, 0)
-	if posMs > m.nowPlaying.durationMs {
-		posMs = m.nowPlaying.durationMs
-	}
+	posMs := min(max(m.nowPlaying.progressMs+deltaMs, 0), m.nowPlaying.durationMs)
 	m.nowPlaying.progressMs = posMs
 	m.nowPlaying.seekPending = true
 	m.seekSeq++
@@ -98,7 +95,7 @@ func (m *Model) seekRelative(deltaMs int) tea.Cmd {
 	})
 }
 
-func (m *Model) copyTrackLink() tea.Cmd {
+func (m Model) copyTrackLink() tea.Cmd {
 	if !m.nowPlaying.hasTrack {
 		return nil
 	}

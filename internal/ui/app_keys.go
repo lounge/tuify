@@ -122,16 +122,16 @@ func (m Model) handleVimKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		return m.(Model), cmd, true
 	case ",":
 		m.nowPlaying.recordUserAction()
-		return m, m.seekRelative(-5000), true
+		cmd := m.seekRelative(-5000)
+		return m, cmd, true
 	case ".":
 		m.nowPlaying.recordUserAction()
-		return m, m.seekRelative(5000), true
+		cmd := m.seekRelative(5000)
+		return m, cmd, true
 	case "ctrl+d":
-		m, cmd := m.halfPage(1)
-		return m.(Model), cmd, true
+		return m.halfPage(1), nil, true
 	case "ctrl+u":
-		m, cmd := m.halfPage(-1)
-		return m.(Model), cmd, true
+		return m.halfPage(-1), nil, true
 	}
 	return m, nil, false
 }
@@ -161,10 +161,12 @@ func (m Model) handlePlaybackKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		return m, m.stopPlayback(), true
 	case "a":
 		m.nowPlaying.recordUserAction()
-		return m, m.seekRelative(-5000), true
+		cmd := m.seekRelative(-5000)
+		return m, cmd, true
 	case "d":
 		m.nowPlaying.recordUserAction()
-		return m, m.seekRelative(5000), true
+		cmd := m.seekRelative(5000)
+		return m, cmd, true
 	case "c":
 		return m, m.copyTrackLink(), true
 	}

@@ -255,18 +255,13 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) halfPage(dir int) (tea.Model, tea.Cmd) {
+func (m Model) halfPage(dir int) Model {
 	l := m.currentList()
 	if l == nil {
-		return m, nil
+		return m
 	}
-	half := max(
-		// list items are ~2 lines tall
-		m.listHeight()/4, 1)
-	idx := max(l.Index()+dir*half, 0)
-	if max := len(l.Items()) - 1; idx > max {
-		idx = max
-	}
+	half := max(m.listHeight()/4, 1) // list items are ~2 lines tall
+	idx := min(max(l.Index()+dir*half, 0), len(l.Items())-1)
 	l.Select(idx)
-	return m, nil
+	return m
 }

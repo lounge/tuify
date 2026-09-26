@@ -357,3 +357,33 @@ func TestPlaylistAndPodcastSearch_KeepsFetchingWhileFiltering(t *testing.T) {
 		})
 	}
 }
+
+func TestUpdate_SeekKeysKeepMutatedModel(t *testing.T) {
+	for _, tc := range []struct {
+		key  string
+		want int
+	}{
+		{"d", 15000},
+		{"a", 5000},
+	} {
+		t.Run(tc.key, func(t *testing.T) {
+			m := newIntentTestModel()
+			m.nowPlaying.hasTrack = true
+			m.nowPlaying.durationMs = 60000
+			m.nowPlaying.progressMs = 10000
+
+			updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.key)})
+			after := updated.(Model)
+
+			if after.nowPlaying.progressMs != tc.want {
+				t.Errorf("progressMs = %d, want %d", after.nowPlaying.progressMs, tc.want)
+			}
+			if after.seekSeq != 1 || !after.nowPlaying.seekPending {
+				t.Errorf("seekSeq = %d, seekPending = %v; the returned Model lost the seek", after.seekSeq, after.nowPlaying.seekPending)
+			}
+			if cmd == nil {
+				t.Error("expected a seek tick cmd")
+			}
+		})
+	}
+}
