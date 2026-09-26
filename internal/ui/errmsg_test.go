@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/lounge/tuify/internal/spotify"
+	"golang.org/x/oauth2"
 )
 
 func TestUserMessage(t *testing.T) {
@@ -34,6 +35,10 @@ func TestUserMessage(t *testing.T) {
 		{"deadline", context.DeadlineExceeded, "Request timed out"},
 		{"deadline in url.Error", &url.Error{Op: "Get", URL: "https://api.spotify.com/v1/me", Err: context.DeadlineExceeded}, "Request timed out"},
 		{"net error", &url.Error{Op: "Get", URL: "https://api.spotify.com/v1/me", Err: netErr}, "Network error, check your connection"},
+		{"dns error", &url.Error{Op: "Get", URL: "https://api.spotify.com/v1/me", Err: &net.DNSError{Err: "no such host", Name: "api.spotify.com"}}, "Network error, check your connection"},
+		{"refresh rejected", &url.Error{Op: "Get", URL: "https://api.spotify.com/v1/me", Err: &oauth2.RetrieveError{ErrorCode: "invalid_client"}}, "Spotify login failed, restart tuify to log in"},
+		{"cancelled", &url.Error{Op: "Get", URL: "https://api.spotify.com/v1/me", Err: context.Canceled}, "Request cancelled"},
+		{"tls failure", &url.Error{Op: "Get", URL: "https://api.spotify.com/v1/me", Err: errors.New("tls: failed to verify certificate")}, "Could not reach Spotify"},
 		{"plain passthrough", errors.New("no Spotify devices found — open Spotify on any device"), "no Spotify devices found — open Spotify on any device"},
 	}
 	for _, tt := range tests {
