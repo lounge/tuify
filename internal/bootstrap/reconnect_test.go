@@ -107,3 +107,30 @@ func TestReconnectHandler(t *testing.T) {
 		})
 	}
 }
+
+// Two "Authenticated as" lines inside the settle delay start two handler
+// goroutines; only one may transfer.
+func TestReconnectHandler_OverlappingTriggersTransferOnce(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fake := &fakeSpotify{}
+		client := spotify.New(&http.Client{Transport: fake})
+		client.PreferredDevice = "tuify"
+
+		handler := reconnectHandler(t.Context(), client, "tuify")
+		var wg sync.WaitGroup
+		wg.Go(handler)
+		time.Sleep(time.Second) // second trigger lands inside the 2s delay
+		wg.Go(handler)
+		wg.Wait()
+
+		if _, transfers := fake.snapshot(); len(transfers) != 1 {
+			t.Errorf("transfers = %d, want 1: overlapping reconnects both transferred", len(transfers))
+		}
+
+		// Once the first has finished, a later reconnect transfers again.
+		handler()
+		if _, transfers := fake.snapshot(); len(transfers) != 2 {
+			t.Errorf("transfers = %d after a later reconnect, want 2", len(transfers))
+		}
+	})
+}

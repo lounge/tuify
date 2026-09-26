@@ -7,6 +7,7 @@ import (
 	"log"
 	"path/filepath"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/lounge/tuify/internal/audio"
@@ -111,8 +112,20 @@ func startLibrespot(ctx context.Context, rc runtimeConfig, client *spotify.Clien
 // transfers playback back to the preferred device (unless overridden).
 // parent is the app's root context; cancelling it aborts any in-flight
 // reconnect transfer instead of letting it linger past shutdown.
+//
+// librespot can re-authenticate several times in quick succession, and each
+// time the callback runs in its own goroutine. Only one runs at a time;
+// triggers that arrive meanwhile are dropped, since the running one will
+// transfer anyway. Two overlapping transfers with play=true could resume
+// playback the user had just paused.
 func reconnectHandler(parent context.Context, client *spotify.Client, deviceName string) func() {
+	var running atomic.Bool
 	return func() {
+		if !running.CompareAndSwap(false, true) {
+			log.Printf("[librespot] reconnect: transfer already in progress, skipping")
+			return
+		}
+		defer running.Store(false)
 		select {
 		case <-time.After(2 * time.Second):
 		case <-parent.Done():
