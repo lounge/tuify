@@ -2,7 +2,6 @@ package ui
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -31,6 +30,12 @@ var (
 	nowPlayingIconStyle   lipgloss.Style
 	progressEmptyStyle    lipgloss.Style
 	progressTimeStyle     lipgloss.Style
+	progressSolidStyle    lipgloss.Style
+	progressTipStyle      lipgloss.Style
+	nowPlayingBoxStyle    lipgloss.Style
+	// Gradient endpoints, parsed from the palette here rather than per frame.
+	nowPlayingGradient adaptiveGradient
+	progressGradient   adaptiveGradient
 
 	// Home tabs
 	homeTabActive   lipgloss.Style
@@ -80,6 +85,12 @@ func RebuildStyles() {
 
 	progressEmptyStyle = lipgloss.NewStyle().Foreground(theme.Dim)
 	progressTimeStyle = lipgloss.NewStyle().Foreground(theme.Subtle)
+	progressSolidStyle = lipgloss.NewStyle().Foreground(theme.Primary)
+	progressTipStyle = lipgloss.NewStyle().Foreground(theme.Tip)
+	// Kept in sync with nowPlayingPadding.
+	nowPlayingBoxStyle = lipgloss.NewStyle().Padding(0, 1)
+	nowPlayingGradient = newAdaptiveGradient(theme.GradientStart, theme.GradientEnd)
+	progressGradient = newAdaptiveGradient(theme.Primary, theme.Tip)
 
 	homeTabActive = lipgloss.NewStyle().
 		Background(theme.Primary).
@@ -161,5 +172,5 @@ func (d zoneListDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 	var buf bytes.Buffer
 	d.DefaultDelegate.Render(&buf, m, index, item)
-	fmt.Fprint(w, zone.Mark(u.URI(), buf.String()))
+	_, _ = io.WriteString(w, zone.Mark(u.URI(), buf.String()))
 }
