@@ -12,6 +12,8 @@ const (
 	oscDecayIdle   = float32(0.88) // band decay per tick when no audio
 )
 
+// Oscillogram draws an oscilloscope-style waveform whose amplitude and
+// colour follow the audio bands.
 type Oscillogram struct {
 	audioData *audio.FrequencyData
 	bands     [audio.NumBands]float32 // smoothed band values
@@ -23,6 +25,7 @@ type oscCol struct {
 	r, g, b int
 }
 
+// NewOscillogram returns an Oscillogram at rest.
 func NewOscillogram() *Oscillogram {
 	return &Oscillogram{}
 }

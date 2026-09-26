@@ -14,6 +14,8 @@ var (
 	lyricsHighlightLight = lipgloss.NewStyle().Foreground(lipgloss.Color("#000000")).Bold(true)
 )
 
+// Lyrics shows the track's lyrics, scrolled in step with playback
+// progress, or an "Instrumental" marker.
 type Lyrics struct {
 	lines        []string
 	durationMs   int
@@ -24,6 +26,8 @@ type Lyrics struct {
 	inited       bool
 }
 
+// NewLyrics returns a Lyrics with nothing loaded; call SetLyrics or
+// SetInstrumental.
 func NewLyrics() *Lyrics {
 	return &Lyrics{}
 }

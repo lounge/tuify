@@ -20,6 +20,7 @@ type star struct {
 	hue     float64
 }
 
+// Starfield flies through a field of stars whose speed follows the beat.
 type Starfield struct {
 	stars       []star
 	rng         uint64
@@ -34,6 +35,7 @@ type Starfield struct {
 	smoothSpeed float64 // smoothed speed multiplier
 }
 
+// NewStarfield returns a Starfield; stars are seeded by Init.
 func NewStarfield() *Starfield {
 	return &Starfield{}
 }

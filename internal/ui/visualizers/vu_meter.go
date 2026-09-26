@@ -40,9 +40,9 @@ const (
 	// leaving cell rows 0–1 above it for tick labels and stalks.
 	vuArcApexSubRow = 4
 
-	// Needle geometry. tipFrac retracts the tip slightly from r so the
-	// needle doesn't touch the arc; baseFrac extends the visible base
-	// past the arc-area midpoint for a tall stroke.
+	// Needle geometry. vuNeedleTipFrac retracts the tip slightly from r
+	// so the needle doesn't touch the arc; vuNeedleBaseFrac extends the
+	// visible base past the arc-area midpoint for a tall stroke.
 	vuNeedleTipFrac  = 0.97
 	vuNeedleBaseFrac = 1.6
 
@@ -98,6 +98,7 @@ type VUMeter struct {
 	inited    bool
 }
 
+// NewVUMeter returns a VUMeter with both needles at rest.
 func NewVUMeter() *VUMeter {
 	return &VUMeter{}
 }

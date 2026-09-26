@@ -12,6 +12,8 @@ import (
 // dissolveFrames is the number of animation frames for the album art dissolve effect (~5 s at 30 fps).
 const dissolveFrames = 150
 
+// AlbumArt renders the current cover image in half-block cells and
+// dissolves in each new cover block by block.
 type AlbumArt struct {
 	img      image.Image
 	hasImage bool
@@ -28,6 +30,7 @@ type AlbumArt struct {
 	inited bool
 }
 
+// NewAlbumArt returns an AlbumArt with no image; call SetImage.
 func NewAlbumArt() *AlbumArt {
 	return &AlbumArt{}
 }
@@ -191,6 +194,8 @@ func (a *AlbumArt) computeGrid(numBlocks int) {
 	}
 }
 
+// MusicNoteFallback returns a small music-note image to show when a track
+// has no cover art.
 func MusicNoteFallback() image.Image {
 	const size = 16
 	img := image.NewRGBA(image.Rect(0, 0, size, size))

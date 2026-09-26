@@ -11,8 +11,12 @@ import (
 	"github.com/lounge/tuify/internal/theme"
 )
 
+// DefaultRedirectURL is the OAuth redirect used when the config sets none.
+// It must be registered for the app in the Spotify dashboard.
 const DefaultRedirectURL = "http://127.0.0.1:4444/callback"
 
+// Config mirrors config.json. Omitted fields keep their zero value and
+// get defaults at runtime (bootstrap.resolveRuntime, librespot.Config).
 type Config struct {
 	ClientID        string `json:"client_id"`
 	EnableLibrespot bool   `json:"enable_librespot,omitempty"`

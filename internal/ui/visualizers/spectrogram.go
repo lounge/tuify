@@ -59,6 +59,8 @@ const (
 	spectroFlatSpread = float32(0.04)
 )
 
+// Spectrogram scrolls a time-by-frequency heat map of the FFT bands,
+// coloured with an inferno palette.
 type Spectrogram struct {
 	audioData *audio.FrequencyData
 
@@ -69,6 +71,7 @@ type Spectrogram struct {
 	inited bool
 }
 
+// NewSpectrogram returns an empty Spectrogram.
 func NewSpectrogram() *Spectrogram { return &Spectrogram{} }
 
 func (s *Spectrogram) Init(seed string, durationMs int) {

@@ -21,6 +21,7 @@ type Spectrum struct {
 	inited    bool
 }
 
+// NewSpectrum returns a Spectrum with all bars at zero.
 func NewSpectrum() *Spectrum {
 	return &Spectrum{}
 }
