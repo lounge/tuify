@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"log"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -95,7 +96,9 @@ func (d *deviceSelectorModel) handleLoaded(msg devicesLoadedMsg) {
 			break
 		}
 	}
-	d.devices = msg.devices
+	// Clone before sorting: msg.devices belongs to the message, and sorting
+	// it in place would mutate a value other code may still hold.
+	d.devices = slices.Clone(msg.devices)
 	// Pin the currently-playing device to the top of the list. Stable sort
 	// preserves the relative order of the inactive devices below it.
 	if d.activeDeviceID != "" {

@@ -349,3 +349,20 @@ var errTest = testError("test error")
 type testError string
 
 func (e testError) Error() string { return string(e) }
+
+func TestHandleLoaded_DoesNotReorderMessageDevices(t *testing.T) {
+	// The active device is last, so pinning it to the top reorders the list.
+	devs := []spotify.Device{
+		{ID: "a", Name: "A"},
+		{ID: "b", Name: "B", Active: true},
+	}
+	d := deviceSelectorModel{}
+	d.handleLoaded(devicesLoadedMsg{devices: devs})
+
+	if d.devices[0].ID != "b" {
+		t.Fatalf("active device not pinned to top: %+v", d.devices)
+	}
+	if devs[0].ID != "a" || devs[1].ID != "b" {
+		t.Errorf("handleLoaded reordered the message's slice: %+v", devs)
+	}
+}
