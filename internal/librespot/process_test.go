@@ -141,69 +141,6 @@ func TestNewProcess_AppliesDefaults(t *testing.T) {
 	}
 }
 
-func TestMonitorStderr_AuthenticatedCallsOnReconnect(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-
-	done := make(chan struct{})
-	p.OnReconnect = func() { close(done) }
-
-	p.monitorStderr("Authenticated as user@example.com")
-
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("OnReconnect not called within 1s")
-	}
-}
-
-func TestMonitorStderr_AudioKeyAndSpirc(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-
-	// Feed audio key error first
-	p.monitorStderr("Audio key response timeout")
-	if !p.sawAudioKeyErr {
-		t.Error("sawAudioKeyErr should be true")
-	}
-
-	// Then spirc shutdown — should trigger kill (but no process, so flags just reset)
-	p.monitorStderr("Spirc shut down unexpectedly")
-	if p.sawAudioKeyErr || p.sawSpirc {
-		t.Error("flags should be reset after detection")
-	}
-}
-
-func TestMonitorStderr_AudioKeyAndPlaybackFailure(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-
-	p.monitorStderr("Audio key response timeout")
-	p.monitorStderr("Unable to read audio file")
-
-	if p.sawAudioKeyErr {
-		t.Error("sawAudioKeyErr should be reset after detection")
-	}
-}
-
-func TestMonitorStderr_NoFalsePositive(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-
-	// Only spirc without audio key shouldn't trigger
-	p.monitorStderr("Spirc shut down unexpectedly")
-	if !p.sawSpirc {
-		t.Error("sawSpirc should be set")
-	}
-	if p.sawAudioKeyErr {
-		t.Error("sawAudioKeyErr should not be set")
-	}
-}
-
 func TestPipeLog_FiltersLibmdns(t *testing.T) {
 	t.Parallel()
 
@@ -312,144 +249,123 @@ func TestStopIdempotent(t *testing.T) {
 
 // --- restartDelay tests ---
 
-func TestRestartDelay_ImmediateCrash(t *testing.T) {
+func TestRestartDelay(t *testing.T) {
 	t.Parallel()
 
-	// Process died instantly — should get max delay.
-	delay := restartDelay(0)
-	if delay != restartMaxDelay {
-		t.Errorf("expected %v for instant crash, got %v", restartMaxDelay, delay)
+	// The delay scales linearly from restartMaxDelay for an instant crash
+	// down to restartBaseDelay at stableThreshold, and never drops below
+	// the base. The tolerance absorbs float rounding in the ratio.
+	tests := []struct {
+		name   string
+		uptime time.Duration
+		want   time.Duration
+	}{
+		{"immediate crash", 0, restartMaxDelay},
+		{"one sixth uptime", stableThreshold / 6, restartMaxDelay * 5 / 6},
+		{"half uptime", stableThreshold / 2, restartMaxDelay / 2},
+		{"near threshold clamps to base", stableThreshold - 100*time.Millisecond, restartBaseDelay},
+		{"exact threshold", stableThreshold, restartBaseDelay},
+		{"stable uptime", stableThreshold + time.Second, restartBaseDelay},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := restartDelay(tc.uptime)
+			if d := got - tc.want; d < -time.Millisecond || d > time.Millisecond {
+				t.Errorf("restartDelay(%v) = %v, want %v", tc.uptime, got, tc.want)
+			}
+		})
 	}
 }
 
-func TestRestartDelay_StableUptime(t *testing.T) {
+// --- monitorStderr tests ---
+
+// TestMonitorStderr_BrokenSessionFlags drives the broken-session detector
+// with sequences of stderr lines. An audio key timeout plus either a spirc
+// shutdown (in any order) or a playback failure is a broken session, which
+// resets both flags; authentication clears them. Callbacks are nil here,
+// so this also covers monitorStderr tolerating nil OnReconnect/OnInactive.
+func TestMonitorStderr_BrokenSessionFlags(t *testing.T) {
 	t.Parallel()
 
-	// Process ran longer than stable threshold — should get base delay.
-	delay := restartDelay(stableThreshold + time.Second)
-	if delay != restartBaseDelay {
-		t.Errorf("expected %v for stable process, got %v", restartBaseDelay, delay)
+	const (
+		audioKey = "Audio key response timeout"
+		spirc    = "Spirc shut down unexpectedly"
+		playback = "Unable to read audio file"
+		authed   = "Authenticated as user@example.com"
+	)
+	// Presetting a flag makes a false detection visible: detection clears
+	// both flags, so a preset flag that survives proves nothing fired.
+	tests := []struct {
+		name                        string
+		presetAudioKey, presetSpirc bool
+		lines                       []string
+		wantAudioKey, wantSpirc     bool
+	}{
+		{"audio key alone", false, false, []string{audioKey}, true, false},
+		{"spirc alone is not broken", false, false, []string{spirc}, false, true},
+		{"audio key then spirc", false, false, []string{audioKey, spirc}, false, false},
+		{"spirc then audio key", false, false, []string{spirc, audioKey}, false, false},
+		{"audio key then playback failure", false, false, []string{audioKey, playback}, false, false},
+		{"playback failure without audio key is not broken", false, true, []string{playback}, false, true},
+		{"unrelated line", false, true, []string{"Loading track xyz"}, false, true},
+		{"authentication clears flags", true, true, []string{authed}, false, false},
+		{"inactive leaves flags", true, true, []string{"device became inactive"}, true, true},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewProcess(Config{})
+			p.sawAudioKeyErr, p.sawSpirc = tc.presetAudioKey, tc.presetSpirc
+			for _, line := range tc.lines {
+				p.monitorStderr(line)
+			}
+			if p.sawAudioKeyErr != tc.wantAudioKey || p.sawSpirc != tc.wantSpirc {
+				t.Errorf("flags after %q: sawAudioKeyErr=%v sawSpirc=%v, want %v %v",
+					tc.lines, p.sawAudioKeyErr, p.sawSpirc, tc.wantAudioKey, tc.wantSpirc)
+			}
+		})
 	}
 }
 
-func TestRestartDelay_ExactThreshold(t *testing.T) {
+// TestMonitorStderr_Callbacks checks each callback line fires its callback.
+// Callbacks run in their own goroutine, so the "other callback" check is
+// best-effort: it can miss a wrong callback that fires late, but never
+// flakes.
+func TestMonitorStderr_Callbacks(t *testing.T) {
 	t.Parallel()
 
-	// Process ran exactly at the stable threshold — should get base delay.
-	delay := restartDelay(stableThreshold)
-	if delay != restartBaseDelay {
-		t.Errorf("expected %v at threshold, got %v", restartBaseDelay, delay)
+	tests := []struct {
+		name          string
+		line          string
+		wantReconnect bool
+	}{
+		{"authenticated calls OnReconnect", "Authenticated as user@example.com", true},
+		{"inactive calls OnInactive", "device became inactive", false},
 	}
-}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			p := NewProcess(Config{})
+			reconnect := make(chan struct{}, 1)
+			inactive := make(chan struct{}, 1)
+			p.OnReconnect = func() { reconnect <- struct{}{} }
+			p.OnInactive = func() { inactive <- struct{}{} }
 
-func TestRestartDelay_HalfUptime(t *testing.T) {
-	t.Parallel()
+			p.monitorStderr(tc.line)
 
-	// Process lived half the stable threshold — delay should be ~half of max.
-	delay := restartDelay(stableThreshold / 2)
-	expected := restartMaxDelay / 2
-	tolerance := time.Second
-	if delay < expected-tolerance || delay > expected+tolerance {
-		t.Errorf("expected ~%v for half uptime, got %v", expected, delay)
-	}
-}
-
-func TestRestartDelay_NearThreshold(t *testing.T) {
-	t.Parallel()
-
-	// Process lived almost to threshold — delay should be close to base, but clamped.
-	delay := restartDelay(stableThreshold - 100*time.Millisecond)
-	if delay < restartBaseDelay {
-		t.Errorf("delay %v should be >= base delay %v", delay, restartBaseDelay)
-	}
-}
-
-// --- monitorStderr additional tests ---
-
-func TestMonitorStderr_InactiveCallsOnInactive(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-
-	done := make(chan struct{})
-	p.OnInactive = func() { close(done) }
-
-	p.monitorStderr("device became inactive")
-
-	select {
-	case <-done:
-	case <-time.After(time.Second):
-		t.Fatal("OnInactive not called within 1s")
-	}
-}
-
-func TestMonitorStderr_InactiveNilCallback(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-	p.OnInactive = nil
-
-	// Should not panic with nil OnInactive.
-	p.monitorStderr("device became inactive")
-}
-
-func TestMonitorStderr_AuthenticatedResetsFlags(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-	p.OnReconnect = func() {} // non-nil but no-op
-
-	// Set broken session flags.
-	p.sawAudioKeyErr = true
-	p.sawSpirc = true
-
-	p.monitorStderr("Authenticated as user@example.com")
-
-	if p.sawAudioKeyErr {
-		t.Error("sawAudioKeyErr should be reset on authentication")
-	}
-	if p.sawSpirc {
-		t.Error("sawSpirc should be reset on authentication")
-	}
-}
-
-func TestMonitorStderr_AuthenticatedNilCallback(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-	p.OnReconnect = nil
-
-	// Should not panic with nil OnReconnect.
-	p.monitorStderr("Authenticated as user@example.com")
-}
-
-func TestMonitorStderr_UnrelatedLine(t *testing.T) {
-	t.Parallel()
-
-	p := NewProcess(Config{})
-
-	// Unrelated lines should not affect state.
-	p.monitorStderr("Loading track xyz")
-	if p.sawAudioKeyErr || p.sawSpirc {
-		t.Error("unrelated line should not set flags")
-	}
-}
-
-func TestMonitorStderr_SpircThenAudioKey(t *testing.T) {
-	t.Parallel()
-
-	// Reverse order: spirc first, then audio key — should still trigger.
-	p := NewProcess(Config{})
-
-	p.monitorStderr("Spirc shut down unexpectedly")
-	if !p.sawSpirc {
-		t.Fatal("sawSpirc should be set")
-	}
-
-	p.monitorStderr("Audio key response timeout")
-	// Now both flags should have been set and the detection should have reset them.
-	if p.sawAudioKeyErr || p.sawSpirc {
-		t.Error("flags should be reset after broken session detection")
+			want, other := inactive, reconnect
+			if tc.wantReconnect {
+				want, other = reconnect, inactive
+			}
+			select {
+			case <-want:
+			case <-time.After(time.Second):
+				t.Fatal("callback not called within 1s")
+			}
+			select {
+			case <-other:
+				t.Error("the other callback fired too")
+			default:
+			}
+		})
 	}
 }
 
