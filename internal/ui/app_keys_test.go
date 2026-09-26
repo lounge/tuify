@@ -234,6 +234,48 @@ func TestUpdate_EscPopsViewStack(t *testing.T) {
 	}
 }
 
+func TestUpdate_EnterOnHomeOpensSelectedScreen(t *testing.T) {
+	m := newIntentTestModel()
+
+	// Home's cursor starts on "Search"; Enter emits the open intent, which
+	// the shell turns into a pushed view on the next Update.
+	m, cmd := pressKeys(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("enter on home should emit an open intent")
+	}
+	updated, _ := m.Update(cmd())
+	m = updated.(Model)
+	if _, ok := m.currentView().(*searchView); !ok {
+		t.Errorf("top of viewStack = %T, want *searchView", m.currentView())
+	}
+}
+
+func TestUpdate_EnterIgnoredInMiniMode(t *testing.T) {
+	m := newIntentTestModel()
+	m.miniMode = true
+
+	m, cmd := pressKeys(t, m, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil || len(m.viewStack) != 1 {
+		t.Error("enter in mini mode must not open a screen")
+	}
+}
+
+func TestUpdate_VTogglesVisualizer(t *testing.T) {
+	m := newIntentTestModel()
+	m.nowPlaying.hasTrack = true
+	m.nowPlaying.trackURI = "spotify:track:abc"
+	m.visualizer.ctx = t.Context() // NewModel wires this; toggle starts lyric/image loads
+
+	m, _ = pressKeys(t, m, runeKey("v"))
+	if !m.visualizer.active {
+		t.Fatal("v with a playable track should open the visualizer")
+	}
+	m, _ = pressKeys(t, m, runeKey("v"))
+	if m.visualizer.active {
+		t.Error("a second v should close the visualizer")
+	}
+}
+
 func TestUpdate_SlashOpensViewOwnedSearchInput(t *testing.T) {
 	m := newIntentTestModel()
 	sv := newSearchView(m.rootCtx, m.client, 80, 20, false)
