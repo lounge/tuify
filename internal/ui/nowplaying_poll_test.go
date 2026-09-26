@@ -22,10 +22,7 @@ import (
 func TestPollState_RootContextCancelCascadesToHTTPCall(t *testing.T) {
 	// Blocking server: holds the request open until its own request
 	// context is cancelled. Our cancel() must trigger that.
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	}))
-	defer srv.Close()
+	srv, entered := newBlockingServer(t)
 
 	httpClient := &http.Client{Transport: &testutil.RewriteTransport{
 		Base:   srv.Client().Transport,
@@ -44,8 +41,8 @@ func TestPollState_RootContextCancelCascadesToHTTPCall(t *testing.T) {
 	done := make(chan tea.Msg, 1)
 	go func() { done <- cmd() }()
 
-	// Give the goroutine time to enter the HTTP call, then cancel.
-	time.Sleep(50 * time.Millisecond)
+	// Cancel only once the request is in flight on the server.
+	waitEntered(t, entered)
 	cancel()
 
 	select {
@@ -184,10 +181,7 @@ func TestAdvanceProgress_QuietWhenPausedOrIdle(t *testing.T) {
 // must abort a playlist/track/etc fetch too. Uses playlistView as the
 // representative since all lazy views share the same fetch shape.
 func TestPlaylistFetch_RootContextCancelCascades(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		<-r.Context().Done()
-	}))
-	defer srv.Close()
+	srv, entered := newBlockingServer(t)
 
 	httpClient := &http.Client{Transport: &testutil.RewriteTransport{
 		Base:   srv.Client().Transport,
@@ -203,7 +197,7 @@ func TestPlaylistFetch_RootContextCancelCascades(t *testing.T) {
 	done := make(chan tea.Msg, 1)
 	go func() { done <- cmd() }()
 
-	time.Sleep(50 * time.Millisecond)
+	waitEntered(t, entered)
 	cancel()
 
 	select {
@@ -221,5 +215,31 @@ func TestPlaylistFetch_RootContextCancelCascades(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("playlist fetch did not return after root ctx cancel")
+	}
+}
+
+// newBlockingServer returns a server whose handler signals on entered once
+// a request arrives and then holds it open until the request's context is
+// cancelled, so tests can cancel exactly while a call is in flight.
+func newBlockingServer(t *testing.T) (*httptest.Server, <-chan struct{}) {
+	t.Helper()
+	entered := make(chan struct{}, 1)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case entered <- struct{}{}:
+		default:
+		}
+		<-r.Context().Done()
+	}))
+	t.Cleanup(srv.Close)
+	return srv, entered
+}
+
+func waitEntered(t *testing.T, entered <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-entered:
+	case <-time.After(2 * time.Second):
+		t.Fatal("request never reached the server")
 	}
 }
