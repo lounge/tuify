@@ -117,6 +117,7 @@ func (p *Process) launch() error {
 
 	args := p.args()
 	p.cmd = exec.Command(p.config.BinaryPath, args...)
+	bindToParent(p.cmd)
 	p.done = make(chan struct{})
 	// Bounds how long Wait keeps copying output after librespot exits, in
 	// case a child it spawned (e.g. an --onevent hook) still holds the

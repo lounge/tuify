@@ -2,9 +2,12 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os/signal"
 	"path/filepath"
 	"sync/atomic"
+	"syscall"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -13,6 +16,10 @@ import (
 	"github.com/lounge/tuify/internal/ui"
 	zone "github.com/lrstanley/bubblezone"
 )
+
+// ErrInterrupted is returned by Run when the process got SIGINT from
+// outside the TUI. main exits with the conventional status 130 for it.
+var ErrInterrupted = errors.New("interrupted")
 
 // Run is the main application entry point. It loads config, authenticates,
 // starts services, and runs the TUI. Returns an error on startup or runtime
@@ -113,10 +120,20 @@ func Run() error {
 	// WithMouseCellMotion enables click + scroll wheel events. CellMotion
 	// is cheaper than AllMotion (events only on cell boundaries) and
 	// sufficient for click-to-select + wheel scroll.
+	//
+	// bubbletea traps SIGINT and SIGTERM itself but not SIGHUP, whose
+	// default action kills the process on the spot: the terminal would be
+	// left in the alt screen with mouse reporting on, and librespot would
+	// be orphaned, still advertising itself as a Connect device. Turning
+	// SIGHUP into a cancelled program context lets Run return normally so
+	// the terminal is restored and every deferred cleanup runs.
+	hupCtx, stopHup := signal.NotifyContext(ctx, syscall.SIGHUP)
+	defer stopHup()
 	p := tea.NewProgram(
 		ui.NewModel(ctx, session.Client, opts...),
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
+		tea.WithContext(hupCtx),
 	)
 	_, err = p.Run()
 	// Cancel now rather than via defer: the deferred cleanups (librespot
@@ -141,6 +158,14 @@ func Run() error {
 				"If login still fails, delete %s and try again.",
 			path,
 		)
+	}
+	switch {
+	case errors.Is(err, tea.ErrInterrupted):
+		// SIGINT from outside (Ctrl+C inside the TUI is a key press and
+		// quits cleanly). Not a failure worth an error message.
+		return ErrInterrupted
+	case errors.Is(err, tea.ErrProgramKilled) && hupCtx.Err() != nil:
+		return nil // terminal hung up; cleanup has run
 	}
 	return err
 }
