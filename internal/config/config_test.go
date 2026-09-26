@@ -239,3 +239,34 @@ func TestLoad_RejectsUnknownFields(t *testing.T) {
 		t.Errorf("error should include the file path, got: %v", err)
 	}
 }
+
+// json.Decoder stops after the first value, so trailing content, including
+// a second object with keys DisallowUnknownFields never sees, used to be
+// ignored silently.
+func TestLoad_RejectsTrailingContent(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	dir := filepath.Join(tmp, "tuify")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	for _, body := range []string{
+		`{"client_id":"abc"} trailing`,
+		`{"client_id":"abc"}{"vim_mod":true}`,
+	} {
+		if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(body), 0o600); err != nil {
+			t.Fatalf("WriteFile: %v", err)
+		}
+		if _, err := Load(); err == nil {
+			t.Errorf("Load accepted %q", body)
+		}
+	}
+
+	// Trailing whitespace and a final newline are fine.
+	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte("{\"client_id\":\"abc\"}\n\n  "), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	if _, err := Load(); err != nil {
+		t.Errorf("trailing whitespace rejected: %v", err)
+	}
+}

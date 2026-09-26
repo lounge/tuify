@@ -103,6 +103,12 @@ func Load() (*Config, error) {
 	if err := dec.Decode(&cfg); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	// Decode stops after the first JSON value. Anything after it (a
+	// second object pasted in, a stray fragment) would be ignored
+	// silently, unknown keys included.
+	if dec.More() {
+		return nil, fmt.Errorf("parse %s: unexpected content after the config object", path)
+	}
 	return &cfg, nil
 }
 
