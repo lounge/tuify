@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/lounge/tuify/internal/testutil"
@@ -102,35 +103,38 @@ func TestSaveFreshToken_StampsAuthorizedAt(t *testing.T) {
 }
 
 func TestSaveToken_PreservesAuthorizedAt(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	freshTok := &oauth2.Token{AccessToken: "v1", RefreshToken: "rt", TokenType: "Bearer"}
-	if err := SaveFreshToken(freshTok); err != nil {
-		t.Fatalf("SaveFreshToken: %v", err)
-	}
-	_, originalAuthAt, err := LoadTokenWithAuth()
-	if err != nil || originalAuthAt.IsZero() {
-		t.Fatalf("setup: expected non-zero AuthorizedAt; err=%v", err)
-	}
+	// On the fake clock the refresh happens a full hour after the login,
+	// so a SaveToken that re-stamped AuthorizedAt could not go unnoticed.
+	synctest.Test(t, func(t *testing.T) {
+		freshTok := &oauth2.Token{AccessToken: "v1", RefreshToken: "rt", TokenType: "Bearer"}
+		if err := SaveFreshToken(freshTok); err != nil {
+			t.Fatalf("SaveFreshToken: %v", err)
+		}
+		_, originalAuthAt, err := LoadTokenWithAuth()
+		if err != nil || originalAuthAt.IsZero() {
+			t.Fatalf("setup: expected non-zero AuthorizedAt; err=%v", err)
+		}
 
-	// Simulate a token refresh — SaveToken must NOT reset AuthorizedAt.
-	refreshedTok := &oauth2.Token{AccessToken: "v2", RefreshToken: "rt", TokenType: "Bearer"}
-	time.Sleep(2 * time.Millisecond) // ensure time.Now() differs
-	if err := SaveToken(refreshedTok); err != nil {
-		t.Fatalf("SaveToken: %v", err)
-	}
+		// Simulate a token refresh — SaveToken must NOT reset AuthorizedAt.
+		time.Sleep(time.Hour)
+		refreshedTok := &oauth2.Token{AccessToken: "v2", RefreshToken: "rt", TokenType: "Bearer"}
+		if err := SaveToken(refreshedTok); err != nil {
+			t.Fatalf("SaveToken: %v", err)
+		}
 
-	loaded, authAt, err := LoadTokenWithAuth()
-	if err != nil {
-		t.Fatalf("LoadTokenWithAuth: %v", err)
-	}
-	if loaded.AccessToken != "v2" {
-		t.Errorf("AccessToken: got %q, want v2", loaded.AccessToken)
-	}
-	if !authAt.Equal(originalAuthAt) {
-		t.Errorf("AuthorizedAt was reset by SaveToken: got %v, want %v", authAt, originalAuthAt)
-	}
+		loaded, authAt, err := LoadTokenWithAuth()
+		if err != nil {
+			t.Fatalf("LoadTokenWithAuth: %v", err)
+		}
+		if loaded.AccessToken != "v2" {
+			t.Errorf("AccessToken: got %q, want v2", loaded.AccessToken)
+		}
+		if !authAt.Equal(originalAuthAt) {
+			t.Errorf("AuthorizedAt was reset by SaveToken: got %v, want %v", authAt, originalAuthAt)
+		}
+	})
 }
 
 func TestLoadTokenWithAuth_BackCompatNoAuthorizedAt(t *testing.T) {
@@ -525,127 +529,130 @@ func (c *countingTokenSource) callCount() int {
 	return c.calls
 }
 
+// The proactive refresh tests run on synctest's fake clock: time.Sleep
+// advances it instantly once every goroutine in the bubble is blocked, and
+// synctest.Wait lets the refresh goroutine settle before each assertion,
+// so they check exactly when a refresh fires instead of polling for it.
+
 func TestProactiveRefresh_TriggersBeforeExpiry(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Initial token expires in 10ms, so the refresh triggers immediately
-	// (wait = 10ms - 5s < 0). Returned tokens expire in 1h to stop the loop.
-	inner := &countingTokenSource{expIn: time.Hour}
-	ts := &savingTokenSource{
-		base: inner,
-		last: &oauth2.Token{
-			AccessToken: "initial",
-			Expiry:      time.Now().Add(10 * time.Millisecond),
-		},
-	}
-
-	ctx := t.Context()
-	ts.startProactiveRefresh(ctx)
-
-	// Wait for at least one proactive refresh.
-	deadline := time.After(2 * time.Second)
-	for {
-		if inner.callCount() >= 1 {
-			break
+	synctest.Test(t, func(t *testing.T) {
+		// Returned tokens expire in 1h, so after one refresh the loop
+		// parks until well past the end of the test.
+		inner := &countingTokenSource{expIn: time.Hour}
+		ts := &savingTokenSource{
+			base: inner,
+			last: &oauth2.Token{AccessToken: "initial", Expiry: time.Now().Add(time.Minute)},
 		}
-		select {
-		case <-deadline:
-			t.Fatalf("proactive refresh did not trigger, calls=%d", inner.callCount())
-		case <-time.After(10 * time.Millisecond):
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		ts.startProactiveRefresh(ctx)
+
+		// The refresh is due 5s before expiry: not at 54s, but by 55s.
+		time.Sleep(54 * time.Second)
+		synctest.Wait()
+		if n := inner.callCount(); n != 0 {
+			t.Fatalf("refreshed %d times before the 5s-before-expiry mark", n)
 		}
-	}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if n := inner.callCount(); n != 1 {
+			t.Fatalf("refresh calls at the 5s-before-expiry mark = %d, want 1", n)
+		}
+	})
 }
 
 func TestProactiveRefresh_StopsOnCancel(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	// Short initial expiry triggers refresh quickly; returned tokens expire in
-	// 1h so the goroutine enters the cancelable sleep after the first refresh.
-	inner := &countingTokenSource{expIn: time.Hour}
-	ts := &savingTokenSource{
-		base: inner,
-		last: &oauth2.Token{
-			AccessToken: "initial",
-			Expiry:      time.Now().Add(10 * time.Millisecond),
-		},
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	ts.startProactiveRefresh(ctx)
-
-	// Wait until at least one refresh happened.
-	deadline := time.After(2 * time.Second)
-	for inner.callCount() < 1 {
-		select {
-		case <-deadline:
-			t.Fatal("refresh never triggered")
-		case <-time.After(5 * time.Millisecond):
+	synctest.Test(t, func(t *testing.T) {
+		// Returned tokens expire in 10s, so the loop keeps refreshing
+		// every 5s until cancelled.
+		inner := &countingTokenSource{expIn: 10 * time.Second}
+		ts := &savingTokenSource{
+			base: inner,
+			last: &oauth2.Token{AccessToken: "initial", Expiry: time.Now().Add(10 * time.Second)},
 		}
-	}
+		ctx, cancel := context.WithCancel(t.Context())
+		ts.startProactiveRefresh(ctx)
 
-	cancel()
-	time.Sleep(50 * time.Millisecond) // let goroutine exit
+		time.Sleep(time.Minute)
+		synctest.Wait()
+		before := inner.callCount()
+		if before < 2 {
+			t.Fatalf("expected repeated refreshes before cancel, got %d", before)
+		}
 
-	countAfterCancel := inner.callCount()
-	time.Sleep(300 * time.Millisecond)
-	countLater := inner.callCount()
-
-	if countLater != countAfterCancel {
-		t.Errorf("refresh continued after cancel: %d -> %d", countAfterCancel, countLater)
-	}
+		// synctest.Test fails the test if the goroutine outlives the
+		// bubble, so this also proves the loop exits on cancel.
+		cancel()
+		synctest.Wait()
+		time.Sleep(time.Hour)
+		if after := inner.callCount(); after != before {
+			t.Errorf("refresh continued after cancel: %d -> %d", before, after)
+		}
+	})
 }
 
 func TestProactiveRefresh_NilToken(t *testing.T) {
-	// When last token is nil, the goroutine should sleep 30s then re-check.
-	// We just verify it doesn't panic and respects cancellation.
-	ts := &savingTokenSource{
-		base: oauth2.StaticTokenSource(&oauth2.Token{AccessToken: "x"}),
-		last: nil,
-	}
+	synctest.Test(t, func(t *testing.T) {
+		// With no token the loop only re-checks every 30s; it must never
+		// call Token() and must exit on cancel.
+		inner := &countingTokenSource{expIn: time.Hour}
+		ts := &savingTokenSource{base: inner, last: nil}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	ts.startProactiveRefresh(ctx)
-	time.Sleep(50 * time.Millisecond) // let goroutine start
-	cancel()                          // should exit cleanly
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		ts.startProactiveRefresh(ctx)
+
+		time.Sleep(5 * time.Minute)
+		synctest.Wait()
+		if n := inner.callCount(); n != 0 {
+			t.Errorf("Token() called %d times with no token to refresh", n)
+		}
+	})
 }
 
 func TestProactiveRefresh_RetriesOnError(t *testing.T) {
-	tmp := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
-	var callCount atomic.Int32
-
-	ts := &savingTokenSource{
-		base: tokenSourceFunc(func() (*oauth2.Token, error) {
-			n := callCount.Add(1)
-			if n <= 1 {
-				return nil, errors.New("temporary failure")
-			}
-			return &oauth2.Token{
-				AccessToken: fmt.Sprintf("recovered-%d", n),
-				Expiry:      time.Now().Add(time.Hour),
-			}, nil
-		}),
-		last: &oauth2.Token{AccessToken: "will-fail", Expiry: time.Now().Add(10 * time.Millisecond)},
-	}
-
-	ctx := t.Context()
-	ts.startProactiveRefresh(ctx)
-
-	// The first call will fail. We just verify the goroutine attempted the refresh.
-	deadline := time.After(2 * time.Second)
-	for {
-		if callCount.Load() >= 1 {
-			break
+	synctest.Test(t, func(t *testing.T) {
+		var callCount atomic.Int32
+		ts := &savingTokenSource{
+			base: tokenSourceFunc(func() (*oauth2.Token, error) {
+				n := callCount.Add(1)
+				if n <= 1 {
+					return nil, errors.New("temporary failure")
+				}
+				return &oauth2.Token{
+					AccessToken: fmt.Sprintf("recovered-%d", n),
+					Expiry:      time.Now().Add(time.Hour),
+				}, nil
+			}),
+			last: &oauth2.Token{AccessToken: "will-fail", Expiry: time.Now().Add(time.Minute)},
 		}
-		select {
-		case <-deadline:
-			t.Fatal("proactive refresh did not attempt")
-		case <-time.After(10 * time.Millisecond):
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
+		ts.startProactiveRefresh(ctx)
+
+		// First attempt at 55s fails; the retry comes 10s later.
+		time.Sleep(55 * time.Second)
+		synctest.Wait()
+		if n := callCount.Load(); n != 1 {
+			t.Fatalf("attempts at the refresh mark = %d, want 1", n)
 		}
-	}
+		time.Sleep(9 * time.Second)
+		synctest.Wait()
+		if n := callCount.Load(); n != 1 {
+			t.Fatalf("retried after %d attempts before the 10s backoff elapsed", n)
+		}
+		time.Sleep(time.Second)
+		synctest.Wait()
+		if n := callCount.Load(); n != 2 {
+			t.Fatalf("attempts after the 10s backoff = %d, want 2", n)
+		}
+	})
 }
 
 // tokenSourceFunc adapts a function to oauth2.TokenSource.
