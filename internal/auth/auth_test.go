@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lounge/tuify/internal/testutil"
 	"golang.org/x/oauth2"
 )
 
@@ -249,36 +250,156 @@ func TestSavingTokenSource_PersistsOnRefresh(t *testing.T) {
 	}
 }
 
-func TestStartupForceExpire(t *testing.T) {
-	// Token expiring in 2 minutes should be force-expired.
-	tok := &oauth2.Token{
-		AccessToken: "soon",
-		Expiry:      time.Now().Add(2 * time.Minute),
+// newTokenServer stands in for Spotify's token endpoint. handler answers
+// refresh requests; the returned counter tracks how many arrived. The
+// returned client routes every request to the server, for injection into
+// newSavingClient as the refresh client.
+func newTokenServer(t *testing.T, handler http.HandlerFunc) (*http.Client, *atomic.Int32) {
+	t.Helper()
+	var hits atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits.Add(1)
+		handler(w, r)
+	}))
+	t.Cleanup(srv.Close)
+	return &http.Client{Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}}, &hits
+}
+
+func refreshOK(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	fmt.Fprint(w, `{"access_token":"fresh","token_type":"Bearer","refresh_token":"r","expires_in":3600}`)
+}
+
+func TestNewSavingClient_StartupRefresh(t *testing.T) {
+	tests := []struct {
+		name      string
+		expiresIn time.Duration
+		wantHits  int32
+	}{
+		{"expiring within 5 minutes is refreshed at startup", 2 * time.Minute, 1},
+		{"valid for 30 minutes is not refreshed", 30 * time.Minute, 0},
 	}
-	if time.Until(tok.Expiry) >= 5*time.Minute {
-		t.Fatal("test setup: token should expire within 5 minutes")
-	}
-	// Simulate the startup check.
-	if !tok.Expiry.IsZero() && time.Until(tok.Expiry) < 5*time.Minute {
-		tok.Expiry = time.Now().Add(-1 * time.Second)
-	}
-	if !tok.Expiry.Before(time.Now()) {
-		t.Error("token should be force-expired")
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+			refresh, hits := newTokenServer(t, refreshOK)
+			tok := &oauth2.Token{AccessToken: "old", RefreshToken: "r", Expiry: time.Now().Add(tc.expiresIn)}
+
+			_, saveErrCh, _, cleanup, err := newSavingClient(t.Context(), NewAuthenticator("id", "http://127.0.0.1:4444/cb"), tok, refresh)
+			if err != nil {
+				t.Fatalf("newSavingClient: %v", err)
+			}
+			defer cleanup()
+
+			if got := hits.Load(); got != tc.wantHits {
+				t.Errorf("refresh requests at startup: got %d, want %d", got, tc.wantHits)
+			}
+			select {
+			case err := <-saveErrCh:
+				t.Errorf("unexpected saveErrCh value: %v", err)
+			default:
+			}
+		})
 	}
 }
 
-func TestStartupNoForceExpire(t *testing.T) {
-	// Token valid for 30 minutes should NOT be force-expired.
-	tok := &oauth2.Token{
-		AccessToken: "valid",
-		Expiry:      time.Now().Add(30 * time.Minute),
+func TestNewSavingClient_StartupRefreshFailureIsReported(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	refresh, _ := newTokenServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	tok := &oauth2.Token{AccessToken: "old", RefreshToken: "r", Expiry: time.Now().Add(time.Minute)}
+
+	_, saveErrCh, revokedCh, cleanup, err := newSavingClient(t.Context(), NewAuthenticator("id", "http://127.0.0.1:4444/cb"), tok, refresh)
+	if err != nil {
+		t.Fatalf("newSavingClient: %v", err)
 	}
-	original := tok.Expiry
-	if !tok.Expiry.IsZero() && time.Until(tok.Expiry) < 5*time.Minute {
-		tok.Expiry = time.Now().Add(-1 * time.Second)
+	defer cleanup()
+
+	select {
+	case err := <-saveErrCh:
+		if errors.Is(err, ErrTokenRevoked) {
+			t.Errorf("a 503 must not be reported as revoked: %v", err)
+		}
+	default:
+		t.Fatal("startup refresh failure was not reported on saveErrCh")
 	}
-	if !tok.Expiry.Equal(original) {
-		t.Error("token with >5min remaining should not be modified")
+	select {
+	case <-revokedCh:
+		t.Error("revokedCh fired for a transient failure")
+	default:
+	}
+}
+
+func TestNewSavingClient_RevokedDeletesTokenAndSignalsOnce(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", dir)
+	tokenPath := filepath.Join(dir, "tuify", "token.json")
+	if err := SaveFreshToken(&oauth2.Token{AccessToken: "old", RefreshToken: "dead"}); err != nil {
+		t.Fatalf("SaveFreshToken: %v", err)
+	}
+	refresh, _ := newTokenServer(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		fmt.Fprint(w, `{"error":"invalid_grant","error_description":"Refresh token revoked"}`)
+	})
+	tok := &oauth2.Token{AccessToken: "old", RefreshToken: "dead", Expiry: time.Now().Add(time.Minute)}
+
+	client, saveErrCh, revokedCh, cleanup, err := newSavingClient(t.Context(), NewAuthenticator("id", "http://127.0.0.1:4444/cb"), tok, refresh)
+	if err != nil {
+		t.Fatalf("newSavingClient: %v", err)
+	}
+	defer cleanup()
+
+	select {
+	case <-revokedCh:
+	default:
+		t.Fatal("revokedCh did not fire after invalid_grant at startup")
+	}
+	if _, err := os.Stat(tokenPath); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("token.json should be deleted, stat err = %v", err)
+	}
+	select {
+	case err := <-saveErrCh:
+		t.Errorf("revocation must not also be reported on saveErrCh: %v", err)
+	default:
+	}
+
+	// A later request refreshes again and fails the same way: the error is
+	// detectable as revoked, and the signal does not fire a second time.
+	resp, err := client.Get("https://api.spotify.com/v1/me")
+	if err == nil {
+		resp.Body.Close()
+		t.Fatal("request with a revoked token succeeded")
+	}
+	if !errors.Is(err, ErrTokenRevoked) {
+		t.Errorf("request error not detectable as ErrTokenRevoked: %v", err)
+	}
+	select {
+	case <-revokedCh:
+		t.Error("revokedCh fired a second time")
+	default:
+	}
+}
+
+func TestIsRevokedError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"invalid_grant", &oauth2.RetrieveError{ErrorCode: "invalid_grant"}, true},
+		{"wrapped invalid_grant", fmt.Errorf("refresh: %w", &oauth2.RetrieveError{ErrorCode: "invalid_grant"}), true},
+		{"other oauth error", &oauth2.RetrieveError{ErrorCode: "invalid_client"}, false},
+		{"string mention only", errors.New("upstream said invalid_grant"), false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isRevokedError(tc.err); got != tc.want {
+				t.Errorf("isRevokedError() = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -14,8 +14,9 @@
 //
 // NewSavingClient returns an *http.Client that refreshes and re-persists
 // the token automatically; its cleanup stops the proactive-refresh
-// goroutine. Refresh failures that can't block the caller (disk write
-// errors) are surfaced on saveErrCh so the UI can warn the user.
+// goroutine. Non-fatal auth problems are surfaced on saveErrCh so the UI
+// can warn the user: token.json write failures, and a failed refresh at
+// startup (every request retries the refresh, so the app keeps running).
 // revokedCh fires once if Spotify rejects the refresh token as
 // permanently invalid, so the caller can prompt for a fresh login.
 //

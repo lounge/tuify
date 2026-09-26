@@ -16,7 +16,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -34,21 +33,24 @@ var ErrTokenRevoked = errors.New("spotify refresh token revoked")
 
 // isRevokedError detects the "invalid_grant" response Spotify returns
 // when a refresh token is permanently dead. The oauth2 library surfaces
-// it as a *RetrieveError whose String contains "invalid_grant".
+// it as a *RetrieveError with ErrorCode set to RFC 6749's error value.
 func isRevokedError(err error) bool {
-	if err == nil {
-		return false
-	}
-	return strings.Contains(err.Error(), "invalid_grant")
+	re, ok := errors.AsType[*oauth2.RetrieveError](err)
+	return ok && re.ErrorCode == "invalid_grant"
 }
 
 // savingTokenSource wraps a TokenSource and persists the token to disk
 // whenever it is refreshed, so refreshed tokens survive app restarts.
 type savingTokenSource struct {
-	mu     sync.Mutex
+	mu     sync.Mutex // guards last
 	base   oauth2.TokenSource
 	last   *oauth2.Token
 	cancel context.CancelFunc
+
+	// saveMu serializes token.json writes. It is taken only when the token
+	// changed, so the per-request path (unchanged token) never waits on disk
+	// I/O behind mu.
+	saveMu sync.Mutex
 
 	// saveErrCh receives persistence failures. Buffered and lossy on full so
 	// we never block a refresh. Consumers (the UI) render these as visible
@@ -77,15 +79,32 @@ func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 		return nil, err
 	}
 	s.mu.Lock()
-	if s.last == nil || tok.AccessToken != s.last.AccessToken {
+	changed := s.last == nil || tok.AccessToken != s.last.AccessToken
+	if changed {
 		s.last = tok
-		if err := SaveToken(tok); err != nil {
-			log.Printf("[auth] failed to persist refreshed token: %v", err)
-			s.notifySaveErr(err)
-		}
 	}
 	s.mu.Unlock()
+	if changed {
+		s.persist(tok)
+	}
 	return tok, nil
+}
+
+// persist writes tok to disk unless a newer token has replaced it in the
+// meantime, so two overlapping saves can never leave an older token on disk.
+func (s *savingTokenSource) persist(tok *oauth2.Token) {
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
+	s.mu.Lock()
+	latest := s.last == tok
+	s.mu.Unlock()
+	if !latest {
+		return
+	}
+	if err := SaveToken(tok); err != nil {
+		log.Printf("[auth] failed to persist refreshed token: %v", err)
+		s.notifySaveErr(fmt.Errorf("could not save refreshed token: %w", err))
+	}
 }
 
 // signalRevoked deletes the stale token file (so the next launch runs
@@ -193,8 +212,9 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 // NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
 // and persists them to disk on each refresh. The returned cleanup function
 // stops the proactive-refresh goroutine; callers must invoke it on shutdown.
-// saveErrCh emits persistence failures (buffered, lossy on full) so the
-// caller can surface them to the user. revokedCh fires exactly once if
+// saveErrCh emits non-fatal problems (buffered, lossy on full) so the
+// caller can surface them to the user: token.json write failures, and a
+// failed refresh at startup that is not a revocation. revokedCh fires exactly once if
 // Spotify rejects the refresh token as permanently invalid ("invalid_grant"
 // — most commonly Spotify's 6-month refresh-token lifetime (measured from
 // original authorization, not extended by refresh), or the user revoking
@@ -213,6 +233,12 @@ func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *o
 			ResponseHeaderTimeout: 10 * time.Second,
 		},
 	}
+	return newSavingClient(ctx, a, token, refreshClient)
+}
+
+// newSavingClient is NewSavingClient with the token-refresh HTTP client
+// injected, so tests can point refreshes at an httptest server.
+func newSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token, refreshClient *http.Client) (*http.Client, <-chan error, <-chan struct{}, func(), error) {
 	// If the token expires within 5 minutes, force it to appear expired so
 	// the oauth2 library refreshes immediately during startup (no concurrent
 	// requests yet). This prevents the first in-flight refresh from blocking
@@ -238,6 +264,12 @@ func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *o
 	// Trigger a refresh now so the token is fresh before any polls start.
 	if freshTok, err := ts.Token(); err != nil {
 		log.Printf("[auth] startup token refresh failed: %v", err)
+		// Revocation is signalled on revokedCh; anything else (network,
+		// Spotify outage) is non-fatal but worth showing, since every
+		// request will retry the refresh until it succeeds.
+		if !errors.Is(err, ErrTokenRevoked) {
+			ts.notifySaveErr(fmt.Errorf("token refresh at startup failed: %w", err))
+		}
 	} else {
 		log.Printf("[auth] token valid until %v", freshTok.Expiry.Local().Format("15:04:05"))
 	}
@@ -309,14 +341,24 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// Login reads exactly one result, but the callback can be hit more
+	// than once (browser prefetch, reloading the success tab, a stray
+	// request). Sends are non-blocking so extra hits can't park a handler
+	// goroutine forever and stall server.Shutdown.
+	sendErr := func(err error) {
+		select {
+		case errCh <- err:
+		default:
+		}
+	}
 	mux.HandleFunc(callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Query().Get("state") != state {
-			errCh <- errors.New("state mismatch")
+			sendErr(errors.New("state mismatch"))
 			return
 		}
 		code := r.URL.Query().Get("code")
 		if code == "" {
-			errCh <- fmt.Errorf("auth error: %s", r.URL.Query().Get("error"))
+			sendErr(fmt.Errorf("auth error: %s", r.URL.Query().Get("error")))
 			return
 		}
 		token, err := a.Exchange(
@@ -325,16 +367,19 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 			oauth2.SetAuthURLParam("code_verifier", verifier),
 		)
 		if err != nil {
-			errCh <- err
+			sendErr(err)
 			return
 		}
 		fmt.Fprint(w, "<html><body><h1>Success!</h1><p>You can close this window.</p></body></html>")
-		tokenCh <- token
+		select {
+		case tokenCh <- token:
+		default:
+		}
 	})
 
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- fmt.Errorf("failed to start auth server: %w", err)
+		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			sendErr(fmt.Errorf("failed to start auth server: %w", err))
 		}
 	}()
 	defer func() {
@@ -369,7 +414,7 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 // the user's original authorization — refreshes do not reset the clock.
 type storedToken struct {
 	oauth2.Token
-	AuthorizedAt time.Time `json:"authorized_at"`
+	AuthorizedAt time.Time `json:"authorized_at,omitzero"`
 }
 
 // SaveToken persists a refreshed token. The authorized_at timestamp from
@@ -378,7 +423,14 @@ type storedToken struct {
 // freshly obtained from the Login flow.
 func SaveToken(token *oauth2.Token) error {
 	var prevAuthAt time.Time
-	if prev, err := loadStoredToken(); err == nil && prev != nil {
+	prev, err := loadStoredToken()
+	switch {
+	case err != nil:
+		// Still save the new token, but the original authorization time is
+		// lost, which disables the 6-month re-auth warning until the next
+		// login. Worth a trace when diagnosing a missing warning.
+		log.Printf("[auth] could not read previous token.json, authorized_at will be reset: %v", err)
+	case prev != nil:
 		prevAuthAt = prev.AuthorizedAt
 	}
 	return saveTokenAt(token, prevAuthAt)
