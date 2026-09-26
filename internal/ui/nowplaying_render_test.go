@@ -4,6 +4,8 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/lipgloss"
 )
 
 // TestWriteWithBackground_MatchesRegexp pins the hand-rolled SGR scanner
@@ -31,5 +33,28 @@ func TestWriteWithBackground_MatchesRegexp(t *testing.T) {
 		if want := sgr.ReplaceAllString(in, "${0}"+bg); b.String() != want {
 			t.Errorf("writeWithBackground(%q) = %q, want %q", in, b.String(), want)
 		}
+	}
+}
+
+// renderTrackLine uses display-cell widths so wide runes (CJK, emoji)
+// that count as 1 Unicode point but 2 cells don't slip past the budget
+// and wrap the now-playing bar. A wrap would shift zone coordinates in
+// the list above and make mouse clicks land on the wrong row.
+func TestRenderTrackLine_WideRunesStaySingleLine(t *testing.T) {
+	np := &nowPlayingModel{
+		width:    40,
+		hasTrack: true,
+		track:    "あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほ", // ~60 cells of wide runes
+		artist:   "まみむめも",
+		playing:  true,
+	}
+	line := np.renderTrackLine()
+	if strings.Contains(line, "\n") {
+		t.Errorf("renderTrackLine produced multi-line output: %q", line)
+	}
+	// The rendered line should fit within the width budget once styling
+	// is applied. lipgloss.Width ignores ANSI codes, so it's the cell count.
+	if w := lipgloss.Width(line); w > np.width-nowPlayingPadding {
+		t.Errorf("line width %d exceeds budget %d", w, np.width-nowPlayingPadding)
 	}
 }
