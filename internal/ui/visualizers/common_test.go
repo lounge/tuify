@@ -1,6 +1,8 @@
 package visualizers
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -118,6 +120,17 @@ func TestClamp(t *testing.T) {
 	for _, tt := range tests {
 		if got := clamp(tt.v, tt.lo, tt.hi); got != tt.want {
 			t.Errorf("clamp(%d, %d, %d) = %d, want %d", tt.v, tt.lo, tt.hi, got, tt.want)
+		}
+	}
+}
+
+func TestWriteAnsiFgBg_MatchesStrconv(t *testing.T) {
+	for _, c := range [][6]int{{0, 0, 0, 255, 255, 255}, {7, 42, 199, 100, 10, 1}, {-1, 256, 1000, 0, 128, 255}} {
+		var sb strings.Builder
+		writeAnsiFgBg(&sb, c[0], c[1], c[2], c[3], c[4], c[5])
+		want := fmt.Sprintf("\x1b[38;2;%d;%d;%dm\x1b[48;2;%d;%d;%dm", c[0], c[1], c[2], c[3], c[4], c[5])
+		if sb.String() != want {
+			t.Errorf("writeAnsiFgBg%v = %q, want %q", c, sb.String(), want)
 		}
 	}
 }

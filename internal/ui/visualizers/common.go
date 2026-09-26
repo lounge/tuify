@@ -92,18 +92,26 @@ func hslToRGB(h, s, l float64) (int, int, int) {
 		clamp(int((b+m)*255), 0, 255)
 }
 
+// decimalBytes holds the decimal text of 0–255 so the ANSI writers below
+// can emit colour components without strconv allocating per cell.
+var decimalBytes = func() (t [256]string) {
+	for i := range t {
+		t[i] = strconv.Itoa(i)
+	}
+	return t
+}()
+
 // writeAnsiFg appends a 24-bit ANSI foreground escape (`\x1b[38;2;R;G;Bm`)
 // directly to the builder. Using the writer form instead of an allocating
-// `fmt.Sprintf` return avoids ~1 string alloc per rendered cell — at 30 FPS
-// on a 100-wide terminal that's ~60k allocs/sec avoided for the spectrum,
-// oscillogram, and spectrogram hot paths.
+// `fmt.Sprintf` return, and table lookups instead of strconv, keeps the
+// spectrum, oscillogram, and spectrogram hot paths allocation-free per cell.
 func writeAnsiFg(w *strings.Builder, r, g, b int) {
 	w.WriteString("\x1b[38;2;")
-	w.WriteString(strconv.Itoa(r))
+	writeDecimal(w, r)
 	w.WriteByte(';')
-	w.WriteString(strconv.Itoa(g))
+	writeDecimal(w, g)
 	w.WriteByte(';')
-	w.WriteString(strconv.Itoa(b))
+	writeDecimal(w, b)
 	w.WriteByte('m')
 }
 
@@ -111,12 +119,23 @@ func writeAnsiFg(w *strings.Builder, r, g, b int) {
 func writeAnsiFgBg(w *strings.Builder, fgR, fgG, fgB, bgR, bgG, bgB int) {
 	writeAnsiFg(w, fgR, fgG, fgB)
 	w.WriteString("\x1b[48;2;")
-	w.WriteString(strconv.Itoa(bgR))
+	writeDecimal(w, bgR)
 	w.WriteByte(';')
-	w.WriteString(strconv.Itoa(bgG))
+	writeDecimal(w, bgG)
 	w.WriteByte(';')
-	w.WriteString(strconv.Itoa(bgB))
+	writeDecimal(w, bgB)
 	w.WriteByte('m')
+}
+
+// writeDecimal writes v in decimal, from the table when v is a valid
+// colour component and via strconv otherwise so out-of-range input still
+// renders exactly as before.
+func writeDecimal(w *strings.Builder, v int) {
+	if uint(v) < uint(len(decimalBytes)) {
+		w.WriteString(decimalBytes[v])
+		return
+	}
+	w.WriteString(strconv.Itoa(v))
 }
 
 const ansiReset = "\x1b[0m"
