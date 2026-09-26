@@ -202,9 +202,9 @@ func TestPlaylistFetch_RootContextCancelCascades(t *testing.T) {
 
 	select {
 	case msg := <-done:
-		plm, ok := msg.(playlistsLoadedMsg)
+		plm, ok := msg.(pageLoadedMsg)
 		if !ok {
-			t.Fatalf("expected playlistsLoadedMsg, got %T", msg)
+			t.Fatalf("expected pageLoadedMsg, got %T", msg)
 		}
 		if plm.err == nil {
 			t.Fatal("expected error from canceled fetch, got nil")

@@ -27,8 +27,8 @@ type searchView struct {
 	query       string // committed search term (after prefix, e.g. "queen")
 	prefix      searchPrefix
 	debounceSeq int
-	epoch       int // incremented on every state reset to discard stale results
-	depth       int // 0 = search results, 1 = container detail, 2 = artist→album→tracks
+	epoch       uint64 // replaced on every state reset (newFetchID) to discard stale results
+	depth       int    // 0 = search results, 1 = container detail, 2 = artist→album→tracks
 	offset      int
 	hasMore     bool
 	pending     int
@@ -52,6 +52,9 @@ func newSearchView(ctx context.Context, client *spotify.Client, width, height in
 		ctx:       ctx,
 		client:    client,
 		searching: true,
+		// Epochs come from the same process-wide counter as list ids, so a
+		// result for an earlier search view can never match this one.
+		epoch: newFetchID(),
 	}
 }
 
@@ -117,7 +120,7 @@ func (v *searchView) resetToDepth0() {
 
 // resetPagination clears pagination state for a new depth level.
 func (v *searchView) resetPagination() {
-	v.epoch++
+	v.epoch = newFetchID()
 	v.items = nil
 	v.offset = 0
 	v.hasMore = false
@@ -153,7 +156,7 @@ func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 		v.prefix = prefix
 		v.query = term
 		v.depth = 0
-		v.epoch++
+		v.epoch = newFetchID()
 		v.items = nil
 		v.offset = 0
 		v.hasMore = false

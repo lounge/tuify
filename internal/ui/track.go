@@ -25,91 +25,40 @@ func (i trackItem) Description() string {
 func (i trackItem) FilterValue() string { return i.name }
 func (i trackItem) URI() string         { return i.uri }
 
-type tracksLoadedMsg struct {
-	tracks  []spotify.Track
-	hasMore bool
-	err     error
-}
-
 type trackView struct {
 	lazyList
-	ctx          context.Context
-	client       *spotify.Client
 	playlistID   string
 	playlistName string
 }
 
 func newTrackView(ctx context.Context, client *spotify.Client, playlistID, playlistName string, width, height int, vimMode bool) *trackView {
-	return &trackView{
-		lazyList:     newLazyList(width, height, vimMode),
-		ctx:          ctx,
-		client:       client,
-		playlistID:   playlistID,
-		playlistName: playlistName,
-	}
-}
-
-func (v trackView) Init() tea.Cmd {
-	return v.fetchMore()
-}
-
-func (v trackView) fetchMore() tea.Cmd {
-	offset := v.offset
-	client := v.client
-	playlistID := v.playlistID
-	parent := v.ctx
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
-		defer cancel()
+	load := func(ctx context.Context, offset int) ([]list.Item, int, bool, error) {
 		tracks, hasMore, err := client.GetPlaylistTracks(ctx, playlistID, offset, 50)
-		return tracksLoadedMsg{tracks: tracks, hasMore: hasMore, err: err}
-	}
-}
-
-func (v *trackView) Update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case tracksLoadedMsg:
-		v.onLoaded()
-		if msg.err != nil {
-			v.onError(msg.err)
-			return nil
-		}
-		var items []list.Item
-		for _, t := range msg.tracks {
+		items := make([]list.Item, 0, len(tracks))
+		for _, t := range tracks {
 			items = append(items, trackItem{
 				uri: t.URI, name: t.Name,
 				artist: t.Artist, album: t.Album, duration: t.Duration,
 			})
 		}
-		if v.append(items, len(msg.tracks), msg.hasMore) {
-			return v.fetchMore()
-		}
-		if v.resolveSync() {
-			return v.fetchMore()
-		}
-		return nil
+		return items, len(tracks), hasMore, err
 	}
-
-	return v.updateList(msg, v.fetchMore)
+	return &trackView{
+		lazyList:     newLazyList(ctx, load, width, height, vimMode),
+		playlistID:   playlistID,
+		playlistName: playlistName,
+	}
 }
 
 func (v *trackView) OnEnter() tea.Cmd {
-	selected := v.list.SelectedItem()
-	if ti, ok := selected.(trackItem); ok {
+	if ti, ok := v.list.SelectedItem().(trackItem); ok {
 		return emitIntent(playItemIntent{
 			itemURI:    ti.uri,
 			contextURI: "spotify:playlist:" + v.playlistID,
 		})
 	}
-	if si, ok := selected.(statusItem); ok && si.isError {
-		return v.retryLoad()
-	}
-	return nil
-}
-
-func (v *trackView) retryLoad() tea.Cmd {
-	v.prepareRetry()
-	return v.fetchMore()
+	cmd, _ := v.retryOnError()
+	return cmd
 }
 
 func (v *trackView) Breadcrumb() string {
@@ -122,6 +71,3 @@ func (v *trackView) SyncURI(uri string) tea.Cmd {
 	}
 	return nil
 }
-
-func (v *trackView) SearchableList() *lazyList { return &v.lazyList }
-func (v *trackView) FetchMore() tea.Cmd        { return v.fetchMore() }

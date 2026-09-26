@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -8,7 +9,8 @@ import (
 )
 
 func newTestLazyList() lazyList {
-	return newLazyList(80, 20, false)
+	noLoad := func(context.Context, int) ([]list.Item, int, bool, error) { return nil, 0, false, nil }
+	return newLazyList(context.Background(), noLoad, 80, 20, false)
 }
 
 func TestLazyList_TriggerLoad_NearEnd(t *testing.T) {
@@ -453,5 +455,51 @@ func TestLazyList_ResolveSync_DuringSearch_Skips(t *testing.T) {
 
 	if ll.syncURI != "now-playing" {
 		t.Errorf("syncURI must remain queued for resolution after search closes, got %q", ll.syncURI)
+	}
+}
+
+// A page requested by a popped screen must not land in a newer screen of
+// the same type (the old page would be appended and skew its offset).
+func TestUpdate_StalePageFromPoppedViewIsDropped(t *testing.T) {
+	m := newIntentTestModel()
+	a := newTrackView(m.rootCtx, m.client, "A", "A", 80, 20, false)
+	b := newTrackView(m.rootCtx, m.client, "B", "B", 80, 20, false)
+	m.viewStack = append(m.viewStack, b) // A was pushed, popped, then B pushed
+
+	stale := pageLoadedMsg{listID: a.id, items: []list.Item{trackItem{uri: "spotify:track:fromA"}}, fetched: 1}
+	updated, _ := m.Update(stale)
+	after := updated.(Model)
+
+	got := after.currentView().(*trackView)
+	if got.offset != 0 {
+		t.Errorf("B offset = %d after A's page, want 0", got.offset)
+	}
+	if _, found := got.findByURI("spotify:track:fromA"); found {
+		t.Error("A's track was appended to B")
+	}
+	if !got.loading {
+		t.Error("A's page cleared B's loading state")
+	}
+}
+
+// A list keeps loading while a screen is pushed over it; its page must
+// reach it rather than whichever view is on top.
+func TestUpdate_PageRoutedToCoveredList(t *testing.T) {
+	m := newIntentTestModel()
+	pv := newPlaylistView(m.rootCtx, m.client, 80, 20, false)
+	tv := newTrackView(m.rootCtx, m.client, "A", "A", 80, 20, false)
+	m.viewStack = append(m.viewStack, pv, tv)
+
+	page := pageLoadedMsg{listID: pv.id, items: []list.Item{playlistItem{id: "p1", name: "Road"}}, fetched: 1}
+	m.Update(page)
+
+	if pv.loading {
+		t.Error("covered playlist view is still loading after its page arrived")
+	}
+	if _, found := pv.findByURI("spotify:playlist:p1"); !found {
+		t.Error("covered playlist view did not receive its page")
+	}
+	if tv.offset != 0 {
+		t.Errorf("page leaked into the track view on top (offset %d)", tv.offset)
 	}
 }

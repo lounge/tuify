@@ -21,84 +21,30 @@ func (i podcastItem) Description() string { return fmt.Sprintf("%d episodes", i.
 func (i podcastItem) FilterValue() string { return i.name }
 func (i podcastItem) URI() string         { return i.uri }
 
-type podcastsLoadedMsg struct {
-	shows   []spotify.Show
-	hasMore bool
-	err     error
-}
-
 type podcastView struct {
 	lazyList
-	ctx    context.Context
-	client *spotify.Client
 }
 
 func newPodcastView(ctx context.Context, client *spotify.Client, width, height int, vimMode bool) *podcastView {
-	return &podcastView{
-		lazyList: newLazyList(width, height, vimMode),
-		ctx:      ctx,
-		client:   client,
-	}
-}
-
-func (v podcastView) Init() tea.Cmd {
-	return v.fetchMore()
-}
-
-func (v podcastView) fetchMore() tea.Cmd {
-	offset := v.offset
-	client := v.client
-	parent := v.ctx
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
-		defer cancel()
+	load := func(ctx context.Context, offset int) ([]list.Item, int, bool, error) {
 		shows, hasMore, err := client.GetSavedShows(ctx, offset, 50)
-		return podcastsLoadedMsg{shows: shows, hasMore: hasMore, err: err}
-	}
-}
-
-func (v *podcastView) Update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case podcastsLoadedMsg:
-		v.onLoaded()
-		if msg.err != nil {
-			v.onError(msg.err)
-			return nil
-		}
-		var items []list.Item
-		for _, s := range msg.shows {
+		items := make([]list.Item, 0, len(shows))
+		for _, s := range shows {
 			items = append(items, podcastItem{
 				id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes,
 			})
 		}
-		// While a search filter is active, append asks for the next page
-		// so the filter covers every item, not just those loaded so far.
-		if v.append(items, len(msg.shows), msg.hasMore) {
-			return v.fetchMore()
-		}
-		return nil
+		return items, len(shows), hasMore, err
 	}
-
-	return v.updateList(msg, v.fetchMore)
+	return &podcastView{lazyList: newLazyList(ctx, load, width, height, vimMode)}
 }
 
 func (v *podcastView) OnEnter() tea.Cmd {
-	selected := v.list.SelectedItem()
-	if pi, ok := selected.(podcastItem); ok {
+	if pi, ok := v.list.SelectedItem().(podcastItem); ok {
 		return emitIntent(openEpisodesIntent{showID: pi.id, showName: pi.name})
 	}
-	if si, ok := selected.(statusItem); ok && si.isError {
-		return v.retryLoad()
-	}
-	return nil
-}
-
-func (v *podcastView) retryLoad() tea.Cmd {
-	v.prepareRetry()
-	return v.fetchMore()
+	cmd, _ := v.retryOnError()
+	return cmd
 }
 
 func (v *podcastView) Breadcrumb() string { return "Home > Podcasts" }
-
-func (v *podcastView) SearchableList() *lazyList { return &v.lazyList }
-func (v *podcastView) FetchMore() tea.Cmd        { return v.fetchMore() }

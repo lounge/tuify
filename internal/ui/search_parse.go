@@ -48,7 +48,7 @@ type searchResultMsg struct {
 	items   []list.Item
 	hasMore bool
 	query   string
-	epoch   int
+	epoch   uint64
 	err     error
 }
 

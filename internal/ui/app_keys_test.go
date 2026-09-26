@@ -341,17 +341,17 @@ func TestPlaylistAndPodcastSearch_KeepsFetchingWhileFiltering(t *testing.T) {
 			view
 			SearchableList() *lazyList
 		}
-		loaded tea.Msg
+		item list.Item
 	}{
-		{"playlists", newPlaylistView(ctx, client, 80, 20, false),
-			playlistsLoadedMsg{playlists: []spotify.Playlist{{ID: "p1", Name: "Road"}}, pageSize: 1, hasMore: true}},
-		{"podcasts", newPodcastView(ctx, client, 80, 20, false),
-			podcastsLoadedMsg{shows: []spotify.Show{{ID: "s1", Name: "Road"}}, hasMore: true}},
+		{"playlists", newPlaylistView(ctx, client, 80, 20, false), playlistItem{id: "p1", name: "Road"}},
+		{"podcasts", newPodcastView(ctx, client, 80, 20, false), podcastItem{id: "s1", name: "Road"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			tc.v.SearchableList().searching = true
-			if cmd := tc.v.Update(tc.loaded); cmd == nil {
+			ll := tc.v.SearchableList()
+			ll.searching = true
+			loaded := pageLoadedMsg{listID: ll.id, items: []list.Item{tc.item}, fetched: 1, hasMore: true}
+			if cmd := tc.v.Update(loaded); cmd == nil {
 				t.Error("a page loaded during an active filter with more pages left must fetch the next page")
 			}
 		})

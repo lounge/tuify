@@ -274,3 +274,16 @@ func TestSearchHintText_UsesThemeStyles(t *testing.T) {
 		t.Errorf("search hint has no colour escapes; styles were captured before RebuildStyles: %q", got)
 	}
 }
+
+func TestSearchView_IgnoresResultFromEarlierSearchView(t *testing.T) {
+	old := newSearchView(context.Background(), nil, 80, 20, false)
+	cur := newSearchView(context.Background(), nil, 80, 20, false)
+	cur.pending = 1
+	cur.list.SetItems([]list.Item{loadingStatusItem})
+
+	cur.Update(searchResultMsg{epoch: old.epoch, items: []list.Item{trackItem{uri: "spotify:track:old"}}})
+
+	if cur.pending != 1 || len(cur.items) != 0 {
+		t.Errorf("result from an earlier search view was applied: pending=%d items=%d", cur.pending, len(cur.items))
+	}
+}

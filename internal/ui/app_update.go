@@ -105,6 +105,8 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.nowPlaying.setInfo("Copied link to clipboard")
 	case seekFireMsg:
 		return m.handleSeekFire(msg)
+	case pageLoadedMsg:
+		return m, m.routePage(msg)
 	case librespotInactiveMsg:
 		m.nowPlaying.setDeviceOverride(true, "librespot inactive — playback moved away from "+m.client.PreferredDevice)
 		m.nowPlaying.deviceName = ""
@@ -174,6 +176,19 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	return m.handleStateUpdate(msg)
+}
+
+// routePage delivers a loaded page to the list in the view stack that
+// requested it, which need not be the current view: a list keeps loading
+// while a screen pushed on top of it is shown. Pages for popped screens
+// have no owner and are dropped.
+func (m Model) routePage(msg pageLoadedMsg) tea.Cmd {
+	for _, v := range m.viewStack {
+		if p, ok := v.(searchableListProvider); ok && p.SearchableList().id == msg.listID {
+			return v.Update(msg)
+		}
+	}
+	return nil
 }
 
 // handleStateUpdate processes now-playing, visualizer, and view updates.

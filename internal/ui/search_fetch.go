@@ -11,7 +11,7 @@ import (
 // fetchCmd builds a tea.Cmd that fetches data, converts each result to a list.Item,
 // and wraps the outcome in a searchResultMsg.
 func fetchCmd[T any](
-	parent context.Context, epoch int, term string,
+	parent context.Context, epoch uint64, term string,
 	fetch func(ctx context.Context) ([]T, bool, error),
 	convert func(T) list.Item,
 ) tea.Cmd {

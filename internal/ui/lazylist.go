@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"log"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
@@ -17,7 +19,16 @@ import (
 // loop, not each page.
 const listFetchTimeout = 30 * time.Second
 
-// lazyList holds the shared state and logic for paginated list views.
+// pageLoader fetches one page starting at offset and maps it to list items.
+// fetched is how far the offset advances, which can differ from len(items)
+// when the loader skips entries. It runs inside a tea.Cmd, so it must only
+// capture values that are safe to use off the Update goroutine.
+type pageLoader func(ctx context.Context, offset int) (items []list.Item, fetched int, hasMore bool, err error)
+
+// lazyList holds the shared state and logic for paginated list views: it
+// owns the fetch loop, the loading/error rows, retries, local filtering and
+// deferred selection. Screens embed it and add only item mapping (via their
+// pageLoader), Enter handling and a breadcrumb.
 type lazyList struct {
 	list        list.Model
 	items       []list.Item
@@ -27,9 +38,32 @@ type lazyList struct {
 	searching   bool
 	searchQuery string
 	syncURI     string
+
+	// id tags every page this list requests. The shell routes a
+	// pageLoadedMsg only to the list with the same id, so a late page from
+	// a popped screen can't land in a newer screen of the same type.
+	id   uint64
+	ctx  context.Context
+	load pageLoader
 }
 
-func newLazyList(width, height int, vimMode bool) lazyList {
+// pageLoadedMsg carries one fetched page back to the lazyList that asked
+// for it.
+type pageLoadedMsg struct {
+	listID  uint64
+	items   []list.Item
+	fetched int
+	hasMore bool
+	err     error
+}
+
+// fetchIDs issues ids that are unique across every list and search view for
+// the life of the process, so results can always be matched to their owner.
+var fetchIDs atomic.Uint64
+
+func newFetchID() uint64 { return fetchIDs.Add(1) }
+
+func newLazyList(ctx context.Context, load pageLoader, width, height int, vimMode bool) lazyList {
 	l := newList(width, height, vimMode)
 	initial := []list.Item{loadingStatusItem}
 	l.SetItems(initial)
@@ -38,8 +72,74 @@ func newLazyList(width, height int, vimMode bool) lazyList {
 		items:   initial,
 		loading: true,
 		hasMore: true,
+		id:      newFetchID(),
+		ctx:     ctx,
+		load:    load,
 	}
 }
+
+// Init starts loading the first page. The shell calls it when it pushes the
+// screen.
+func (l *lazyList) Init() tea.Cmd {
+	return l.fetchMore()
+}
+
+// fetchMore returns a Cmd that loads the page at the current offset.
+func (l *lazyList) fetchMore() tea.Cmd {
+	id, offset, parent, load := l.id, l.offset, l.ctx, l.load
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
+		defer cancel()
+		items, fetched, hasMore, err := load(ctx, offset)
+		return pageLoadedMsg{listID: id, items: items, fetched: fetched, hasMore: hasMore, err: err}
+	}
+}
+
+// onPage applies a loaded page and returns a Cmd for the next page when the
+// active filter or a pending selection needs more data. Pages for another
+// list are ignored.
+func (l *lazyList) onPage(msg pageLoadedMsg) tea.Cmd {
+	if msg.listID != l.id {
+		return nil
+	}
+	l.onLoaded()
+	if msg.err != nil {
+		l.onError(msg.err)
+		return nil
+	}
+	// While a search filter is active, append asks for the next page so
+	// the filter covers every item, not just those loaded so far.
+	if l.append(msg.items, msg.fetched, msg.hasMore) || l.resolveSync() {
+		return l.fetchMore()
+	}
+	return nil
+}
+
+// Update applies loaded pages and forwards everything else to the inner
+// list, fetching the next page when the cursor nears the end.
+func (l *lazyList) Update(msg tea.Msg) tea.Cmd {
+	if msg, ok := msg.(pageLoadedMsg); ok {
+		return l.onPage(msg)
+	}
+	return l.updateList(msg)
+}
+
+// retryOnError reloads after a failed fetch when the selected row is the
+// error row. handled is false when some other row is selected.
+func (l *lazyList) retryOnError() (cmd tea.Cmd, handled bool) {
+	if si, ok := l.list.SelectedItem().(statusItem); ok && si.isError {
+		l.prepareRetry()
+		return l.fetchMore(), true
+	}
+	return nil, false
+}
+
+// SearchableList exposes the list for local filtering. Satisfies
+// searchableListProvider.
+func (l *lazyList) SearchableList() *lazyList { return l }
+
+// FetchMore loads the next page. Satisfies searchableListProvider.
+func (l *lazyList) FetchMore() tea.Cmd { return l.fetchMore() }
 
 // onLoaded clears the loading indicator. Call at the start of a loaded-msg handler.
 func (l *lazyList) onLoaded() {
@@ -104,13 +204,13 @@ func (l *lazyList) prepareRetry() {
 }
 
 // updateList forwards a message to the inner list and triggers a fetch if
-// the cursor is near the end. Use as the default branch in view Update methods.
-func (l *lazyList) updateList(msg tea.Msg, fetchMore func() tea.Cmd) tea.Cmd {
+// the cursor is near the end.
+func (l *lazyList) updateList(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	l.list, cmd = l.list.Update(msg)
 	cmds := []tea.Cmd{cmd}
 	if l.triggerLoad() {
-		cmds = append(cmds, fetchMore())
+		cmds = append(cmds, l.fetchMore())
 	}
 	return tea.Batch(cmds...)
 }

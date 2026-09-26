@@ -23,97 +23,45 @@ func (i playlistItem) Description() string {
 func (i playlistItem) FilterValue() string { return i.name }
 func (i playlistItem) URI() string         { return "spotify:playlist:" + i.id }
 
-type playlistsLoadedMsg struct {
-	playlists []spotify.Playlist
-	pageSize  int
-	hasMore   bool
-	err       error
-}
-
 type playlistView struct {
 	lazyList
-	ctx    context.Context
-	client *spotify.Client
 }
 
 func newPlaylistView(ctx context.Context, client *spotify.Client, width, height int, vimMode bool) *playlistView {
-	return &playlistView{
-		lazyList: newLazyList(width, height, vimMode),
-		ctx:      ctx,
-		client:   client,
-	}
+	return &playlistView{lazyList: newLazyList(ctx, playlistLoader(client), width, height, vimMode)}
 }
 
-func (v playlistView) Init() tea.Cmd {
-	return v.fetchMore()
-}
-
-func (v playlistView) fetchMore() tea.Cmd {
-	offset := v.offset
-	client := v.client
-	parent := v.ctx
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
-		defer cancel()
-		var all []spotify.Playlist
-		totalFetched := 0
+// playlistLoader fetches Spotify pages of 50 until at least 20 playlists
+// are collected; GetPlaylists can return short pages once it filters out
+// entries it can't show.
+func playlistLoader(client *spotify.Client) pageLoader {
+	return func(ctx context.Context, offset int) ([]list.Item, int, bool, error) {
+		var items []list.Item
+		fetched := 0
 		hasMore := true
-		for hasMore && len(all) < 20 {
-			playlists, pageSize, more, err := client.GetPlaylists(ctx, offset, 50)
+		for hasMore && len(items) < 20 {
+			playlists, pageSize, more, err := client.GetPlaylists(ctx, offset+fetched, 50)
 			if err != nil {
-				return playlistsLoadedMsg{playlists: all, pageSize: totalFetched, hasMore: more, err: err}
+				return items, fetched, more, err
 			}
-			all = append(all, playlists...)
-			totalFetched += pageSize
-			offset += pageSize
+			for _, p := range playlists {
+				items = append(items, playlistItem{
+					id: p.ID, name: p.Name, ownerName: p.OwnerName, trackCount: p.TrackCount,
+				})
+			}
+			fetched += pageSize
 			hasMore = more
 		}
-		return playlistsLoadedMsg{playlists: all, pageSize: totalFetched, hasMore: hasMore}
+		return items, fetched, hasMore, nil
 	}
-}
-
-func (v *playlistView) Update(msg tea.Msg) tea.Cmd {
-	switch msg := msg.(type) {
-	case playlistsLoadedMsg:
-		v.onLoaded()
-		if msg.err != nil {
-			v.onError(msg.err)
-			return nil
-		}
-		var items []list.Item
-		for _, p := range msg.playlists {
-			items = append(items, playlistItem{
-				id: p.ID, name: p.Name, ownerName: p.OwnerName, trackCount: p.TrackCount,
-			})
-		}
-		// While a search filter is active, append asks for the next page
-		// so the filter covers every item, not just those loaded so far.
-		if v.append(items, msg.pageSize, msg.hasMore) {
-			return v.fetchMore()
-		}
-		return nil
-	}
-
-	return v.updateList(msg, v.fetchMore)
 }
 
 func (v *playlistView) OnEnter() tea.Cmd {
-	selected := v.list.SelectedItem()
-	if pi, ok := selected.(playlistItem); ok {
+	if pi, ok := v.list.SelectedItem().(playlistItem); ok {
 		return emitIntent(openTracksIntent{playlistID: pi.id, playlistName: pi.name})
 	}
-	if si, ok := selected.(statusItem); ok && si.isError {
-		return v.retryLoad()
-	}
-	return nil
-}
-
-func (v *playlistView) retryLoad() tea.Cmd {
-	v.prepareRetry()
-	return v.fetchMore()
+	cmd, _ := v.retryOnError()
+	return cmd
 }
 
 func (v *playlistView) Breadcrumb() string { return "Home > Playlists" }
-
-func (v *playlistView) SearchableList() *lazyList { return &v.lazyList }
-func (v *playlistView) FetchMore() tea.Cmd        { return v.fetchMore() }
