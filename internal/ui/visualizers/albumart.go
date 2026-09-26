@@ -94,7 +94,9 @@ func (a *AlbumArt) View(width, height int) string {
 	}
 
 	var buf strings.Builder
-	buf.Grow(width * height * 20)
+	// Worst case per cell: fused fg+bg escape (2×19 bytes) + '▀' (3) +
+	// reset (4); plus a newline per row.
+	buf.Grow(width*height*45 + height)
 
 	for row := range height {
 		for col := range width {

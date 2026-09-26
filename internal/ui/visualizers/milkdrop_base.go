@@ -216,7 +216,9 @@ func (m *MilkdropPreset) stampEnergy() {
 
 func (m *MilkdropPreset) render(termW, termH int) string {
 	var buf strings.Builder
-	buf.Grow(termW * termH * 24)
+	// Worst case per cell: fused fg+bg escape (2×19 bytes) + '▀' (3); plus
+	// a reset and newline per row.
+	buf.Grow(termW*termH*41 + termH*5)
 
 	for row := range termH {
 		topRow := row * 2
