@@ -174,6 +174,7 @@ All configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`)
 | `client_id` | `""` | Spotify Developer App Client ID |
 | `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
 | `vim_mode` | `false` | Enable vim-style keybindings |
+| `nerd_font` | _(auto)_ | Use [Nerd Font](https://www.nerdfonts.com/) icons (e.g. 󰒝 for shuffle). Omitted: auto-detected from installed fonts, falling back to `⇄`. Set `false` if your terminal uses a different font. |
 | `appearance` | `""` (auto) | Force `"dark"` or `"light"` palette. Empty/omitted uses terminal-background autodetection. |
 | `theme` | _(see below)_ | Per-role color overrides (light + dark) |
 

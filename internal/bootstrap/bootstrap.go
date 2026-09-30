@@ -81,6 +81,9 @@ func Run() error {
 	if cfg.VimMode {
 		opts = append(opts, ui.WithVimMode())
 	}
+	if useNerdFont(cfg.NerdFont) {
+		opts = append(opts, ui.WithNerdFont())
+	}
 	if session.SaveErrCh != nil {
 		opts = append(opts, ui.WithTokenSaveErrors(session.SaveErrCh))
 	}

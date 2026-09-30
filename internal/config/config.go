@@ -27,6 +27,9 @@ type Config struct {
 	RedirectURL     string `json:"redirect_url,omitempty"`
 	AudioBackend    string `json:"audio_backend,omitempty"`
 	VimMode         bool   `json:"vim_mode,omitempty"`
+	// NerdFont selects Nerd Font glyphs (e.g. the shuffle icon). Nil
+	// (omitted) auto-detects an installed Nerd Font; true/false forces it.
+	NerdFont *bool `json:"nerd_font,omitempty"`
 	// Appearance forces dark or light palette selection. Empty (omitted)
 	// uses lipgloss's terminal-background autodetection. Valid: "", "dark",
 	// "light".
