@@ -10,6 +10,7 @@ type ModelOption func(*modelOptions)
 type modelOptions struct {
 	audioSrc            AudioSource
 	vimMode             bool
+	nerdFont            bool
 	librespotInactiveCh <-chan struct{}
 	tokenSaveErrCh      <-chan error
 	tokenRevokedCh      <-chan struct{}
@@ -37,6 +38,13 @@ func WithAudioSource(src AudioSource) ModelOption {
 // WithVimMode enables vim-style keybindings (h/l for back/select, ctrl+d/u half-page, etc.).
 func WithVimMode() ModelOption {
 	return func(o *modelOptions) { o.vimMode = true }
+}
+
+// WithNerdFont renders icons with Nerd Font glyphs instead of the
+// plain-Unicode fallbacks. Only set it when the terminal font has them,
+// or the icons show as empty boxes.
+func WithNerdFont() ModelOption {
+	return func(o *modelOptions) { o.nerdFont = true }
 }
 
 // WithLibrespotInactive provides a channel that signals when librespot reports

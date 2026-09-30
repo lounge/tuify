@@ -125,11 +125,7 @@ func (m Model) miniModeView() string {
 		return np.renderGradient([]string{nowPlayingArtistStyle.Render("No track playing")})
 	}
 
-	icon := "⏸"
-	if np.playing {
-		icon = "▶"
-	}
-	iconStr := nowPlayingIconStyle.Render(icon)
+	iconStr := nowPlayingIconStyle.Render(np.statusIcons())
 
 	cur := formatDuration(time.Duration(np.progressMs) * time.Millisecond)
 	total := formatDuration(time.Duration(np.durationMs) * time.Millisecond)
@@ -165,10 +161,7 @@ func (m Model) miniModeView() string {
 // decide whether the marquee needs to run.
 func (m Model) miniLabelBudget() int {
 	np := m.nowPlaying
-	icon := "⏸"
-	if np.playing {
-		icon = "▶"
-	}
+	icon := np.statusIcons()
 	cur := formatDuration(time.Duration(np.progressMs) * time.Millisecond)
 	total := formatDuration(time.Duration(np.durationMs) * time.Millisecond)
 	innerWidth := m.width - nowPlayingPadding

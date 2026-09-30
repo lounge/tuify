@@ -66,6 +66,43 @@ func TestMiniModeView_Paused(t *testing.T) {
 	}
 }
 
+func TestMiniModeView_Shuffle(t *testing.T) {
+	tests := []struct {
+		name     string
+		nerdFont bool
+		want     string
+	}{
+		{name: "fallback", nerdFont: false, want: shuffleIconFallback},
+		{name: "nerd font", nerdFont: true, want: shuffleIconNerdFont},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			np := &nowPlayingModel{
+				hasTrack:   true,
+				playing:    true,
+				shuffling:  true,
+				nerdFont:   tt.nerdFont,
+				track:      "This Is A Very Long Track Name",
+				artist:     "This Is A Very Long Artist Name",
+				durationMs: 60000,
+			}
+			m := newTestModel(50, np)
+			result := m.miniModeView()
+			if !strings.Contains(result, tt.want) {
+				t.Errorf("expected shuffle icon %q in %q", tt.want, result)
+			}
+			if w := lipgloss.Width(result); w > 50 {
+				t.Errorf("width %d exceeds terminal width 50", w)
+			}
+
+			np.shuffling = false
+			if strings.Contains(m.miniModeView(), tt.want) {
+				t.Errorf("shuffle icon %q shown while shuffle is off", tt.want)
+			}
+		})
+	}
+}
+
 func TestMiniModeView_StatusMessage(t *testing.T) {
 	np := &nowPlayingModel{
 		hasTrack:  true,

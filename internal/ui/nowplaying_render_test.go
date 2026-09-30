@@ -58,3 +58,43 @@ func TestRenderTrackLine_WideRunesStaySingleLine(t *testing.T) {
 		t.Errorf("line width %d exceeds budget %d", w, np.width-nowPlayingPadding)
 	}
 }
+
+func TestRenderTrackLine_ShuffleIcon(t *testing.T) {
+	tests := []struct {
+		name      string
+		shuffling bool
+		nerdFont  bool
+		want      string
+		notWant   []string
+	}{
+		{name: "shuffle off", notWant: []string{shuffleIconFallback, shuffleIconNerdFont}},
+		{name: "fallback", shuffling: true, want: "▶ " + shuffleIconFallback, notWant: []string{shuffleIconNerdFont}},
+		{name: "nerd font", shuffling: true, nerdFont: true, want: "▶ " + shuffleIconNerdFont, notWant: []string{shuffleIconFallback}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			np := &nowPlayingModel{
+				width:      40,
+				hasTrack:   true,
+				playing:    true,
+				shuffling:  tt.shuffling,
+				nerdFont:   tt.nerdFont,
+				track:      "A Reasonably Long Track Title",
+				artist:     "Some Artist",
+				deviceName: "Living Room",
+			}
+			line := np.renderTrackLine()
+			if tt.want != "" && !strings.Contains(line, tt.want) {
+				t.Errorf("expected %q in %q", tt.want, line)
+			}
+			for _, nw := range tt.notWant {
+				if strings.Contains(line, nw) {
+					t.Errorf("unexpected %q in %q", nw, line)
+				}
+			}
+			if w := lipgloss.Width(line); w > np.width-nowPlayingPadding {
+				t.Errorf("line width %d exceeds budget %d", w, np.width-nowPlayingPadding)
+			}
+		})
+	}
+}

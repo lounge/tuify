@@ -92,10 +92,12 @@ func NewModel(ctx context.Context, client *spotify.Client, opts ...ModelOption) 
 	}
 	// Submodels get the root ctx at construction so their async ops
 	// (poll, image/lyrics fetch) see shutdown cancellation.
+	np := newNowPlaying(ctx, client)
+	np.nerdFont = o.nerdFont
 	return Model{
 		rootCtx:             ctx,
 		viewStack:           []view{newHomeView(0, 0, o.vimMode)},
-		nowPlaying:          newNowPlaying(ctx, client),
+		nowPlaying:          np,
 		visualizer:          newVisualizerModel(ctx, o.audioSrc),
 		client:              client,
 		vimMode:             o.vimMode,

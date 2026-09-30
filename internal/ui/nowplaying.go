@@ -46,6 +46,13 @@ type (
 // left-to-right drift without redraw churn.
 const labelScrollInterval = 200 * time.Millisecond
 
+// Shuffle indicators. Both are one cell wide so the track line's width
+// budget holds whichever is chosen.
+const (
+	shuffleIconNerdFont = "\U000F049D" // nf-md-shuffle_variant
+	shuffleIconFallback = "⇄"
+)
+
 // Model
 
 type nowPlayingModel struct {
@@ -59,6 +66,10 @@ type nowPlayingModel struct {
 	trackURI   string
 	contextURI string
 	imageURL   string
+
+	// nerdFont selects Nerd Font glyphs (WithNerdFont). The zero value
+	// uses the plain-Unicode fallbacks, which render in any font.
+	nerdFont bool
 
 	// Playback state
 	playing       bool

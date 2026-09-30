@@ -53,19 +53,10 @@ func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
 // total View() output exceed terminal height, which scrolls the viewport
 // and shifts mouse-click zone coordinates in the list above.
 func (m nowPlayingModel) renderTrackLine() string {
-	icon := "⏸"
-	if m.playing {
-		icon = "▶"
-	}
-	shufflePrefix := ""
-	if m.shuffling {
-		shufflePrefix = "[shuffle] "
-	}
 	labelBudget, showDevice := m.trackLineLabelBudget()
 	innerWidth := m.width - nowPlayingPadding
 
-	left := nowPlayingIconStyle.Render(icon) + " " +
-		nowPlayingIconStyle.Render(shufflePrefix) +
+	left := nowPlayingIconStyle.Render(m.statusIcons()) + " " +
 		m.renderLabel(labelBudget)
 
 	if !showDevice {
@@ -79,20 +70,35 @@ func (m nowPlayingModel) renderTrackLine() string {
 	return left + strings.Repeat(" ", gap) + device
 }
 
+// statusIcons returns the play/pause glyph, followed by the shuffle glyph
+// while shuffle is on. The track line and mini mode both lead with it.
+func (m nowPlayingModel) statusIcons() string {
+	icon := "⏸"
+	if m.playing {
+		icon = "▶"
+	}
+	if m.shuffling {
+		icon += " " + m.shuffleIcon()
+	}
+	return icon
+}
+
+// shuffleIcon returns the Nerd Font shuffle glyph when enabled, else the
+// plain-Unicode fallback.
+func (m nowPlayingModel) shuffleIcon() string {
+	if m.nerdFont {
+		return shuffleIconNerdFont
+	}
+	return shuffleIconFallback
+}
+
 // trackLineLabelBudget returns the display cells renderTrackLine gives the
 // "track — artist" label, and whether the device name still fits beside
 // it. The label-scroll tick uses the same budget to decide whether the
 // marquee needs to run.
 func (m nowPlayingModel) trackLineLabelBudget() (budget int, showDevice bool) {
-	// Fixed portion consumed before the label: icon + space + shuffle prefix.
-	icon := "⏸"
-	if m.playing {
-		icon = "▶"
-	}
-	prefixW := lipgloss.Width(icon) + 1
-	if m.shuffling {
-		prefixW += lipgloss.Width("[shuffle] ")
-	}
+	// Fixed portion consumed before the label: status icons + space.
+	prefixW := lipgloss.Width(m.statusIcons()) + 1
 	innerWidth := m.width - nowPlayingPadding
 	if m.deviceName == "" {
 		return innerWidth - prefixW, false

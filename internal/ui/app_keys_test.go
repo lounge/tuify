@@ -333,6 +333,25 @@ func TestNewModel_PanicsOnNilClient(t *testing.T) {
 	NewModel(t.Context(), nil)
 }
 
+func TestNewModel_WithNerdFont(t *testing.T) {
+	tests := []struct {
+		name string
+		opts []ModelOption
+		want bool
+	}{
+		{name: "default", want: false},
+		{name: "WithNerdFont", opts: []ModelOption{WithNerdFont()}, want: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(t.Context(), &spotify.Client{}, tt.opts...)
+			if m.nowPlaying.nerdFont != tt.want {
+				t.Errorf("nowPlaying.nerdFont = %v, want %v", m.nowPlaying.nerdFont, tt.want)
+			}
+		})
+	}
+}
+
 func TestPlaylistAndPodcastSearch_KeepsFetchingWhileFiltering(t *testing.T) {
 	ctx, client := t.Context(), &spotify.Client{}
 	tests := []struct {
