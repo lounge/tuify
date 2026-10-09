@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"runtime/pprof"
+	"strings"
 	"testing"
 )
 
@@ -62,8 +63,6 @@ func goroutineLeaks() (string, error) {
 }
 
 func firstLine(s string) string {
-	if i := bytes.IndexByte([]byte(s), '\n'); i >= 0 {
-		return s[:i]
-	}
-	return s
+	line, _, _ := strings.Cut(s, "\n")
+	return line
 }
