@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -323,7 +324,7 @@ func TestMonitorStderr_BrokenSessionFlags(t *testing.T) {
 			p := NewProcess(Config{})
 			p.sawAudioKeyErr, p.sawSpirc = tc.presetAudioKey, tc.presetSpirc
 			for _, line := range tc.lines {
-				p.monitorStderr(line)
+				p.monitorStderr(p.cmd, line)
 			}
 			if p.sawAudioKeyErr != tc.wantAudioKey || p.sawSpirc != tc.wantSpirc {
 				t.Errorf("flags after %q: sawAudioKeyErr=%v sawSpirc=%v, want %v %v",
@@ -356,7 +357,7 @@ func TestMonitorStderr_Callbacks(t *testing.T) {
 			p.OnReconnect = func() { reconnect <- struct{}{} }
 			p.OnInactive = func() { inactive <- struct{}{} }
 
-			p.monitorStderr(tc.line)
+			p.monitorStderr(p.cmd, tc.line)
 
 			want, other := inactive, reconnect
 			if tc.wantReconnect {
@@ -373,6 +374,41 @@ func TestMonitorStderr_Callbacks(t *testing.T) {
 			default:
 			}
 		})
+	}
+}
+
+// A restart can leave the previous child's log reader delivering its last
+// lines after the new child is running. Those lines belong to a process
+// that is gone: they must neither announce a reconnect nor count toward
+// killing the new child.
+func TestMonitorStderr_IgnoresLinesFromStaleProcess(t *testing.T) {
+	t.Parallel()
+
+	p := NewProcess(Config{})
+	reconnects := make(chan struct{}, 1)
+	p.OnReconnect = func() { reconnects <- struct{}{} }
+	stale, current := &exec.Cmd{}, &exec.Cmd{}
+	p.cmd = current
+
+	p.monitorStderr(stale, "Authenticated as user@example.com")
+	p.monitorStderr(stale, "Audio key response timeout")
+	p.monitorStderr(stale, "Spirc shut down unexpectedly")
+
+	select {
+	case <-reconnects:
+		t.Fatal("OnReconnect fired for a line from the previous process")
+	default:
+	}
+	if p.sawAudioKeyErr || p.sawSpirc {
+		t.Errorf("stale lines set broken-session flags (audioKey=%v spirc=%v)", p.sawAudioKeyErr, p.sawSpirc)
+	}
+
+	// The same line from the current process still counts.
+	p.monitorStderr(current, "Authenticated as user@example.com")
+	select {
+	case <-reconnects:
+	case <-time.After(time.Second):
+		t.Fatal("OnReconnect not called for the current process")
 	}
 }
 

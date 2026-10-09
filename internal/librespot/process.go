@@ -133,8 +133,9 @@ func (p *Process) launch() error {
 	}
 
 	args := p.args()
-	p.cmd = exec.Command(p.config.BinaryPath, args...)
-	bindToParent(p.cmd)
+	cmd := exec.Command(p.config.BinaryPath, args...)
+	p.cmd = cmd
+	bindToParent(cmd)
 	p.done = make(chan struct{})
 	// Bounds how long Wait keeps copying output after librespot exits, in
 	// case a child it spawned (e.g. an --onevent hook) still holds the
@@ -175,7 +176,11 @@ func (p *Process) launch() error {
 	} else {
 		p.cmd.Stdout = logTo("[librespot:out]", nil)
 	}
-	p.cmd.Stderr = logTo("[librespot:err]", p.monitorStderr)
+	// The monitor learns which launch a line belongs to. Its pipeLog
+	// goroutine can outlive the process (drainLogs stops waiting after
+	// logDrainTimeout), and a late line from the dead process must not kill
+	// the next child or announce a reconnect for it.
+	p.cmd.Stderr = logTo("[librespot:err]", func(line string) { p.monitorStderr(cmd, line) })
 
 	log.Printf("[librespot] starting: %s %v", p.config.BinaryPath, args)
 
@@ -197,10 +202,9 @@ func (p *Process) launch() error {
 
 	startedAt := time.Now()
 	done := p.done
-	// Hand the goroutine its own reference instead of having it read p.cmd
+	// The goroutine keeps its own cmd reference instead of reading p.cmd
 	// without the lock; p.cmd is only cleared below, but that invariant is
 	// invisible to the race detector and easy to break.
-	cmd := p.cmd
 
 	go func() {
 		err := cmd.Wait()
@@ -329,9 +333,18 @@ func (p *Process) Stop() {
 // but can't play audio. A kill is triggered when both an audio key timeout and
 // a spirc shutdown are seen (in either order), or when "Unable to read audio
 // file" follows an audio key timeout.
-func (p *Process) monitorStderr(line string) {
+//
+// from is the process that wrote line. Lines from any process other than
+// the current one are ignored: after a restart the previous child's log
+// reader may still be delivering its last output, and acting on it would
+// kill the new child or fire OnReconnect for a session that is gone.
+func (p *Process) monitorStderr(from *exec.Cmd, line string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if from != p.cmd {
+		return
+	}
 
 	if strings.Contains(line, "Authenticated as") {
 		p.sawAudioKeyErr = false

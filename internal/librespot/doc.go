@@ -12,7 +12,8 @@
 // transfer playback back to the preferred device); OnInactive fires when
 // the device has been idle long enough that the UI may want to release it;
 // a session that stops producing audio is killed so the restart can
-// recover it. stdout is handed to OnStdout when set (bootstrap wires it to
+// recover it. Lines still arriving from a previous child after a restart
+// are ignored. stdout is handed to OnStdout when set (bootstrap wires it to
 // the audio package's PipeReader for the "pipe" backend), otherwise it is
 // logged. Output librespot writes just before exiting is logged before the
 // exit is.
