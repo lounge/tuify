@@ -81,8 +81,7 @@ func TestReconnectHandler(t *testing.T) {
 				}()
 
 				// Nothing happens before the settle delay elapses.
-				time.Sleep(2*time.Second - time.Millisecond)
-				synctest.Wait()
+				synctest.Sleep(2*time.Second - time.Millisecond)
 				if n, _ := fake.snapshot(); n != 0 {
 					t.Fatalf("%d requests before the 2s settle delay", n)
 				}

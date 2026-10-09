@@ -529,10 +529,10 @@ func (c *countingTokenSource) callCount() int {
 	return c.calls
 }
 
-// The proactive refresh tests run on synctest's fake clock: time.Sleep
-// advances it instantly once every goroutine in the bubble is blocked, and
-// synctest.Wait lets the refresh goroutine settle before each assertion,
-// so they check exactly when a refresh fires instead of polling for it.
+// The proactive refresh tests run on synctest's fake clock: synctest.Sleep
+// advances it instantly once every goroutine in the bubble is blocked and
+// then lets the refresh goroutine settle before each assertion, so they
+// check exactly when a refresh fires instead of polling for it.
 
 func TestProactiveRefresh_TriggersBeforeExpiry(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -550,13 +550,11 @@ func TestProactiveRefresh_TriggersBeforeExpiry(t *testing.T) {
 		ts.startProactiveRefresh(ctx)
 
 		// The refresh is due 5s before expiry: not at 54s, but by 55s.
-		time.Sleep(54 * time.Second)
-		synctest.Wait()
+		synctest.Sleep(54 * time.Second)
 		if n := inner.callCount(); n != 0 {
 			t.Fatalf("refreshed %d times before the 5s-before-expiry mark", n)
 		}
-		time.Sleep(time.Second)
-		synctest.Wait()
+		synctest.Sleep(time.Second)
 		if n := inner.callCount(); n != 1 {
 			t.Fatalf("refresh calls at the 5s-before-expiry mark = %d, want 1", n)
 		}
@@ -577,8 +575,7 @@ func TestProactiveRefresh_StopsOnCancel(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		ts.startProactiveRefresh(ctx)
 
-		time.Sleep(time.Minute)
-		synctest.Wait()
+		synctest.Sleep(time.Minute)
 		before := inner.callCount()
 		if before < 2 {
 			t.Fatalf("expected repeated refreshes before cancel, got %d", before)
@@ -606,8 +603,7 @@ func TestProactiveRefresh_NilToken(t *testing.T) {
 		defer cancel()
 		ts.startProactiveRefresh(ctx)
 
-		time.Sleep(5 * time.Minute)
-		synctest.Wait()
+		synctest.Sleep(5 * time.Minute)
 		if n := inner.callCount(); n != 0 {
 			t.Errorf("Token() called %d times with no token to refresh", n)
 		}
@@ -637,18 +633,15 @@ func TestProactiveRefresh_RetriesOnError(t *testing.T) {
 		ts.startProactiveRefresh(ctx)
 
 		// First attempt at 55s fails; the retry comes 10s later.
-		time.Sleep(55 * time.Second)
-		synctest.Wait()
+		synctest.Sleep(55 * time.Second)
 		if n := callCount.Load(); n != 1 {
 			t.Fatalf("attempts at the refresh mark = %d, want 1", n)
 		}
-		time.Sleep(9 * time.Second)
-		synctest.Wait()
+		synctest.Sleep(9 * time.Second)
 		if n := callCount.Load(); n != 1 {
 			t.Fatalf("retried after %d attempts before the 10s backoff elapsed", n)
 		}
-		time.Sleep(time.Second)
-		synctest.Wait()
+		synctest.Sleep(time.Second)
 		if n := callCount.Load(); n != 2 {
 			t.Fatalf("attempts after the 10s backoff = %d, want 2", n)
 		}
