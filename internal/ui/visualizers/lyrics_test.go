@@ -139,6 +139,23 @@ func TestLyrics_ProgressScrolls(t *testing.T) {
 	}
 }
 
+// A negative position (stale or interpolated progress) must clamp to the
+// first line, not index the lines slice with a negative number.
+func TestLyrics_NegativeProgressClampsToStart(t *testing.T) {
+	t.Parallel()
+
+	l := NewLyrics()
+	l.Init("seed", 10000)
+	l.SetLyrics([]string{"first", "second", "third"})
+
+	l.SetProgress(0)
+	atStart := l.View(40, 3)
+	l.SetProgress(-5000)
+	if got := l.View(40, 3); got != atStart {
+		t.Errorf("negative progress rendered differently from progress 0:\n%q\nvs\n%q", got, atStart)
+	}
+}
+
 func TestLyrics_AdvanceIsNoop(t *testing.T) {
 	t.Parallel()
 

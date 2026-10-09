@@ -81,13 +81,13 @@ func (l *Lyrics) View(width, height int) string {
 			lyricsDimStyle.Render("No lyrics found"))
 	}
 
-	// Estimate which line we're on based on playback progress.
+	// Estimate which line we're on based on playback progress. Clamp both
+	// ends: progress can run past the end while the poll lags, and a
+	// negative value (a stale or interpolated position) would otherwise
+	// turn into a negative line index below.
 	var progress float64
 	if l.durationMs > 0 {
-		progress = float64(l.progressMs) / float64(l.durationMs)
-	}
-	if progress > 1 {
-		progress = 1
+		progress = clampF64(float64(l.progressMs)/float64(l.durationMs), 0, 1)
 	}
 
 	// Map progress to a line index, snapping to the nearest non-blank line.
