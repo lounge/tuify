@@ -35,6 +35,23 @@ var ErrTokenRevoked = errors.New("spotify refresh token revoked")
 // valid token file. The caller can discard it and log in again.
 var ErrTokenCorrupt = errors.New("token.json is unreadable")
 
+const (
+	// proactiveRetryMin is the first wait after a failed proactive refresh.
+	// Each further failure doubles it up to proactiveRetryMax, so an
+	// offline machine is not asked for a refresh every 10 seconds for
+	// hours; a successful refresh resets it.
+	proactiveRetryMin = 10 * time.Second
+	proactiveRetryMax = time.Minute
+
+	// exchangeTimeout bounds the code-for-token exchange that completes a
+	// login. The exchange runs on Login's own context, not the callback
+	// request's, so the browser dropping the connection cannot abort it.
+	exchangeTimeout = 30 * time.Second
+	// exchangeClientTimeout bounds the HTTP round trip of that exchange,
+	// which oauth2 would otherwise make with http.DefaultClient (no timeout).
+	exchangeClientTimeout = 15 * time.Second
+)
+
 // isRevokedError detects the "invalid_grant" response Spotify returns
 // when a refresh token is permanently dead. The oauth2 library surfaces
 // it as a *RetrieveError with ErrorCode set to RFC 6749's error value.
@@ -69,11 +86,14 @@ type savingTokenSource struct {
 	revokedOnce sync.Once
 }
 
+// Token returns the current token, refreshing it when needed. A refresh
+// failure is returned, not logged: the caller (an API request, the startup
+// refresh, or the proactive loop) is the one place that handles it.
 func (s *savingTokenSource) Token() (*oauth2.Token, error) {
 	start := time.Now()
 	tok, err := s.base.Token()
 	if elapsed := time.Since(start); elapsed > time.Second {
-		log.Printf("[auth] Token() took %v (err=%v)", elapsed.Round(time.Millisecond), err)
+		log.Printf("[auth] Token() took %v", elapsed.Round(time.Millisecond))
 	}
 	if err != nil {
 		if isRevokedError(err) {
@@ -106,7 +126,8 @@ func (s *savingTokenSource) persist(tok *oauth2.Token) {
 		return
 	}
 	if err := SaveToken(tok); err != nil {
-		log.Printf("[auth] failed to persist refreshed token: %v", err)
+		// Reported on saveErrCh only; the UI logs it once when it renders
+		// the warning.
 		s.notifySaveErr(fmt.Errorf("could not save refreshed token: %w", err))
 	}
 }
@@ -152,6 +173,7 @@ func (s *savingTokenSource) startProactiveRefresh(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 	go func() {
+		retry := proactiveRetryMin
 		for {
 			s.mu.Lock()
 			tok := s.last
@@ -178,21 +200,24 @@ func (s *savingTokenSource) startProactiveRefresh(ctx context.Context) {
 				}
 			}
 
-			log.Printf("[auth] proactive token refresh")
 			newTok, err := s.Token()
 			if err != nil {
-				log.Printf("[auth] proactive token refresh failed: %v", err)
 				if errors.Is(err, ErrTokenRevoked) {
 					// Permanent failure — shell is already being told
 					// to shut down via revokedCh; stop looping.
 					return
 				}
+				// This loop is the only consumer of this error, so it is
+				// logged here, once per attempt.
+				log.Printf("[auth] proactive token refresh failed, retrying in %v: %v", retry, err)
 				select {
 				case <-ctx.Done():
 					return
-				case <-time.After(10 * time.Second):
+				case <-time.After(retry):
 				}
+				retry = min(retry*2, proactiveRetryMax)
 			} else {
+				retry = proactiveRetryMin
 				log.Printf("[auth] token refreshed, valid until %v", newTok.Expiry.Local().Format("15:04:05"))
 			}
 		}
@@ -279,10 +304,10 @@ func newSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *o
 	}
 	// Trigger a refresh now so the token is fresh before any polls start.
 	if freshTok, err := ts.Token(); err != nil {
-		log.Printf("[auth] startup token refresh failed: %v", err)
 		// Revocation is signalled on revokedCh; anything else (network,
 		// Spotify outage) is non-fatal but worth showing, since every
-		// request will retry the refresh until it succeeds.
+		// request will retry the refresh until it succeeds. Either way the
+		// consumer logs it; nothing is logged here.
 		if !errors.Is(err, ErrTokenRevoked) {
 			ts.notifySaveErr(fmt.Errorf("token refresh at startup failed: %w", err))
 		}
@@ -357,9 +382,7 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	exchange := func(ctx context.Context, code string) (*oauth2.Token, error) {
-		return a.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", verifier))
-	}
+	exchange := newExchange(ctx, a, verifier, &http.Client{Timeout: exchangeClientTimeout})
 	mux.Handle(callbackPath, callbackHandler(state, exchange, tokenCh, errCh))
 
 	go func() {
@@ -394,6 +417,21 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 	}
 }
 
+// newExchange returns the code-for-token exchange callbackHandler runs when
+// Spotify redirects back. Each call is bound to ctx (Login's lifetime) with
+// exchangeTimeout rather than to the callback request's context: the
+// browser may close the connection as soon as the redirect lands, which
+// would otherwise cancel the exchange mid-flight. client makes the token
+// request, in place of the timeout-less http.DefaultClient oauth2 defaults
+// to.
+func newExchange(ctx context.Context, a *spotifyauth.Authenticator, verifier string, client *http.Client) func(code string) (*oauth2.Token, error) {
+	return func(code string) (*oauth2.Token, error) {
+		ctx, cancel := context.WithTimeout(context.WithValue(ctx, oauth2.HTTPClient, client), exchangeTimeout)
+		defer cancel()
+		return a.Exchange(ctx, code, oauth2.SetAuthURLParam("code_verifier", verifier))
+	}
+}
+
 // callbackHandler serves the OAuth redirect. It ends the login by sending
 // exactly one result on tokenCh or errCh, and only for a request carrying
 // the state this login generated.
@@ -407,9 +445,13 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 // The callback can also be hit more than once (browser prefetch,
 // reloading the success tab). Sends are non-blocking so extra hits can't
 // park a handler goroutine and stall server.Shutdown.
+//
+// exchange is deliberately not given the request's context (see
+// newExchange): the login must complete even if the browser has already
+// gone away.
 func callbackHandler(
 	state string,
-	exchange func(ctx context.Context, code string) (*oauth2.Token, error),
+	exchange func(code string) (*oauth2.Token, error),
 	tokenCh chan<- *oauth2.Token,
 	errCh chan<- error,
 ) http.HandlerFunc {
@@ -433,7 +475,7 @@ func callbackHandler(
 			fail(w, http.StatusBadRequest, fmt.Errorf("auth error: %s", q.Get("error")))
 			return
 		}
-		token, err := exchange(r.Context(), code)
+		token, err := exchange(code)
 		if err != nil {
 			fail(w, http.StatusBadGateway, err)
 			return

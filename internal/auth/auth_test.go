@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -610,20 +611,26 @@ func TestProactiveRefresh_NilToken(t *testing.T) {
 	})
 }
 
+// A failed proactive refresh is retried after 10s, and each further
+// failure doubles the wait up to a 60s cap, so an offline machine is not
+// asked for a refresh every 10s for hours. A success resets the wait, so
+// the next failure is retried after 10s again.
 func TestProactiveRefresh_RetriesOnError(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 
 	synctest.Test(t, func(t *testing.T) {
+		// Attempts 1-5 fail, 6 succeeds with a token expiring in a minute
+		// (so the next refresh is due 55s later), 7 fails, 8 succeeds.
 		var callCount atomic.Int32
 		ts := &savingTokenSource{
 			base: tokenSourceFunc(func() (*oauth2.Token, error) {
 				n := callCount.Add(1)
-				if n <= 1 {
+				if n <= 5 || n == 7 {
 					return nil, errors.New("temporary failure")
 				}
 				return &oauth2.Token{
 					AccessToken: fmt.Sprintf("recovered-%d", n),
-					Expiry:      time.Now().Add(time.Hour),
+					Expiry:      time.Now().Add(time.Minute),
 				}, nil
 			}),
 			last: &oauth2.Token{AccessToken: "will-fail", Expiry: time.Now().Add(time.Minute)},
@@ -632,18 +639,25 @@ func TestProactiveRefresh_RetriesOnError(t *testing.T) {
 		defer cancel()
 		ts.startProactiveRefresh(ctx)
 
-		// First attempt at 55s fails; the retry comes 10s later.
-		synctest.Sleep(55 * time.Second)
-		if n := callCount.Load(); n != 1 {
-			t.Fatalf("attempts at the refresh mark = %d, want 1", n)
+		// The wait before each attempt: 5s before expiry, then the
+		// escalating retries, then the post-success refresh and the
+		// reset retry.
+		gaps := []time.Duration{
+			55 * time.Second,
+			10 * time.Second, 20 * time.Second, 40 * time.Second, 60 * time.Second, 60 * time.Second,
+			55 * time.Second,
+			10 * time.Second,
 		}
-		synctest.Sleep(9 * time.Second)
-		if n := callCount.Load(); n != 1 {
-			t.Fatalf("retried after %d attempts before the 10s backoff elapsed", n)
-		}
-		synctest.Sleep(time.Second)
-		if n := callCount.Load(); n != 2 {
-			t.Fatalf("attempts after the 10s backoff = %d, want 2", n)
+		for i, gap := range gaps {
+			attempt := int32(i + 1)
+			synctest.Sleep(gap - time.Second)
+			if n := callCount.Load(); n != attempt-1 {
+				t.Fatalf("attempt %d fired before its %v wait elapsed (%d attempts so far)", attempt, gap, n)
+			}
+			synctest.Sleep(time.Second)
+			if n := callCount.Load(); n != attempt {
+				t.Fatalf("attempts after a %v wait = %d, want %d", gap, n, attempt)
+			}
 		}
 	})
 }
@@ -665,15 +679,23 @@ type callbackRig struct {
 
 func newCallbackRig(t *testing.T, exchangeErr error) *callbackRig {
 	t.Helper()
-	rig := &callbackRig{tokenCh: make(chan *oauth2.Token, 1), errCh: make(chan error, 1)}
-	exchange := func(_ context.Context, code string) (*oauth2.Token, error) {
-		rig.exchanged.Add(1)
+	return newCallbackRigWith(t, func(code string) (*oauth2.Token, error) {
 		if exchangeErr != nil {
 			return nil, exchangeErr
 		}
 		return &oauth2.Token{AccessToken: "token-for-" + code}, nil
+	})
+}
+
+// newCallbackRigWith runs callbackHandler against exchange, counting calls.
+func newCallbackRigWith(t *testing.T, exchange func(code string) (*oauth2.Token, error)) *callbackRig {
+	t.Helper()
+	rig := &callbackRig{tokenCh: make(chan *oauth2.Token, 1), errCh: make(chan error, 1)}
+	counted := func(code string) (*oauth2.Token, error) {
+		rig.exchanged.Add(1)
+		return exchange(code)
 	}
-	rig.srv = httptest.NewServer(callbackHandler("expected-state", exchange, rig.tokenCh, rig.errCh))
+	rig.srv = httptest.NewServer(callbackHandler("expected-state", counted, rig.tokenCh, rig.errCh))
 	t.Cleanup(rig.srv.Close)
 	return rig
 }
@@ -749,6 +771,165 @@ func TestCallbackHandler_RepeatHitDoesNotBlock(t *testing.T) {
 	}
 	if len(rig.tokenCh) != 1 {
 		t.Errorf("tokenCh holds %d tokens, want 1", len(rig.tokenCh))
+	}
+}
+
+// The browser may drop the callback connection as soon as the redirect
+// lands. The exchange it triggered must still finish and complete the
+// login; it used to run on the request's context and die with it.
+func TestCallbackHandler_ExchangeSurvivesBrowserDisconnect(t *testing.T) {
+	started := make(chan struct{})
+	release := make(chan struct{})
+	rig := newCallbackRigWith(t, func(code string) (*oauth2.Token, error) {
+		close(started)
+		<-release
+		return &oauth2.Token{AccessToken: "token-for-" + code}, nil
+	})
+
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rig.srv.URL+"/callback?state=expected-state&code=c", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		resp, err := http.DefaultClient.Do(req)
+		if err == nil {
+			resp.Body.Close()
+		}
+		done <- err
+	}()
+
+	<-started
+	cancel() // the browser goes away while the exchange is in flight
+	if err := <-done; err == nil {
+		t.Fatal("callback request completed although its context was cancelled")
+	}
+	close(release)
+
+	select {
+	case tok := <-rig.tokenCh:
+		if tok.AccessToken != "token-for-c" {
+			t.Errorf("token = %q", tok.AccessToken)
+		}
+	case err := <-rig.errCh:
+		t.Fatalf("login failed after the browser disconnected: %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("login did not complete after the browser disconnected")
+	}
+}
+
+// tokenServer stands in for Spotify's token endpoint inside a synctest
+// bubble: an in-memory server plus a client that routes every request to
+// it. timeout is the client's overall timeout; 0 leaves it unbounded.
+func tokenServer(t *testing.T, timeout time.Duration, handler http.HandlerFunc) *http.Client {
+	t.Helper()
+	srv := httptest.NewTestServer(t, handler)
+	return &http.Client{
+		Timeout:   timeout,
+		Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL},
+	}
+}
+
+// The exchange must go through the injected client (oauth2 would otherwise
+// use http.DefaultClient) and carry the code and the PKCE verifier.
+func TestNewExchange_SendsCodeAndVerifier(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var form url.Values
+		client := tokenServer(t, exchangeClientTimeout, func(w http.ResponseWriter, r *http.Request) {
+			if err := r.ParseForm(); err != nil {
+				t.Errorf("ParseForm: %v", err)
+			}
+			form = r.PostForm
+			w.Header().Set("Content-Type", "application/json")
+			fmt.Fprint(w, `{"access_token":"exchanged","token_type":"Bearer","refresh_token":"r","expires_in":3600}`)
+		})
+		exchange := newExchange(t.Context(), NewAuthenticator("id", "http://127.0.0.1:4444/cb"), "verifier-123", client)
+
+		tok, err := exchange("code-abc")
+		if err != nil {
+			t.Fatalf("exchange: %v", err)
+		}
+		if tok.AccessToken != "exchanged" {
+			t.Errorf("AccessToken = %q, want exchanged", tok.AccessToken)
+		}
+		if got := form.Get("code"); got != "code-abc" {
+			t.Errorf("code = %q, want code-abc", got)
+		}
+		if got := form.Get("code_verifier"); got != "verifier-123" {
+			t.Errorf("code_verifier = %q, want verifier-123", got)
+		}
+		if got := form.Get("grant_type"); got != "authorization_code" {
+			t.Errorf("grant_type = %q", got)
+		}
+	})
+}
+
+// An exchange against a token endpoint that never answers must end on its
+// own: by the HTTP client's timeout, by exchangeTimeout when the client
+// has none, or when Login's context is cancelled. Nothing else bounds it;
+// the callback request's context is deliberately not involved.
+func TestNewExchange_Bounded(t *testing.T) {
+	tests := []struct {
+		name           string
+		clientTimeout  time.Duration
+		cancelLogin    bool          // cancel Login's ctx instead of waiting for a deadline
+		stillRunningAt time.Duration // the exchange must not have ended yet here
+		doneBy         time.Duration
+		wantErr        error // nil: only require an error
+	}{
+		// oauth2 probes both client-auth styles, so a hanging endpoint can
+		// cost two client timeouts before the exchange gives up.
+		{"http client timeout", 5 * time.Second, false, 4 * time.Second, 10 * time.Second, nil},
+		{"exchange deadline without client timeout", 0, false, exchangeTimeout - time.Second, exchangeTimeout, context.DeadlineExceeded},
+		{"login context cancelled", exchangeClientTimeout, true, 3 * time.Second, 3 * time.Second, context.Canceled},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				client := tokenServer(t, tc.clientTimeout, func(w http.ResponseWriter, r *http.Request) {
+					// Drain the body: the server only watches for the
+					// client going away once the request has been read.
+					io.Copy(io.Discard, r.Body)
+					<-r.Context().Done() // hang until the client gives up
+				})
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				exchange := newExchange(ctx, NewAuthenticator("id", "http://127.0.0.1:4444/cb"), "v", client)
+
+				done := make(chan error, 1)
+				go func() {
+					_, err := exchange("code")
+					done <- err
+				}()
+
+				synctest.Sleep(tc.stillRunningAt)
+				select {
+				case err := <-done:
+					t.Fatalf("exchange ended before %v: %v", tc.stillRunningAt, err)
+				default:
+				}
+
+				if tc.cancelLogin {
+					cancel()
+					synctest.Wait()
+				} else {
+					synctest.Sleep(tc.doneBy - tc.stillRunningAt)
+				}
+				select {
+				case err := <-done:
+					if err == nil {
+						t.Fatal("exchange against a hanging endpoint returned a token")
+					}
+					if tc.wantErr != nil && !errors.Is(err, tc.wantErr) {
+						t.Errorf("err = %v, want %v", err, tc.wantErr)
+					}
+				default:
+					t.Fatalf("exchange still running %v after it should have been bounded", tc.doneBy)
+				}
+			})
+		})
 	}
 }
 

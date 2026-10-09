@@ -24,9 +24,19 @@
 // permanently invalid, so the caller can prompt for a fresh login.
 // token.json is written atomically (config.WriteFileAtomic).
 //
+// Errors the package hands on — returned from a request, sent on
+// saveErrCh or signalled on revokedCh — are not logged here; the consumer
+// logs each once. The proactive-refresh loop is its own consumer: it logs
+// a failed refresh and retries after 10s, doubling the wait on each
+// further failure up to 60s, and resets to 10s after a success.
+//
 // Login's callback server ends the login only for a request that carries
 // the state it generated; any other request to the port gets a 400 and is
-// ignored, so a stray local request can't abort the login.
+// ignored, so a stray local request can't abort the login. The
+// code-for-token exchange that the callback triggers runs on Login's own
+// context with a 30s deadline and a 15s HTTP client timeout, not on the
+// callback request's context, so a browser that drops the connection as
+// soon as the redirect lands cannot abort it.
 //
 // # Refresh-token lifetime
 //
