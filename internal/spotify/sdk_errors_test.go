@@ -130,11 +130,11 @@ func TestWrapSDKErr_PassThrough(t *testing.T) {
 		t.Error("context.DeadlineExceeded must not become an *APIError")
 	}
 	orig := &APIError{Status: http.StatusNotFound, Endpoint: "x"}
-	if got := wrapSDKErr(orig, opPlay); got != orig {
+	if got := wrapSDKErr(orig, opPlay); got != orig { //nolint:errorlint // identity check: wrapSDKErr must return the very same error value
 		t.Errorf("existing *APIError: got %v, want it returned unchanged", got)
 	}
 	plain := errors.New("spotify: HTTP 404: Not Found (body empty)")
-	if got := wrapSDKErr(plain, opPlay); got != plain || strings.Contains(got.Error(), "API") {
+	if got := wrapSDKErr(plain, opPlay); got != plain || strings.Contains(got.Error(), "API") { //nolint:errorlint // identity check: wrapSDKErr must return the very same error value
 		t.Errorf("undecodable SDK error: got %v, want unchanged", got)
 	}
 }

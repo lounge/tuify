@@ -20,6 +20,16 @@ linters:
     # - bodyclose: unclosed HTTP response bodies leak connections.
     - usestdlibvars
     - bodyclose
+    # - modernize: flags code that a newer Go idiom expresses better
+    #   (the same checks `go fix` applies); keeps the 1.27 baseline
+    #   from drifting back.
+    # - nolintlint: every //nolint must name its linter and say why,
+    #   which is already the house style (see ratelimit.go).
+    # - errorlint: errors.Is/As instead of == / type switches, so a
+    #   future wrap does not silently break a comparison.
+    - modernize
+    - nolintlint
+    - errorlint
 
   settings:
     errcheck:
@@ -67,6 +77,12 @@ linters:
         # idiomatic and forward-looking (easy to add cases). Rewriting to
         # an if-ok assertion costs clarity for no real gain.
         - singleCaseSwitch
+
+    nolintlint:
+      # The name alone does not tell a reader whether the suppression is
+      # still justified; the explanation does.
+      require-explanation: true
+      require-specific: true
 
     staticcheck:
       # In v2, the `staticcheck` linter bundles what used to be the
