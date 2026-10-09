@@ -4,7 +4,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 
 [![CI](https://github.com/lounge/tuify/actions/workflows/ci.yml/badge.svg)](https://github.com/lounge/tuify/actions/workflows/ci.yml)
 [![golangci-lint](https://img.shields.io/badge/linted%20with-golangci--lint-00ADD8?logo=go&logoColor=white)](https://golangci-lint.run/)
-![Go](https://img.shields.io/badge/Go-1.26-00ADD8?logo=go&logoColor=white)
+![Go](https://img.shields.io/badge/Go-1.27-00ADD8?logo=go&logoColor=white)
 ![Windows](https://img.shields.io/badge/Windows-0078D6?logo=windows&logoColor=white)
 ![macOS](https://img.shields.io/badge/macOS-000000?logo=apple&logoColor=white)
 ![Linux](https://img.shields.io/badge/Linux-FCC624?logo=linux&logoColor=black)
@@ -34,6 +34,8 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 ## Install
 
 ### macOS / Linux
+
+Go 1.27 builds require macOS 13 (Ventura) or later.
 
 ```bash
 brew install lounge/tap/tuify
@@ -232,7 +234,7 @@ Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. Starting tu
 
 ### Build from source
 
-Requires Go 1.26+. On Linux, also install `libasound2-dev`.
+Requires Go 1.27+. On Linux, also install `libasound2-dev`.
 
 ```bash
 git clone https://github.com/lounge/tuify.git

@@ -9,11 +9,11 @@ go build                         # build the tuify binary
 go test ./...                    # run all tests
 go test -run TestName ./internal/spotify   # run a single test in one package
 gofmt -l .                       # CI fails hard if this lists anything
-golangci-lint run ./...          # matches CI lint job; pinned to v2.11.4
+golangci-lint run ./...          # matches CI lint job; pinned to v2.14.0
 go vet ./...
 ```
 
-Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.26+.
+Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.27+.
 
 ## Architecture
 
