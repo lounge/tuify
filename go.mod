@@ -12,10 +12,10 @@ require (
 	github.com/ebitengine/oto/v3 v3.5.1
 	github.com/lrstanley/bubblezone v1.0.0
 	github.com/lucasb-eyer/go-colorful v1.4.1
-	github.com/mattn/go-runewidth v0.0.30
+	github.com/mattn/go-runewidth v0.0.31
 	github.com/muesli/termenv v0.16.0
 	github.com/zmb3/spotify/v2 v2.4.3
-	golang.org/x/net v0.59.0
+	golang.org/x/net v0.60.0
 	golang.org/x/oauth2 v0.37.0
 )
 
