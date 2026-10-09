@@ -92,10 +92,13 @@ func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error
 		t.consecutive.Store(0)
 		return resp, nil
 	}
+	// A Retry-After of zero or less is treated as missing: it carries no
+	// usable backoff, and honouring it would let the caller's inline retry
+	// loop fire its three attempts back to back.
 	hasRetryAfter := false
 	wait := 0
 	if s := resp.Header.Get("Retry-After"); s != "" {
-		if n, perr := strconv.Atoi(s); perr == nil {
+		if n, perr := strconv.Atoi(s); perr == nil && n > 0 {
 			hasRetryAfter = true
 			wait = n
 		}
@@ -135,11 +138,7 @@ func (t *rateLimitTransport) setUntil(deadline time.Time) {
 			return
 		}
 		if t.until.CompareAndSwap(cur, newVal) {
-			// gosec G706 (log injection) taint-tracks a numeric Retry-After
-			// header through to this log line. deadline.Format with a
-			// literal layout emits only digits and colons, so no external
-			// content can reach the log.
-			log.Printf("[ratelimit] cooldown set: pausing API calls until %s", deadline.Format("15:04:05")) //nolint:gosec
+			log.Printf("[ratelimit] cooldown set: pausing API calls until %s", deadline.Format("15:04:05"))
 			return
 		}
 	}

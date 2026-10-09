@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"unicode/utf8"
 
 	"github.com/lounge/tuify/internal/testutil"
@@ -22,6 +23,14 @@ func newTestClient(t *testing.T, handler http.HandlerFunc) *Client {
 	t.Helper()
 	srv := httptest.NewServer(handler)
 	t.Cleanup(srv.Close)
+	return New(&http.Client{Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}})
+}
+
+// newBubbleClient is newTestClient on an in-memory server, for tests that
+// run inside synctest.Test so Retry-After waits elapse on the fake clock.
+func newBubbleClient(t *testing.T, handler http.HandlerFunc) *Client {
+	t.Helper()
+	srv := httptest.NewTestServer(t, handler)
 	return New(&http.Client{Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}})
 }
 
@@ -47,57 +56,90 @@ func TestFetchUserID(t *testing.T) {
 func TestDoWithRetry_429(t *testing.T) {
 	t.Parallel()
 
-	var attempts atomic.Int32
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int32
 
-	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		n := attempts.Add(1)
-		if n <= 2 {
-			w.Header().Set("Retry-After", "0")
-			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte("rate limited"))
-			return
+		c := newBubbleClient(t, func(w http.ResponseWriter, r *http.Request) {
+			n := attempts.Add(1)
+			if n <= 2 {
+				w.Header().Set("Retry-After", "1")
+				w.WriteHeader(http.StatusTooManyRequests)
+				w.Write([]byte("rate limited"))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(`{"ok": true}`))
+		})
+
+		body, status, err := c.doWithRetry(t.Context(), "https://api.spotify.com/v1/test")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
-		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"ok": true}`))
+		if status != http.StatusOK {
+			t.Errorf("status: got %d, want 200", status)
+		}
+		if string(body) != `{"ok": true}` {
+			t.Errorf("body: got %q", string(body))
+		}
+		if attempts.Load() != 3 {
+			t.Errorf("attempts: got %d, want 3", attempts.Load())
+		}
 	})
-
-	body, status, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if status != http.StatusOK {
-		t.Errorf("status: got %d, want 200", status)
-	}
-	if string(body) != `{"ok": true}` {
-		t.Errorf("body: got %q", string(body))
-	}
-	if attempts.Load() != 3 {
-		t.Errorf("attempts: got %d, want 3", attempts.Load())
-	}
 }
 
 func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
 	t.Parallel()
 
+	synctest.Test(t, func(t *testing.T) {
+		c := newBubbleClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte("rate limited"))
+		})
+
+		_, status, err := c.doWithRetry(t.Context(), "https://api.spotify.com/v1/test")
+		if err == nil {
+			t.Fatal("expected error after exhausted retries")
+		}
+		if status != http.StatusTooManyRequests {
+			t.Errorf("status: got %d, want 429", status)
+		}
+		apiErr, ok := errors.AsType[*APIError](err)
+		if !ok {
+			t.Fatalf("expected *APIError, got %T: %v", err, err)
+		}
+		if apiErr.Status != http.StatusTooManyRequests {
+			t.Errorf("APIError.Status: got %d, want 429", apiErr.Status)
+		}
+	})
+}
+
+// A 429 with "Retry-After: 0" used to pass the transport and then retry
+// without waiting, so one throttle became three back-to-back requests. It
+// must arm the cooldown like a missing header: one request, then a 429
+// *APIError without touching the network again.
+func TestDoWithRetry_429_ZeroRetryAfterArmsCooldown(t *testing.T) {
+	t.Parallel()
+
+	var attempts atomic.Int32
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		attempts.Add(1)
 		w.Header().Set("Retry-After", "0")
 		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("rate limited"))
 	})
 
 	_, status, err := c.doWithRetry(context.Background(), "https://api.spotify.com/v1/test")
-	if err == nil {
-		t.Fatal("expected error after exhausted retries")
-	}
 	if status != http.StatusTooManyRequests {
 		t.Errorf("status: got %d, want 429", status)
 	}
-	apiErr, ok := errors.AsType[*APIError](err)
-	if !ok {
+	if _, ok := errors.AsType[*APIError](err); !ok {
 		t.Fatalf("expected *APIError, got %T: %v", err, err)
 	}
-	if apiErr.Status != http.StatusTooManyRequests {
-		t.Errorf("APIError.Status: got %d, want 429", apiErr.Status)
+	if n := attempts.Load(); n != 1 {
+		t.Errorf("attempts: got %d, want 1", n)
+	}
+	if !c.IsRateLimited() {
+		t.Error("Retry-After: 0 did not arm the cooldown")
 	}
 }
 

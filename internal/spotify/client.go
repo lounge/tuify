@@ -210,6 +210,11 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 					wait = n
 				}
 			}
+			// The transport arms the cooldown for a missing, zero or
+			// negative Retry-After, so this path only sees positive
+			// values; the floor keeps a retry from ever being immediate
+			// should that change.
+			wait = max(wait, 1)
 			select {
 			case <-time.After(time.Duration(wait) * time.Second):
 				continue

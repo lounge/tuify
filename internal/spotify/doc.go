@@ -27,13 +27,16 @@
 // When Spotify rate-limits the client, a shared cooldown is armed so
 // subsequent calls short-circuit before hitting the network; callers
 // polling on a timer should consult RateLimitWait to extend their
-// interval past the deadline. Consecutive 429s escalate
+// interval past the deadline. A 429 whose Retry-After is missing, zero or
+// negative arms the cooldown; only a positive value of a few seconds is
+// retried inline. Consecutive 429s escalate
 // the cooldown exponentially (up to one hour) so a persistent throttle
 // backs off instead of retrying at a fixed interval; the streak resets
 // on the first non-429 response. 429s for requests that were in flight
 // together count as one throttle.
 //
 // Text: every name the package returns (tracks, artists, albums,
-// playlists and their owners, shows, episodes, devices) has been passed
-// through termsafe.Clean, so callers can render it without escaping.
+// playlists and their owners, shows, episodes, devices), along with
+// device types, release dates and artist genres, has been passed through
+// termsafe.Clean, so callers can render it without escaping.
 package spotify

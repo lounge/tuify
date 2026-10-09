@@ -125,14 +125,19 @@ func TestRateLimitTransport_LargeRetryAfterCapped(t *testing.T) {
 // server there.
 type stubTransport struct {
 	status func() int
+	header http.Header // optional response headers, e.g. Retry-After
 	hits   atomic.Int32
 }
 
 func (s *stubTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	s.hits.Add(1)
+	header := s.header
+	if header == nil {
+		header = http.Header{}
+	}
 	return &http.Response{
 		StatusCode: s.status(),
-		Header:     http.Header{},
+		Header:     header,
 		Body:       http.NoBody,
 		Request:    req,
 	}, nil
@@ -150,6 +155,38 @@ func get(t *testing.T, rl *rateLimitTransport) error {
 		resp.Body.Close()
 	}
 	return err
+}
+
+// TestRateLimitTransport_NonPositiveRetryAfterArmsCooldown: a Retry-After
+// of zero or less is no backoff at all, so it must be treated like a
+// missing header and arm the base cooldown instead of passing through to
+// an immediate inline retry.
+func TestRateLimitTransport_NonPositiveRetryAfterArmsCooldown(t *testing.T) {
+	t.Parallel()
+
+	for _, retryAfter := range []string{"0", "-5"} {
+		t.Run("Retry-After "+retryAfter, func(t *testing.T) {
+			t.Parallel()
+
+			synctest.Test(t, func(t *testing.T) {
+				stub := &stubTransport{
+					status: always(http.StatusTooManyRequests),
+					header: http.Header{"Retry-After": {retryAfter}},
+				}
+				rl := newRateLimitTransport(stub)
+
+				if err := get(t, rl); err != nil {
+					t.Fatalf("first call: %v", err)
+				}
+				if got := rl.wait(); got != rateLimitMinBackoff {
+					t.Errorf("cooldown = %v, want %v", got, rateLimitMinBackoff)
+				}
+				if err := get(t, rl); err == nil || stub.hits.Load() != 1 {
+					t.Errorf("second call reached the network (hits=%d, err=%v); cooldown not enforced", stub.hits.Load(), err)
+				}
+			})
+		})
+	}
 }
 
 // TestRateLimitTransport_ExpiredCooldownAllowsCalls verifies the gate
