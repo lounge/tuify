@@ -24,6 +24,7 @@ const externalDeviceID = "__external__"
 // Messages
 
 type devicesLoadedMsg struct {
+	seq     uint64 // the fetch's number; see deviceSelectorModel.fetch
 	devices []spotify.Device
 	err     error
 }
@@ -72,6 +73,9 @@ type deviceSelectorModel struct {
 	transferTarget   string // device name we're switching to
 	transferDeadline time.Time
 	err              error
+	// fetchSeq numbers each device fetch; handleLoaded applies only the
+	// reply of the latest one.
+	fetchSeq uint64
 }
 
 func (d *deviceSelectorModel) open() {
@@ -83,6 +87,9 @@ func (d *deviceSelectorModel) open() {
 }
 
 func (d *deviceSelectorModel) handleLoaded(msg devicesLoadedMsg) {
+	if msg.seq < d.fetchSeq {
+		return // a fetch superseded by a reopen, finishing late
+	}
 	d.loading = false
 	if msg.err != nil {
 		log.Printf("[device] loading devices failed: %v", msg.err)
@@ -203,12 +210,21 @@ func (d *deviceSelectorModel) view(width, height int) string {
 
 // Commands
 
-func fetchDevicesCmd(parent context.Context, client *spotify.Client) tea.Cmd {
+// fetch numbers and starts a device fetch. Closing and reopening the
+// selector while one is in flight starts another; the first reply would
+// otherwise land after the second and reset the cursor the user has since
+// moved, so handleLoaded drops replies older than the latest fetch.
+func (d *deviceSelectorModel) fetch(parent context.Context, client *spotify.Client) tea.Cmd {
+	d.fetchSeq++
+	return fetchDevicesCmd(parent, client, d.fetchSeq)
+}
+
+func fetchDevicesCmd(parent context.Context, client *spotify.Client, seq uint64) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, 5*time.Second)
 		defer cancel()
 		devices, err := client.GetDevices(ctx)
-		return devicesLoadedMsg{devices: devices, err: err}
+		return devicesLoadedMsg{seq: seq, devices: devices, err: err}
 	}
 }
 

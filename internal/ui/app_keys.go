@@ -204,7 +204,8 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		}
 		m.deviceSelector.open()
 		m.showDeviceSelector = true
-		return m, fetchDevicesCmd(m.rootCtx, m.client), true
+		cmd := m.deviceSelector.fetch(m.rootCtx, m.client)
+		return m, cmd, true
 	case "m":
 		m.miniMode = !m.miniMode
 		return m, nil, true
@@ -257,7 +258,9 @@ func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
 		selected := sc.list.SelectedItem()
 		// Don't try to play/drill into status rows ("Loading more…",
 		// "No matching results"). Real items — tracks, episodes, albums,
-		// artists, shows, playlists — all pass this check.
+		// artists, shows, playlists — all pass this check. The error row
+		// is the exception: Enter on it retries the fetch, with the search
+		// left open so the filter survives the reload.
 		if selected == nil {
 			return nil, true
 		}

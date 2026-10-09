@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -196,6 +197,40 @@ func TestUpdate_TabIgnoredWhileTransferring(t *testing.T) {
 	}
 }
 
+// Tab, Esc, Tab leaves the first fetch in flight. Its late reply must not
+// re-run handleLoaded over the second fetch's list and reset the cursor
+// the user has since moved.
+func TestUpdate_ReopenedSelectorIgnoresEarlierFetch(t *testing.T) {
+	devs := []spotify.Device{
+		{ID: "active", Name: "Active", Active: true},
+		{ID: "a", Name: "A"},
+		{ID: "b", Name: "B"},
+	}
+	m := newIntentTestModel()
+	for _, key := range []string{"tab", "esc", "tab"} {
+		updated, _ := m.Update(keyMsg(key))
+		m = updated.(Model)
+	}
+	if !m.showDeviceSelector || !m.deviceSelector.loading {
+		t.Fatalf("setup: open=%v loading=%v, want the selector open and loading", m.showDeviceSelector, m.deviceSelector.loading)
+	}
+
+	updated, _ := m.Update(devicesLoadedMsg{seq: 2, devices: devs})
+	m = updated.(Model)
+	updated, _ = m.Update(keyMsg("down"))
+	m = updated.(Model)
+	if m.deviceSelector.cursor != 2 {
+		t.Fatalf("setup: cursor = %d after down, want 2", m.deviceSelector.cursor)
+	}
+
+	updated, _ = m.Update(devicesLoadedMsg{seq: 1, devices: devs})
+	m = updated.(Model)
+
+	if m.deviceSelector.cursor != 2 {
+		t.Errorf("cursor = %d after the first fetch's late reply, want 2 (left where the user put it)", m.deviceSelector.cursor)
+	}
+}
+
 // The transfer lock clears once a player-state poll reports the target
 // device, or once its deadline passes; until then it holds.
 func TestUpdate_PlayerStateClearsTransferLock(t *testing.T) {
@@ -236,6 +271,26 @@ func TestHandleLoaded_Error(t *testing.T) {
 	}
 	if d.loading {
 		t.Error("loading should be false after error")
+	}
+}
+
+// Only the latest fetch's reply loads the list; one from a fetch
+// superseded by a reopen is dropped.
+func TestHandleLoaded_DropsReplyFromSupersededFetch(t *testing.T) {
+	d := deviceSelectorModel{}
+	client := &spotify.Client{}
+	d.open()
+	d.fetch(context.Background(), client) // tab
+	d.open()
+	d.fetch(context.Background(), client) // esc, tab
+
+	d.handleLoaded(devicesLoadedMsg{seq: 1, devices: twoDevices()})
+	if !d.loading || len(d.devices) != 0 {
+		t.Fatalf("stale reply applied: loading=%v devices=%d", d.loading, len(d.devices))
+	}
+	d.handleLoaded(devicesLoadedMsg{seq: 2, devices: twoDevices()})
+	if d.loading || len(d.devices) != 2 {
+		t.Errorf("latest reply not applied: loading=%v devices=%d", d.loading, len(d.devices))
 	}
 }
 
