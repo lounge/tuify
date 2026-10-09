@@ -11,40 +11,44 @@ func (m nowPlayingModel) progressBarView() string {
 	return renderProgressBar(m.width, m.progressMs, m.durationMs)
 }
 
+// View renders the bar, always nowPlayingHeight lines tall. The search
+// prompt takes the place of the trailing blank line rather than adding a
+// sixth: one line more and the frame exceeds the terminal height, so
+// bubbletea drops the top line and every mouse zone in the list above is
+// one row off while the filter is open.
 func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
+	var lines []string
 	if m.statusMsg != "" {
-		lines := []string{"", renderStatusLine(m.statusMsg, m.statusSpinning, m.statusIsError), "", "", ""}
-		if searchActive {
-			lines = append(lines, "")
-		}
-		return m.renderGradient(lines)
-	}
-
-	var status string
-	if m.hasTrack {
-		status = m.renderTrackLine()
+		lines = []string{"", renderStatusLine(m.statusMsg, m.statusSpinning, m.statusIsError), "", "", ""}
 	} else {
-		status = nowPlayingArtistStyle.Render("No track playing")
-	}
-
-	var progress string
-	if m.hasTrack {
-		progress = m.progressBarView()
-	}
-
-	lines := []string{"", status, "", progress, ""}
-	if searchActive {
-		var search string
-		if idx := strings.Index(searchQuery, ":"); idx > 0 {
-			pre := searchQuery[:idx+1]
-			rest := searchQuery[idx+1:]
-			search = searchPrefixStyle.Render("/"+pre) + searchInputStyle.Render(rest+"█")
+		var status string
+		if m.hasTrack {
+			status = m.renderTrackLine()
 		} else {
-			search = searchInputStyle.Render("/" + searchQuery + "█")
+			status = nowPlayingArtistStyle.Render("No track playing")
 		}
-		lines = append(lines, search)
+
+		var progress string
+		if m.hasTrack {
+			progress = m.progressBarView()
+		}
+		lines = []string{"", status, "", progress, ""}
+	}
+	if searchActive {
+		lines[len(lines)-1] = renderSearchPrompt(searchQuery)
 	}
 	return m.renderGradient(lines)
+}
+
+// renderSearchPrompt renders the "/query" line with a cursor, highlighting
+// a type prefix such as "a:" when the query has one.
+func renderSearchPrompt(query string) string {
+	if idx := strings.Index(query, ":"); idx > 0 {
+		pre := query[:idx+1]
+		rest := query[idx+1:]
+		return searchPrefixStyle.Render("/"+pre) + searchInputStyle.Render(rest+"█")
+	}
+	return searchInputStyle.Render("/" + query + "█")
 }
 
 // renderTrackLine builds the one-line "icon track — artist   device" status,

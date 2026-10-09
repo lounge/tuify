@@ -4,8 +4,42 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
+
+// The frame must be exactly the terminal height. One line more and
+// bubbletea drops the top line, and every mouse zone in the list is then
+// one row off from the row the user sees. The search prompt used to add a
+// sixth line to the now-playing bar.
+func TestView_SearchPromptKeepsFrameAtTerminalHeight(t *testing.T) {
+	const height = 24
+	m := newIntentTestModel()
+	tv := newTrackView(m.rootCtx, m.client, "p1", "Roadtrip", 0, 0, false)
+	m.pushView(tv)
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 80, Height: height})
+	m = updated.(Model)
+
+	frameLines := func() int { return strings.Count(m.View(), "\n") + 1 }
+	if got := frameLines(); got != height {
+		t.Fatalf("setup: frame is %d lines, want %d", got, height)
+	}
+
+	m, _ = pressKeys(t, m, runeKey("/"))
+	if !tv.searching {
+		t.Fatal("/ did not open the filter")
+	}
+	if got := frameLines(); got != height {
+		t.Errorf("frame is %d lines with the search prompt open, want %d", got, height)
+	}
+
+	// A status banner replaces the track line; the prompt must not grow
+	// the bar there either.
+	m.nowPlaying.statusMsg = "Copied link to clipboard"
+	if got := frameLines(); got != height {
+		t.Errorf("frame is %d lines with a status banner and the prompt, want %d", got, height)
+	}
+}
 
 func newTestModel(width int, np *nowPlayingModel) Model {
 	np.width = width
