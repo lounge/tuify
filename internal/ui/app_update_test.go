@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
@@ -12,7 +12,9 @@ import (
 
 // The waitFor* Cmds park on bootstrap channels that usually never fire.
 // They must return once the root context is cancelled, and must not re-arm
-// into a busy loop when their channel is closed.
+// into a busy loop when their channel is closed. Each case runs in a
+// synctest bubble, so "the Cmd returned" is checked once every goroutine
+// is parked instead of after a wall-clock timeout.
 func TestWaitCmds_ExitOnShutdownAndClosedChannel(t *testing.T) {
 	cmds := []struct {
 		name string
@@ -24,48 +26,65 @@ func TestWaitCmds_ExitOnShutdownAndClosedChannel(t *testing.T) {
 	}
 	for _, tc := range cmds {
 		t.Run(tc.name+"/shutdown", func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			m := Model{
-				rootCtx:             ctx,
-				librespotInactiveCh: make(chan struct{}),
-				tokenSaveErrCh:      make(chan error),
-				tokenRevokedCh:      make(chan struct{}),
-			}
-			done := runCmd(tc.cmd(m))
-			cancel()
-			assertReturnsNil(t, done)
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				m := Model{
+					rootCtx:             ctx,
+					librespotInactiveCh: make(chan struct{}),
+					tokenSaveErrCh:      make(chan error),
+					tokenRevokedCh:      make(chan struct{}),
+				}
+				done := runCmd(tc.cmd(m))
+				cancel()
+				assertReturnsNil(t, done)
+			})
 		})
 		t.Run(tc.name+"/closed", func(t *testing.T) {
-			libCh, saveCh, revCh := make(chan struct{}), make(chan error), make(chan struct{})
-			close(libCh)
-			close(saveCh)
-			close(revCh)
-			m := Model{
-				rootCtx:             t.Context(),
-				librespotInactiveCh: libCh,
-				tokenSaveErrCh:      saveCh,
-				tokenRevokedCh:      revCh,
-			}
-			assertReturnsNil(t, runCmd(tc.cmd(m)))
+			synctest.Test(t, func(t *testing.T) {
+				libCh, saveCh, revCh := make(chan struct{}), make(chan error), make(chan struct{})
+				close(libCh)
+				close(saveCh)
+				close(revCh)
+				m := Model{
+					rootCtx:             t.Context(),
+					librespotInactiveCh: libCh,
+					tokenSaveErrCh:      saveCh,
+					tokenRevokedCh:      revCh,
+				}
+				assertReturnsNil(t, runCmd(tc.cmd(m)))
+			})
 		})
 	}
 }
 
+// runCmd runs cmd on its own goroutine and returns the channel its message
+// lands on. Pair it with receiveNow inside a synctest bubble.
 func runCmd(cmd tea.Cmd) <-chan tea.Msg {
 	done := make(chan tea.Msg, 1)
 	go func() { done <- cmd() }()
 	return done
 }
 
-func assertReturnsNil(t *testing.T, done <-chan tea.Msg) {
+// receiveNow returns the message a Cmd started with runCmd has already
+// produced. Call it inside a synctest bubble: synctest.Wait parks the
+// caller until the Cmd's goroutine is blocked or gone without advancing
+// the fake clock, so an empty channel means the Cmd is stuck, not slow.
+func receiveNow(t *testing.T, done <-chan tea.Msg, what string) tea.Msg {
 	t.Helper()
+	synctest.Wait()
 	select {
 	case msg := <-done:
-		if msg != nil {
-			t.Errorf("got %T, want nil", msg)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("Cmd did not return")
+		return msg
+	default:
+		t.Fatalf("%s did not return", what)
+		return nil
+	}
+}
+
+func assertReturnsNil(t *testing.T, done <-chan tea.Msg) {
+	t.Helper()
+	if msg := receiveNow(t, done, "Cmd"); msg != nil {
+		t.Errorf("got %T, want nil", msg)
 	}
 }
 

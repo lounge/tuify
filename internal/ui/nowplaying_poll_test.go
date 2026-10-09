@@ -7,63 +7,58 @@ import (
 	"net/http/httptest"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
 	"github.com/lounge/tuify/internal/testutil"
 )
 
+// The HTTP-backed tests here run in a synctest bubble against an in-memory
+// httptest server. "The request is in flight" and "the command returned"
+// are then exact states reached through synctest.Wait, not guesses behind
+// a wall-clock timeout, and the rate-limit cooldown runs on the fake clock.
+
 // Cancelling the root context must cascade: any in-flight pollState()
 // command sees the cancellation and returns playerStateMsg with a
-// context.Canceled (or DeadlineExceeded) error instead of waiting for
-// the per-op timeout. Proves the ctx threading from bootstrap.Run is
-// wired up correctly for the now-playing poll path.
+// context.Canceled error instead of waiting for the per-op timeout. Proves
+// the ctx threading from bootstrap.Run is wired up correctly for the
+// now-playing poll path.
 func TestPollState_RootContextCancelCascadesToHTTPCall(t *testing.T) {
-	// Blocking server: holds the request open until its own request
-	// context is cancelled. Our cancel() must trigger that.
-	srv, entered := newBlockingServer(t)
+	synctest.Test(t, func(t *testing.T) {
+		// Blocking server: holds the request open until its own request
+		// context is cancelled. Our cancel() must trigger that.
+		srv, entered := newBlockingServer(t)
 
-	httpClient := &http.Client{Transport: &testutil.RewriteTransport{
-		Base:   srv.Client().Transport,
-		Target: srv.URL,
-	}}
+		httpClient := &http.Client{Transport: &testutil.RewriteTransport{
+			Base:   srv.Client().Transport,
+			Target: srv.URL,
+		}}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
 
-	np := &nowPlayingModel{
-		client: spotify.New(httpClient),
-		ctx:    ctx,
-	}
-	cmd := np.pollState()
+		np := &nowPlayingModel{
+			client: spotify.New(httpClient),
+			ctx:    ctx,
+		}
+		done := runCmd(np.pollState())
 
-	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+		// Cancel only once the request is in flight on the server.
+		waitEntered(t, entered)
+		cancel()
 
-	// Cancel only once the request is in flight on the server.
-	waitEntered(t, entered)
-	cancel()
-
-	select {
-	case msg := <-done:
+		// No fake time passes between cancel and the check, so the per-op
+		// 10s timeout cannot have fired: only the cascade can end the call.
+		msg := receiveNow(t, done, "pollState")
 		psm, ok := msg.(playerStateMsg)
 		if !ok {
 			t.Fatalf("expected playerStateMsg, got %T", msg)
 		}
-		if psm.err == nil {
-			t.Fatal("expected error from canceled pollState, got nil")
+		if !errors.Is(psm.err, context.Canceled) {
+			t.Errorf("expected context.Canceled, got %v", psm.err)
 		}
-		// Either context.Canceled (our cancel won the race) or
-		// context.DeadlineExceeded (the per-op 10s timeout wraps ctx);
-		// both prove cancellation propagated.
-		if !errors.Is(psm.err, context.Canceled) &&
-			!errors.Is(psm.err, context.DeadlineExceeded) {
-			t.Errorf("expected ctx.Canceled/DeadlineExceeded, got %v", psm.err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("pollState did not return after root ctx cancel — cascade broken")
-	}
+	})
 }
 
 // While the spotify client is in a rate-limit cooldown, pollState must
@@ -71,52 +66,53 @@ func TestPollState_RootContextCancelCascadesToHTTPCall(t *testing.T) {
 // extend the next tick past the deadline. Regression coverage for the
 // post-sleep / network-change 429 storm.
 func TestPollState_SkipsCallDuringRateLimitCooldown(t *testing.T) {
-	var hits atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("Too many requests"))
-	}))
-	defer srv.Close()
+	synctest.Test(t, func(t *testing.T) {
+		var hits atomic.Int32
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte("Too many requests"))
+		}))
 
-	httpClient := &http.Client{Transport: &testutil.RewriteTransport{
-		Base:   srv.Client().Transport,
-		Target: srv.URL,
-	}}
-	client := spotify.New(httpClient)
-	np := &nowPlayingModel{client: client, ctx: context.Background()}
+		httpClient := &http.Client{Transport: &testutil.RewriteTransport{
+			Base:   srv.Client().Transport,
+			Target: srv.URL,
+		}}
+		client := spotify.New(httpClient)
+		np := &nowPlayingModel{client: client, ctx: t.Context()}
 
-	// First poll: arms the cooldown by hitting the 429.
-	msg := np.pollState()()
-	if _, ok := msg.(playerStateMsg); !ok {
-		t.Fatalf("first poll: expected playerStateMsg, got %T", msg)
-	}
-	before := hits.Load()
-	if before == 0 {
-		t.Fatal("first poll: did not reach test server")
-	}
-	if !client.IsRateLimited() {
-		t.Fatal("first poll: cooldown should be armed after 429")
-	}
+		// First poll: arms the cooldown by hitting the 429.
+		msg := np.pollState()()
+		if _, ok := msg.(playerStateMsg); !ok {
+			t.Fatalf("first poll: expected playerStateMsg, got %T", msg)
+		}
+		before := hits.Load()
+		if before == 0 {
+			t.Fatal("first poll: did not reach test server")
+		}
+		if !client.IsRateLimited() {
+			t.Fatal("first poll: cooldown should be armed after 429")
+		}
 
-	// Second poll: must skip the network call entirely.
-	msg2 := np.pollState()()
-	psm, ok := msg2.(playerStateMsg)
-	if !ok {
-		t.Fatalf("second poll: expected playerStateMsg, got %T", msg2)
-	}
-	if !psm.skipped {
-		t.Fatal("second poll: expected skipped=true during cooldown")
-	}
-	if hits.Load() != before {
-		t.Errorf("second poll hit the network during cooldown (hits %d → %d)", before, hits.Load())
-	}
+		// Second poll: must skip the network call entirely.
+		msg2 := np.pollState()()
+		psm, ok := msg2.(playerStateMsg)
+		if !ok {
+			t.Fatalf("second poll: expected playerStateMsg, got %T", msg2)
+		}
+		if !psm.skipped {
+			t.Fatal("second poll: expected skipped=true during cooldown")
+		}
+		if hits.Load() != before {
+			t.Errorf("second poll hit the network during cooldown (hits %d → %d)", before, hits.Load())
+		}
 
-	// pollInterval must reflect the cooldown so the next tick lands past it,
-	// not the default 10s.
-	if got := np.pollInterval(); got < 10*time.Second {
-		t.Errorf("pollInterval during cooldown should be >= 10s, got %v", got)
-	}
+		// pollInterval must reflect the cooldown so the next tick lands past it,
+		// not the default 10s.
+		if got := np.pollInterval(); got < 10*time.Second {
+			t.Errorf("pollInterval during cooldown should be >= 10s, got %v", got)
+		}
+	})
 }
 
 // advanceProgress must only report a crossing on the *first* tick that
@@ -181,65 +177,61 @@ func TestAdvanceProgress_QuietWhenPausedOrIdle(t *testing.T) {
 // must abort a playlist/track/etc fetch too. Uses playlistView as the
 // representative since all lazy views share the same fetch shape.
 func TestPlaylistFetch_RootContextCancelCascades(t *testing.T) {
-	srv, entered := newBlockingServer(t)
+	synctest.Test(t, func(t *testing.T) {
+		srv, entered := newBlockingServer(t)
 
-	httpClient := &http.Client{Transport: &testutil.RewriteTransport{
-		Base:   srv.Client().Transport,
-		Target: srv.URL,
-	}}
+		httpClient := &http.Client{Transport: &testutil.RewriteTransport{
+			Base:   srv.Client().Transport,
+			Target: srv.URL,
+		}}
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+		ctx, cancel := context.WithCancel(t.Context())
+		defer cancel()
 
-	pv := newPlaylistView(ctx, spotify.New(httpClient), 80, 20, false)
-	cmd := pv.fetchMore()
+		pv := newPlaylistView(ctx, spotify.New(httpClient), 80, 20, false)
+		done := runCmd(pv.fetchMore())
 
-	done := make(chan tea.Msg, 1)
-	go func() { done <- cmd() }()
+		waitEntered(t, entered)
+		cancel()
 
-	waitEntered(t, entered)
-	cancel()
-
-	select {
-	case msg := <-done:
+		msg := receiveNow(t, done, "playlist fetch")
 		plm, ok := msg.(pageLoadedMsg)
 		if !ok {
 			t.Fatalf("expected pageLoadedMsg, got %T", msg)
 		}
-		if plm.err == nil {
-			t.Fatal("expected error from canceled fetch, got nil")
+		if !errors.Is(plm.err, context.Canceled) {
+			t.Errorf("expected context.Canceled, got %v", plm.err)
 		}
-		if !errors.Is(plm.err, context.Canceled) &&
-			!errors.Is(plm.err, context.DeadlineExceeded) {
-			t.Errorf("expected ctx.Canceled/DeadlineExceeded, got %v", plm.err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("playlist fetch did not return after root ctx cancel")
-	}
+	})
 }
 
-// newBlockingServer returns a server whose handler signals on entered once
-// a request arrives and then holds it open until the request's context is
-// cancelled, so tests can cancel exactly while a call is in flight.
+// newBlockingServer returns an in-memory server whose handler signals on
+// entered once a request arrives and then holds it open until the
+// request's context is cancelled, so tests can cancel exactly while a call
+// is in flight. The server shuts down with the test.
 func newBlockingServer(t *testing.T) (*httptest.Server, <-chan struct{}) {
 	t.Helper()
 	entered := make(chan struct{}, 1)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
 		case entered <- struct{}{}:
 		default:
 		}
 		<-r.Context().Done()
 	}))
-	t.Cleanup(srv.Close)
 	return srv, entered
 }
 
+// waitEntered returns once the blocking server holds a request. Inside a
+// bubble, synctest.Wait parks the caller until the client goroutine waits
+// on its response and the handler on its context, so a request that never
+// arrived shows up as an empty channel rather than a timeout.
 func waitEntered(t *testing.T, entered <-chan struct{}) {
 	t.Helper()
+	synctest.Wait()
 	select {
 	case <-entered:
-	case <-time.After(2 * time.Second):
+	default:
 		t.Fatal("request never reached the server")
 	}
 }

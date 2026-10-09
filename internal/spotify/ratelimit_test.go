@@ -18,47 +18,48 @@ import (
 func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
 	t.Parallel()
 
-	var hits atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		hits.Add(1)
-		w.WriteHeader(http.StatusTooManyRequests)
-		w.Write([]byte("Too many requests"))
-	}))
-	defer srv.Close()
+	synctest.Test(t, func(t *testing.T) {
+		var hits atomic.Int32
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
+			w.WriteHeader(http.StatusTooManyRequests)
+			w.Write([]byte("Too many requests"))
+		}))
 
-	rl := newRateLimitTransport(srv.Client().Transport)
-	client := &http.Client{Transport: rl}
+		rl := newRateLimitTransport(srv.Client().Transport)
+		client := &http.Client{Transport: rl}
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("first call: unexpected err: %v", err)
-	}
-	resp.Body.Close()
-	if resp.StatusCode != http.StatusTooManyRequests {
-		t.Fatalf("first call: status got %d want 429", resp.StatusCode)
-	}
-	if hits.Load() != 1 {
-		t.Fatalf("first call: hits got %d want 1", hits.Load())
-	}
+		req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("first call: unexpected err: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusTooManyRequests {
+			t.Fatalf("first call: status got %d want 429", resp.StatusCode)
+		}
+		if hits.Load() != 1 {
+			t.Fatalf("first call: hits got %d want 1", hits.Load())
+		}
 
-	req2, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
-	resp2, err := client.Do(req2)
-	if resp2 != nil {
-		resp2.Body.Close()
-	}
-	if err == nil {
-		t.Fatal("second call: expected RateLimitedError, got nil")
-	}
-	if _, ok := errors.AsType[*RateLimitedError](err); !ok {
-		t.Fatalf("second call: expected *RateLimitedError, got %T: %v", err, err)
-	}
-	if hits.Load() != 1 {
-		t.Errorf("second call hit the network (hits=%d); cooldown not enforced", hits.Load())
-	}
-	if got := rl.wait(); got <= 0 || got > rateLimitMaxBackoff {
-		t.Errorf("wait(): got %v, expected in (0, %v]", got, rateLimitMaxBackoff)
-	}
+		req2, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+		resp2, err := client.Do(req2)
+		if resp2 != nil {
+			resp2.Body.Close()
+		}
+		if err == nil {
+			t.Fatal("second call: expected RateLimitedError, got nil")
+		}
+		if _, ok := errors.AsType[*RateLimitedError](err); !ok {
+			t.Fatalf("second call: expected *RateLimitedError, got %T: %v", err, err)
+		}
+		if hits.Load() != 1 {
+			t.Errorf("second call hit the network (hits=%d); cooldown not enforced", hits.Load())
+		}
+		if got := rl.wait(); got <= 0 || got > rateLimitMaxBackoff {
+			t.Errorf("wait(): got %v, expected in (0, %v]", got, rateLimitMaxBackoff)
+		}
+	})
 }
 
 // TestRateLimitTransport_ShortRetryAfterPassesThrough verifies the inline
@@ -67,25 +68,26 @@ func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
 func TestRateLimitTransport_ShortRetryAfterPassesThrough(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "1")
-		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer srv.Close()
+	synctest.Test(t, func(t *testing.T) {
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
 
-	rl := newRateLimitTransport(srv.Client().Transport)
-	client := &http.Client{Transport: rl}
+		rl := newRateLimitTransport(srv.Client().Transport)
+		client := &http.Client{Transport: rl}
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
-	resp, err := client.Do(req)
-	if err != nil {
-		t.Fatalf("unexpected err: %v", err)
-	}
-	resp.Body.Close()
+		req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		resp.Body.Close()
 
-	if got := rl.wait(); got != 0 {
-		t.Errorf("short Retry-After should not arm cooldown, got wait=%v", got)
-	}
+		if got := rl.wait(); got != 0 {
+			t.Errorf("short Retry-After should not arm cooldown, got wait=%v", got)
+		}
+	})
 }
 
 // TestRateLimitTransport_LargeRetryAfterCapped verifies a malicious or
@@ -93,32 +95,34 @@ func TestRateLimitTransport_ShortRetryAfterPassesThrough(t *testing.T) {
 func TestRateLimitTransport_LargeRetryAfterCapped(t *testing.T) {
 	t.Parallel()
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Retry-After", "99999")
-		w.WriteHeader(http.StatusTooManyRequests)
-	}))
-	defer srv.Close()
+	synctest.Test(t, func(t *testing.T) {
+		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Retry-After", "99999")
+			w.WriteHeader(http.StatusTooManyRequests)
+		}))
 
-	rl := newRateLimitTransport(srv.Client().Transport)
-	client := &http.Client{Transport: rl}
+		rl := newRateLimitTransport(srv.Client().Transport)
+		client := &http.Client{Transport: rl}
 
-	req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
-	resp, _ := client.Do(req)
-	if resp != nil {
-		resp.Body.Close()
-	}
-	got := rl.wait()
-	if got > rateLimitMaxBackoff {
-		t.Errorf("wait %v exceeds cap %v", got, rateLimitMaxBackoff)
-	}
-	if got <= 0 {
-		t.Errorf("expected cooldown to be set, got %v", got)
-	}
+		req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
+		resp, _ := client.Do(req)
+		if resp != nil {
+			resp.Body.Close()
+		}
+		got := rl.wait()
+		if got > rateLimitMaxBackoff {
+			t.Errorf("wait %v exceeds cap %v", got, rateLimitMaxBackoff)
+		}
+		if got <= 0 {
+			t.Errorf("expected cooldown to be set, got %v", got)
+		}
+	})
 }
 
 // stubTransport answers every request in memory with the status status()
-// returns, counting hits. Unlike httptest it does no network I/O, so it
-// works inside a synctest bubble where only the fake clock advances.
+// returns, counting hits. The escalation tests below exercise only the
+// transport under test and the fake clock, so a stub is simpler than a
+// server there.
 type stubTransport struct {
 	status func() int
 	hits   atomic.Int32
