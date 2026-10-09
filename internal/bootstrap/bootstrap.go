@@ -52,13 +52,22 @@ func Run() error {
 
 	// Force or autodetect terminal background mode before any rendering.
 	// AdaptiveColor lookups read this at render time, so it has to land
-	// before the first View() call. Empty cfg.Appearance leaves lipgloss
-	// in autodetect mode.
+	// before the first View() call.
 	switch cfg.Appearance {
 	case "dark":
 		lipgloss.SetHasDarkBackground(true)
 	case "light":
 		lipgloss.SetHasDarkBackground(false)
+	default:
+		// Autodetect. lipgloss answers the first HasDarkBackground call by
+		// asking the terminal for its background colour (termenv OSC 11,
+		// up to a 5s wait for the reply) and caches the result. Left to
+		// chance, that first call lands inside View — the progress bar
+		// gradient, album art and lyrics all consult it — and stalls the
+		// first frame with the alt screen already up. Asking here, with
+		// the terminal still in its normal state, moves the wait before
+		// the program starts and makes every render-time call a cache hit.
+		lipgloss.HasDarkBackground()
 	}
 
 	// Apply theme overrides before any UI rendering. ui.RebuildStyles
