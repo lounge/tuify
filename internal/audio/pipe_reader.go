@@ -31,6 +31,11 @@ type PipeReader struct {
 
 	// newPlayer creates an audio player. Defaults to oto. Override in tests.
 	newPlayer playerFactory
+
+	// playerErrLogged makes the "no audio device" message a one-liner per
+	// PipeReader. The oto context is a process-wide singleton, so a failed
+	// init is permanent: every librespot restart would otherwise re-log it.
+	playerErrLogged atomic.Bool
 }
 
 // maxVolumeGain caps the inverse-volume gain so very low volumes don't
@@ -172,6 +177,11 @@ func (pr *PipeReader) Stop() {
 
 // readLoop reads PCM from the pipe, plays audio, and runs FFT.
 // Exits when the pipe closes (librespot died) or quit is closed (Stop/new Start).
+//
+// If no audio player can be created, the pipe is still drained through the
+// FFT bridge by a silentPlayer, so visualizers keep getting frames. Closing
+// the pipe instead would kill librespot with EPIPE, and its restart would
+// hit the same (permanent) error forever.
 func (pr *PipeReader) readLoop(pipe io.ReadCloser, quit <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 
@@ -186,14 +196,12 @@ func (pr *PipeReader) readLoop(pipe io.ReadCloser, quit <-chan struct{}, done ch
 		store:    pr.storeFrame,
 	}
 
-	p, err := pr.newPlayer(bridge, format)
-	if err != nil {
-		pipe.Close()
-		log.Printf("[pipe-reader] failed to create audio player: %v", err)
+	p, ok := pr.createPlayer(bridge, pipe, format, quit)
+	if !ok {
+		// quit fired while the player was still being created; the pipe is
+		// closed and the creator will discard whatever it produces.
 		return
 	}
-
-	log.Printf("[pipe-reader] playing")
 
 	// Block until player finishes (pipe EOF/error) or we're told to quit.
 	ticker := time.NewTicker(50 * time.Millisecond)
@@ -215,6 +223,52 @@ func (pr *PipeReader) readLoop(pipe io.ReadCloser, quit <-chan struct{}, done ch
 	pipe.Close()
 	p.Close()
 	log.Printf("[pipe-reader] pipe closed, shutting down")
+}
+
+// createPlayer runs newPlayer without letting it hold up shutdown: the
+// factory can block in audio-driver initialization (oto's ready channel),
+// and Stop/Start wait for readLoop to exit. It returns ok=false when quit
+// closed first; the pipe is then closed here, and the factory goroutine
+// closes any player it eventually produces, since nobody else will.
+//
+// When the factory fails, a silentPlayer takes its place so the bridge is
+// still drained (see readLoop).
+func (pr *PipeReader) createPlayer(bridge *pipeReaderBridge, pipe io.Closer, format pCMFormat, quit <-chan struct{}) (player, bool) {
+	type result struct {
+		p   player
+		err error
+	}
+	// Unbuffered on purpose: a send can only complete if readLoop is still
+	// receiving, so exactly one side ends up owning the player.
+	res := make(chan result)
+	go func() {
+		p, err := pr.newPlayer(bridge, format)
+		select {
+		case res <- result{p, err}:
+		case <-quit:
+			if p != nil {
+				p.Close()
+			}
+		}
+	}()
+
+	var r result
+	select {
+	case r = <-res:
+	case <-quit:
+		log.Printf("[pipe-reader] cancelled while creating audio player, shutting down")
+		pipe.Close()
+		return nil, false
+	}
+
+	if r.err != nil {
+		if pr.playerErrLogged.CompareAndSwap(false, true) {
+			log.Printf("[pipe-reader] no audio device, playback is silent but visualizers stay live: %v", r.err)
+		}
+		return newSilentPlayer(bridge), true
+	}
+	log.Printf("[pipe-reader] playing")
+	return r.p, true
 }
 
 // storeFrame atomically publishes a new FrequencyData frame.
@@ -245,7 +299,7 @@ func (b *pipeReaderBridge) Read(p []byte) (int, error) {
 		return n, err
 	}
 
-	// Count mono samples for progress tracking.
+	// Count mono samples for stream-time tracking.
 	bytesPerFrame := b.format.Channels * (b.format.BitDepth / 8)
 	monoSamples := int64(n / bytesPerFrame)
 	b.totalFrames += monoSamples
@@ -265,7 +319,7 @@ func (b *pipeReaderBridge) Read(p []byte) (int, error) {
 		}
 
 		fd := b.analyzer.Analyze(b.samples)
-		fd.ProgressMs = int32(b.totalFrames * 1000 / int64(b.format.SampleRate))
+		fd.StreamMs = b.totalFrames * 1000 / int64(b.format.SampleRate)
 
 		b.store(&fd)
 
@@ -293,6 +347,41 @@ type player interface {
 	IsPlaying() bool
 }
 
+// silentPlayer is the fallback when no audio device is available: it reads
+// src to exhaustion so the FFT bridge keeps publishing frames, and produces
+// no sound. IsPlaying turns false once src returns an error (pipe closed).
+type silentPlayer struct {
+	playing atomic.Bool
+	done    chan struct{}
+}
+
+func newSilentPlayer(src io.Reader) *silentPlayer {
+	s := &silentPlayer{done: make(chan struct{})}
+	s.playing.Store(true)
+	go func() {
+		defer func() {
+			s.playing.Store(false)
+			close(s.done)
+		}()
+		buf := make([]byte, ChunkBytes)
+		for {
+			if _, err := src.Read(buf); err != nil {
+				return
+			}
+		}
+	}()
+	return s
+}
+
+func (s *silentPlayer) IsPlaying() bool { return s.playing.Load() }
+
+// Close waits for the drain goroutine, which exits once src fails; readLoop
+// closes the pipe before calling Close, matching the order oto needs.
+func (s *silentPlayer) Close() error {
+	<-s.done
+	return nil
+}
+
 // otoPlayer wraps an oto.Player to satisfy the player interface.
 type otoPlayer struct {
 	p *oto.Player
@@ -305,7 +394,10 @@ func (o *otoPlayer) Close() error    { return nil }
 func (o *otoPlayer) IsPlaying() bool { return o.p.IsPlaying() }
 
 // oto.NewContext is a process-wide singleton — it must only be called once.
-// We initialize it lazily on first use and reuse across restarts.
+// We initialize it lazily on first use and reuse across restarts. A failed
+// initialization is therefore permanent for the process; otoCtxErr keeps it
+// observable so every later factory call fails the same way instead of
+// using a dead context.
 var (
 	otoCtx     *oto.Context
 	otoCtxOnce sync.Once
@@ -321,9 +413,14 @@ func defaultPlayerFactory(src io.Reader, format pCMFormat) (player, error) {
 			ChannelCount: format.Channels,
 			Format:       oto.FormatSignedInt16LE,
 		})
-		if otoCtxErr == nil {
-			<-ready
+		if otoCtxErr != nil {
+			return
 		}
+		// Driver init runs asynchronously; oto reports its outcome only
+		// through Err after ready closes. A nil error from NewContext
+		// alone says nothing about whether a device was opened.
+		<-ready
+		otoCtxErr = otoCtx.Err()
 	})
 	if otoCtxErr != nil {
 		return nil, otoCtxErr

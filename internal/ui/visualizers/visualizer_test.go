@@ -153,6 +153,53 @@ func TestStarfield_ResizeGrid(t *testing.T) {
 	}
 }
 
+// The beat detector resets its tempo history when progress jumps
+// backwards, which is how it notices a seek or track change. That only
+// works if it is fed the track position, not FrequencyData.StreamMs, which
+// never runs backwards.
+func TestStarfield_SetProgressDrivesBeatDetector(t *testing.T) {
+	t.Parallel()
+
+	var _ ProgressAware = (*Starfield)(nil)
+
+	silent := &audio.FrequencyData{StreamMs: 900000}
+	loud := &audio.FrequencyData{StreamMs: 900050}
+	for i := range loud.Bands {
+		loud.Bands[i] = 1
+	}
+
+	sf := NewStarfield()
+	sf.Init("seed", 300000)
+
+	sf.SetAudioData(silent)
+	sf.SetProgress(1000)
+	sf.Advance()
+	sf.SetAudioData(loud)
+	sf.SetProgress(1050)
+	sf.Advance()
+	if sf.beat.Pulse != 1 {
+		t.Fatalf("Pulse = %v after an onset, want 1", sf.beat.Pulse)
+	}
+	if sf.beat.lastBeatMs != 1050 {
+		t.Fatalf("beat stamped at %d, want the playback position 1050 (StreamMs was %d)", sf.beat.lastBeatMs, loud.StreamMs)
+	}
+
+	// Seek backwards: the detector must start over.
+	sf.SetAudioData(silent)
+	sf.SetProgress(200)
+	sf.Advance()
+	if sf.beat.lastBeatMs != 0 {
+		t.Errorf("lastBeatMs = %d after a seek backwards, want 0 (reset)", sf.beat.lastBeatMs)
+	}
+
+	// Init is a new track: position starts over too.
+	sf.SetProgress(5000)
+	sf.Init("other", 300000)
+	if sf.progressMs != 0 {
+		t.Errorf("progressMs = %d after Init, want 0", sf.progressMs)
+	}
+}
+
 // --- AlbumArt tests ---
 
 func testImage(w, h int) image.Image {

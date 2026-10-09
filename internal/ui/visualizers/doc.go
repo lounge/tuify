@@ -10,9 +10,11 @@
 //
 //   - AudioAware receives per-frame FrequencyData from the FFT pipeline.
 //   - ProgressAware receives playback progress in ms (for time-aligned
-//     visuals like lyrics scroll).
+//     visuals like lyrics scroll, and for beat tracking that must notice
+//     seeks; FrequencyData.StreamMs is stream time, not position).
 //   - ImageAware receives the current track's album art (for AlbumArt).
-//   - LyricsAware receives the track's lyric lines (for Lyrics).
+//   - LyricsAware receives the track's lyric lines, or is told the track
+//     is instrumental (for Lyrics).
 //
 // A visualizer opts in by implementing the matching capability interface;
 // the ui package's visualizerModel pushes data to everything that opts in.

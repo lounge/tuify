@@ -30,6 +30,7 @@ type Starfield struct {
 	gridW       int
 	gridH       int
 	audioData   *audio.FrequencyData
+	progressMs  int     // playback position from Spotify, see SetProgress
 	intensity   float64 // audio intensity, computed in Advance()
 	beat        beatDetector
 	smoothSpeed float64 // smoothed speed multiplier
@@ -50,11 +51,21 @@ func (sf *Starfield) Init(seed string, durationMs int) {
 	}
 	sf.beat.Reset()
 	sf.smoothSpeed = 0
+	sf.progressMs = 0
 	sf.inited = true
 }
 
 func (sf *Starfield) SetAudioData(data *audio.FrequencyData) {
 	sf.audioData = data
+}
+
+// SetProgress feeds the beat detector the position in the track. It must
+// be playback progress, not FrequencyData.StreamMs: the detector drops its
+// tempo history when time jumps backwards or far forwards, which only
+// ever happens to the track position (seek, track change), never to the
+// stream time.
+func (sf *Starfield) SetProgress(progressMs int) {
+	sf.progressMs = progressMs
 }
 
 func (sf *Starfield) Advance() {
@@ -71,7 +82,8 @@ func (sf *Starfield) Advance() {
 		peak := float64(sf.audioData.Peak)
 		sf.intensity = bass*0.5 + mid*0.3 + peak*0.2
 
-		sf.beat.Tick(&sf.audioData.Bands, sf.audioData.ProgressMs)
+		// A track position fits int32 with room to spare (24 days).
+		sf.beat.Tick(&sf.audioData.Bands, int32(sf.progressMs))
 
 		// Speed: continuous bass drive + beat pulse burst, scaled by tempo.
 		bassDrive := bass * 1.2

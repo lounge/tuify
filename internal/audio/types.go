@@ -16,7 +16,13 @@ type FrequencyData struct {
 	High       float32           // average of bands 32–63
 	LeftLevel  float32           // time-domain per-channel peak, AGC-normalized 0.0–1.0
 	RightLevel float32           // time-domain per-channel peak, AGC-normalized 0.0–1.0
-	ProgressMs int32             // playback progress derived from PCM sample count
+	// StreamMs is the milliseconds of PCM received since the current pipe
+	// was opened, derived from the sample count. It is stream time, not
+	// playback position: it keeps counting across track changes and seeks,
+	// includes whatever librespot prebuffers, and restarts from zero only
+	// when librespot restarts. Visualizers that need the position in the
+	// track must implement ProgressAware and take it from Spotify.
+	StreamMs int64
 }
 
 // Band boundary indices for convenience fields.
