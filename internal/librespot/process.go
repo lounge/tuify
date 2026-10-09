@@ -62,6 +62,14 @@ type Process struct {
 	sawAudioKeyErr bool
 	sawSpirc       bool
 
+	// Timing knobs, set to the package constants by NewProcess. Fields
+	// rather than constants so tests can drive a real child process through
+	// restart and force-kill in milliseconds.
+	restartBaseDelay time.Duration
+	restartMaxDelay  time.Duration
+	stableThreshold  time.Duration
+	stopTimeout      time.Duration
+
 	OnReconnect func()              // called when librespot authenticates (initial or restart)
 	OnInactive  func()              // called when librespot reports device became inactive
 	OnStdout    func(io.ReadCloser) // called with the stdout pipe in launch(); for pipe backend audio
@@ -71,8 +79,12 @@ type Process struct {
 func NewProcess(cfg Config) *Process {
 	cfg.setDefaults()
 	return &Process{
-		config: cfg,
-		stopCh: make(chan struct{}),
+		config:           cfg,
+		stopCh:           make(chan struct{}),
+		restartBaseDelay: restartBaseDelay,
+		restartMaxDelay:  restartMaxDelay,
+		stableThreshold:  stableThreshold,
+		stopTimeout:      stopTimeout,
 	}
 }
 
@@ -229,16 +241,19 @@ const (
 // restartDelay returns the backoff delay based on how long the process was alive.
 // The faster it died, the longer we wait (up to restartMaxDelay).
 // If it ran longer than stableThreshold, restart quickly (restartBaseDelay).
-func restartDelay(uptime time.Duration) time.Duration {
-	if uptime >= stableThreshold {
-		return restartBaseDelay
+func (p *Process) restartDelay(uptime time.Duration) time.Duration {
+	if uptime >= p.stableThreshold {
+		return p.restartBaseDelay
 	}
-	ratio := float64(stableThreshold-uptime) / float64(stableThreshold)
-	delay := max(time.Duration(float64(restartMaxDelay)*ratio), restartBaseDelay)
+	ratio := float64(p.stableThreshold-uptime) / float64(p.stableThreshold)
+	delay := max(time.Duration(float64(p.restartMaxDelay)*ratio), p.restartBaseDelay)
 	return delay
 }
 
-// scheduleRestart handles automatic restart with linear backoff.
+// scheduleRestart handles automatic restart with linear backoff. A launch
+// that fails (binary missing, fork error) is retried at the maximum delay
+// until Stop: giving up would leave tuify without a device for the rest of
+// the session over what is often a transient condition.
 func (p *Process) scheduleRestart(lastStart time.Time) {
 	p.mu.Lock()
 	if p.stopped {
@@ -248,18 +263,25 @@ func (p *Process) scheduleRestart(lastStart time.Time) {
 	p.mu.Unlock()
 
 	uptime := time.Since(lastStart)
-	delay := restartDelay(uptime)
+	delay := p.restartDelay(uptime)
 
 	log.Printf("[librespot] restarting in %v (uptime was %v)", delay.Round(time.Second), uptime.Round(time.Second))
 
-	select {
-	case <-time.After(delay):
-	case <-p.stopCh:
-		return
-	}
+	for {
+		timer := time.NewTimer(delay)
+		select {
+		case <-timer.C:
+		case <-p.stopCh:
+			timer.Stop()
+			return
+		}
 
-	if err := p.launch(); err != nil {
-		log.Printf("[librespot] restart failed: %v", err)
+		err := p.launch()
+		if err == nil {
+			return
+		}
+		delay = p.restartMaxDelay
+		log.Printf("[librespot] restart failed: %v (retrying in %v)", err, delay.Round(time.Second))
 	}
 }
 
@@ -296,8 +318,8 @@ func (p *Process) Stop() {
 
 	select {
 	case <-done:
-	case <-time.After(stopTimeout):
-		log.Printf("[librespot] force killing after %v timeout", stopTimeout)
+	case <-time.After(p.stopTimeout):
+		log.Printf("[librespot] force killing after %v timeout", p.stopTimeout)
 		_ = cmd.Process.Kill()
 		<-done
 	}

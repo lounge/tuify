@@ -19,7 +19,9 @@
 //
 // Restarts: if the process exits without Stop, it is relaunched after a
 // delay between 2s and 30s: the sooner after starting it died, the longer
-// the wait; a run that stayed up for a minute restarts after 2s.
+// the wait; a run that stayed up for a minute restarts after 2s. A relaunch
+// that fails outright (the binary cannot be started) is retried every 30s
+// until Stop.
 //
 // On Linux the child also gets a parent-death signal, so it is terminated
 // even if tuify is killed without running Stop.
