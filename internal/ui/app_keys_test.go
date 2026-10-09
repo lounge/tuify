@@ -262,13 +262,70 @@ func TestUpdate_EnterOnHomeOpensSelectedScreen(t *testing.T) {
 	}
 }
 
-func TestUpdate_EnterIgnoredInMiniMode(t *testing.T) {
-	m := newIntentTestModel()
-	m.miniMode = true
+// listHiddenModes are the states in which the current view's list is not
+// on screen but keys still reach the navigation tier (help and the device
+// overlay take their keys earlier).
+var listHiddenModes = map[string]func(*Model){
+	"mini mode":  func(m *Model) { m.miniMode = true },
+	"visualizer": func(m *Model) { m.visualizer.active = true },
+}
 
-	m, cmd := pressKeys(t, m, tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil || len(m.viewStack) != 1 {
-		t.Error("enter in mini mode must not open a screen")
+// Enter, including vim's "l", must not act on a selection the user can't
+// see.
+func TestUpdate_EnterIgnoredWhileListHidden(t *testing.T) {
+	for name, hide := range listHiddenModes {
+		t.Run(name, func(t *testing.T) {
+			for _, key := range []tea.KeyMsg{{Type: tea.KeyEnter}, runeKey("l")} {
+				m := newIntentTestModel()
+				m.vimMode = true
+				hide(&m)
+
+				m, cmd := pressKeys(t, m, key)
+				if cmd != nil || len(m.viewStack) != 1 {
+					t.Errorf("%s on a hidden list must not open a screen", key)
+				}
+			}
+		})
+	}
+}
+
+// "/" must not open a filter or the search input while the list is
+// hidden: the prompt isn't drawn in those modes, so the input would
+// swallow every key into an invisible query until Esc.
+func TestUpdate_SlashIgnoredWhileListHidden(t *testing.T) {
+	for name, hide := range listHiddenModes {
+		t.Run(name+"/local filter", func(t *testing.T) {
+			m := newIntentTestModel()
+			pv := newPlaylistView(m.rootCtx, m.client, 80, 20, false)
+			m.viewStack = append(m.viewStack, pv)
+			hide(&m)
+
+			m, _ = pressKeys(t, m, runeKey("/"))
+			if pv.searching {
+				t.Fatal("/ opened the local filter on a hidden list")
+			}
+			// "n" must still reach the next-track shortcut, not a query.
+			_, cmd := pressKeys(t, m, runeKey("n"))
+			if cmd == nil || pv.searchQuery != "" {
+				t.Errorf("n after /: cmd=%v query=%q, want the playback cmd and no query", cmd != nil, pv.searchQuery)
+			}
+		})
+		t.Run(name+"/search input", func(t *testing.T) {
+			m := newIntentTestModel()
+			sv := newSearchView(m.rootCtx, m.client, 80, 20, false)
+			sv.closeSearch() // the view opens with its input active
+			m.viewStack = append(m.viewStack, sv)
+			hide(&m)
+
+			m, _ = pressKeys(t, m, runeKey("/"))
+			if sv.searching {
+				t.Fatal("/ opened the search input on a hidden list")
+			}
+			_, cmd := pressKeys(t, m, runeKey("n"))
+			if cmd == nil || sv.searchQuery != "" {
+				t.Errorf("n after /: cmd=%v query=%q, want the playback cmd and no query", cmd != nil, sv.searchQuery)
+			}
+		})
 	}
 }
 

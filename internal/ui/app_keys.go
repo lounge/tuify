@@ -217,12 +217,15 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m, cmd := m.handleBack()
 		return m.(Model), cmd, true
 	case "enter":
-		if m.miniMode {
-			return m, nil, true
-		}
 		m, cmd := m.handleEnter()
 		return m.(Model), cmd, true
 	case "/":
+		// With the list hidden there is nothing to filter and the prompt
+		// isn't drawn; the input would swallow every key into an
+		// invisible query until Esc.
+		if m.listHidden() {
+			return m, nil, true
+		}
 		if is, ok := m.currentView().(inputSearcher); ok {
 			is.openSearchInput()
 			return m, nil, true
