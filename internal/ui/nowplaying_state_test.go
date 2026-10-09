@@ -44,6 +44,11 @@ func withShuffle(s *spotify.PlayerState, on bool) *spotify.PlayerState {
 	return s
 }
 
+func withContext(s *spotify.PlayerState, contextURI string) *spotify.PlayerState {
+	s.ContextURI = contextURI
+	return s
+}
+
 // runResume executes the Cmd returned by handlePlayerState and reports the
 // episodeResumeMsg it produced, if any.
 func runResume(t *testing.T, cmd tea.Cmd) *episodeResumeMsg {
@@ -243,6 +248,23 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 			steps: []npStep{
 				{msg: playerStateMsg{state: withDevice(pstate(trackX, true, 0), "Phone")}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					wantOverride(t, np, true)
+				}},
+			},
+		},
+		{
+			name: "context follows the state and clears for a contextless item",
+			steps: []npStep{
+				{msg: playerStateMsg{state: withContext(pstate(trackX, true, 0), "spotify:playlist:p")}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
+					if np.contextURI != "spotify:playlist:p" {
+						t.Errorf("contextURI = %q, want the playlist", np.contextURI)
+					}
+				}},
+				// A queue from search plays with no context. Keeping the
+				// playlist would re-establish playback inside it.
+				{msg: playerStateMsg{state: pstate(trackY, true, 0)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
+					if np.contextURI != "" {
+						t.Errorf("contextURI = %q after a contextless item, want empty", np.contextURI)
+					}
 				}},
 			},
 		},

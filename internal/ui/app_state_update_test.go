@@ -223,3 +223,44 @@ func TestHandleStateUpdate_SyncPagesOnlyInPlayingContext(t *testing.T) {
 		})
 	}
 }
+
+// After a track from the playlist, an item playing with no context (a queue
+// from search) must not inherit the playlist as its context, or the list
+// would page to its end for an item that isn't playing from it.
+func TestHandleStateUpdate_ContextlessItemDoesNotPagePreviousContext(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var loads atomic.Int32
+		load := func(context.Context, int) ([]list.Item, int, bool, error) {
+			loads.Add(1)
+			return nil, 0, false, nil
+		}
+		m := newStateTestModel(t, nil)
+		tv := &trackView{lazyList: newLazyList(m.rootCtx, load, 80, 20, false), playlistID: "pl", playlistName: "PL"}
+		m.viewStack = append(m.viewStack, tv)
+		items := make([]list.Item, 20)
+		for i := range items {
+			items[i] = trackItem{uri: fmt.Sprintf("spotify:track:%c", 'a'+i), name: string(rune('A' + i))}
+		}
+		updated, _ := m.Update(pageLoadedMsg{listID: tv.id, items: items, fetched: len(items), hasMore: true})
+		m = updated.(Model)
+
+		st := pstate("spotify:track:b", true, 0)
+		st.ContextURI = tv.contextURI()
+		updated, cmd := m.Update(playerStateMsg{seq: 1, state: st})
+		m = updated.(Model)
+		collectMsgs(cmd)
+		if got := loads.Load(); got != 0 {
+			t.Fatalf("setup: %d pages fetched for an already loaded track", got)
+		}
+
+		_, cmd = m.Update(playerStateMsg{seq: 2, state: pstate("spotify:track:zzz", true, 0)})
+		collectMsgs(cmd)
+
+		if got := loads.Load(); got != 0 {
+			t.Errorf("pages fetched = %d, want 0: the contextless item paged the playlist", got)
+		}
+		if tv.syncURI != "" {
+			t.Errorf("syncURI = %q, want none queued", tv.syncURI)
+		}
+	})
+}

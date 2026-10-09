@@ -224,9 +224,11 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	m.track = msg.state.TrackName
 	m.artist = msg.state.ArtistName
 	m.trackURI = msg.state.TrackURI
-	if msg.state.ContextURI != "" {
-		m.contextURI = msg.state.ContextURI
-	}
+	// Taken as reported, empty included: an item playing without a
+	// context (a queue from search) must not keep the previous one, or
+	// withDevice would re-establish playback inside it and syncTo would
+	// page a list for an item that isn't playing from it.
+	m.contextURI = msg.state.ContextURI
 	m.imageURL = msg.state.ImageURL
 	m.durationMs = msg.state.DurationMs
 
