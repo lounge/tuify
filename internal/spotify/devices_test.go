@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/lounge/tuify/internal/termsafe"
 )
 
 type apiDevice struct {
@@ -51,6 +53,34 @@ func TestGetDevices_MapsFields(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("GetDevices:\n got %+v\nwant %+v", got, want)
+	}
+}
+
+// Device names and types come from Spotify and are rendered straight into
+// the terminal, so every string field GetDevices maps must have been
+// through termsafe.Clean. An OSC 52 sequence in a device name would
+// otherwise write the clipboard when the device list is drawn.
+func TestGetDevices_CleansText(t *testing.T) {
+	t.Parallel()
+
+	const evil = "\x1b]52;c;evil\x07name"
+	want := termsafe.Clean(evil)
+	if want == evil || strings.ContainsAny(want, "\x1b\x07") {
+		t.Fatalf("termsafe.Clean(%q) = %q; the probe string is not doing its job", evil, want)
+	}
+
+	c := newDevicesClient(t, "", apiDevice{ID: "a", Name: evil, Type: evil, Active: true, Volume: 70})
+	got, err := c.GetDevices(t.Context())
+	if err != nil {
+		t.Fatalf("GetDevices: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d devices, want 1", len(got))
+	}
+	for name, field := range map[string]string{"Name": got[0].Name, "Type": got[0].Type} {
+		if field != want {
+			t.Errorf("Device.%s = %q, want cleaned %q", name, field, want)
+		}
 	}
 }
 

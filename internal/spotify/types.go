@@ -208,10 +208,24 @@ func convertArtists(raw []rawArtist) []Artist {
 			ID:     a.ID,
 			URI:    a.URI,
 			Name:   termsafe.Clean(a.Name),
-			Genres: a.Genres,
+			Genres: cleanAll(a.Genres),
 		})
 	}
 	return artists
+}
+
+// cleanAll returns a copy of ss with every element passed through
+// termsafe.Clean; nil stays nil so callers can tell "no genres" apart from
+// an empty list.
+func cleanAll(ss []string) []string {
+	if ss == nil {
+		return nil
+	}
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = termsafe.Clean(s)
+	}
+	return out
 }
 
 func convertShows(raw []rawShow) []Show {

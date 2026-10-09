@@ -19,7 +19,7 @@ func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 		out = append(out, Device{
 			ID:     string(d.ID),
 			Name:   termsafe.Clean(d.Name),
-			Type:   d.Type,
+			Type:   termsafe.Clean(d.Type),
 			Active: d.Active,
 			Volume: int(d.Volume),
 		})

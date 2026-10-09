@@ -4,8 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/lounge/tuify/internal/termsafe"
 )
 
 func TestSearchTracks(t *testing.T) {
@@ -180,5 +184,82 @@ func TestSearchTracks_Pagination(t *testing.T) {
 	}
 	if !more {
 		t.Error("expected more=true when total > offset+items")
+	}
+}
+
+// Search results are rendered straight into the terminal, so every string
+// field each converter maps (names, artists, albums, release dates,
+// genres) must have been through termsafe.Clean. One probe string carrying
+// an OSC 52 clipboard write goes through every field of every search type.
+func TestSearch_CleansText(t *testing.T) {
+	t.Parallel()
+
+	const evil = "\x1b]52;c;evil\x07name"
+	clean := termsafe.Clean(evil)
+	if clean == evil || strings.ContainsAny(clean, "\x1b\x07") {
+		t.Fatalf("termsafe.Clean(%q) = %q; the probe string is not doing its job", evil, clean)
+	}
+
+	tests := []struct {
+		name   string
+		key    string
+		item   map[string]any
+		search func(*Client) (any, error)
+		want   any
+	}{
+		{
+			name: "tracks",
+			key:  "tracks",
+			item: map[string]any{"id": "t1", "uri": "spotify:track:t1", "name": evil, "duration_ms": 1000,
+				"artists": []map[string]any{{"name": evil}}, "album": map[string]any{"name": evil}},
+			search: func(c *Client) (any, error) { v, _, err := c.SearchTracks(t.Context(), "q", 0, 1); return v, err },
+			want:   []Track{{ID: "t1", URI: "spotify:track:t1", Name: clean, Artist: clean, Album: clean, Duration: time.Second}},
+		},
+		{
+			name: "albums",
+			key:  "albums",
+			item: map[string]any{"id": "a1", "uri": "spotify:album:a1", "name": evil, "release_date": evil,
+				"total_tracks": 2, "artists": []map[string]any{{"name": evil}}},
+			search: func(c *Client) (any, error) { v, _, err := c.SearchAlbums(t.Context(), "q", 0, 1); return v, err },
+			want:   []Album{{ID: "a1", URI: "spotify:album:a1", Name: clean, Artist: clean, ReleaseDate: clean, TrackCount: 2}},
+		},
+		{
+			name:   "artists",
+			key:    "artists",
+			item:   map[string]any{"id": "ar1", "uri": "spotify:artist:ar1", "name": evil, "genres": []string{evil, "rock"}},
+			search: func(c *Client) (any, error) { v, _, err := c.SearchArtists(t.Context(), "q", 0, 1); return v, err },
+			want:   []Artist{{ID: "ar1", URI: "spotify:artist:ar1", Name: clean, Genres: []string{clean, "rock"}}},
+		},
+		{
+			name:   "episodes",
+			key:    "episodes",
+			item:   map[string]any{"id": "e1", "uri": "spotify:episode:e1", "name": evil, "release_date": evil, "duration_ms": 1000},
+			search: func(c *Client) (any, error) { v, _, err := c.SearchEpisodes(t.Context(), "q", 0, 1); return v, err },
+			want:   []Episode{{ID: "e1", URI: "spotify:episode:e1", Name: clean, ReleaseDate: clean, Duration: time.Second}},
+		},
+		{
+			name:   "shows",
+			key:    "shows",
+			item:   map[string]any{"id": "s1", "uri": "spotify:show:s1", "name": evil, "total_episodes": 3},
+			search: func(c *Client) (any, error) { v, _, err := c.SearchShows(t.Context(), "q", 0, 1); return v, err },
+			want:   []Show{{ID: "s1", URI: "spotify:show:s1", Name: clean, TotalEpisodes: 3}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			response := map[string]any{tc.key: map[string]any{"offset": 0, "total": 1, "items": []map[string]any{tc.item}}}
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				json.NewEncoder(w).Encode(response)
+			})
+			got, err := tc.search(c)
+			if err != nil {
+				t.Fatalf("search: %v", err)
+			}
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("search results:\n got %+v\nwant %+v", got, tc.want)
+			}
+		})
 	}
 }
