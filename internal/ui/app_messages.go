@@ -12,10 +12,23 @@ type seekFireMsg struct {
 
 type clipboardResultMsg struct{ err error }
 
+// playbackOp names the command a playbackResultMsg answers. The commands
+// that flip now-playing state ahead of the reply (play/pause, shuffle)
+// get a value of their own so a failure reverts that flip and no other:
+// a failed Next must not undo the pause the user just made.
+type playbackOp uint8
+
+const (
+	opPlayback  playbackOp = iota // play, next, previous, stop: nothing flipped ahead of the reply
+	opSeek                        // clears seekPending; lighter post-action polling
+	opPlayPause                   // reverts playing on failure
+	opShuffle                     // reverts shuffling on failure
+)
+
 // playbackResultMsg is used for all device-bound commands.
 type playbackResultMsg struct {
-	err  error
-	seek bool // true for seek results (uses lighter post-action polling)
+	err error
+	op  playbackOp
 }
 
 // librespotInactiveMsg is sent (via p.Send) when librespot reports that the

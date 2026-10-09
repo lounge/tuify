@@ -28,28 +28,37 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) {
-	if msg.seek {
+	seek := msg.op == opSeek
+	if seek {
 		m.nowPlaying.seekPending = false
 	}
 	if msg.err != nil {
 		log.Printf("[playback] command failed: %v", msg.err)
-		if m.nowPlaying.playPausePending {
-			m.nowPlaying.playPausePending = false
-			m.nowPlaying.playing = !m.nowPlaying.playing
-		}
-		if m.nowPlaying.shufflePending {
-			m.nowPlaying.shufflePending = false
-			m.nowPlaying.shuffling = !m.nowPlaying.shuffling
+		// Revert only the optimistic flip made for this command. A flip
+		// pending for another command (a pause that succeeded while this
+		// Next failed) stays until its own reply or the next poll settles it.
+		switch msg.op {
+		case opPlayPause:
+			if m.nowPlaying.playPausePending {
+				m.nowPlaying.playPausePending = false
+				m.nowPlaying.playing = !m.nowPlaying.playing
+			}
+		case opShuffle:
+			if m.nowPlaying.shufflePending {
+				m.nowPlaying.shufflePending = false
+				m.nowPlaying.shuffling = !m.nowPlaying.shuffling
+			}
+		case opPlayback, opSeek:
 		}
 		// Don't show transient network errors in the UI — they recover on their own.
 		if errors.Is(msg.err, context.DeadlineExceeded) {
-			if msg.seek {
+			if seek {
 				return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
 			}
 			return m, nil
 		}
 		errCmd := m.nowPlaying.setError(userMessage(msg.err))
-		if msg.seek {
+		if seek {
 			return m, tea.Batch(
 				errCmd,
 				tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} }),
@@ -57,7 +66,7 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 		}
 		return m, errCmd
 	}
-	if msg.seek {
+	if seek {
 		return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })
 	}
 	// Staggered polls to catch the update once the API reflects the change.
@@ -90,7 +99,7 @@ func (m Model) handleSeekFire(msg seekFireMsg) (tea.Model, tea.Cmd) {
 func (m Model) seekTo(posMs int) tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Seek(ctx, posMs, id)
-	}, true)
+	}, opSeek)
 }
 
 // handleMouse routes a mouse event. Scroll wheel moves the current list's

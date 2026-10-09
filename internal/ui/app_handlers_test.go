@@ -40,6 +40,45 @@ func TestHandleSeekFire_CurrentSequenceFires(t *testing.T) {
 	}
 }
 
+// handlePlaybackResult reverts an optimistic flip only when the failed
+// command is the one that made it. Space (pause, pending) followed by a
+// failing Next must leave the pause in place: it succeeded, and flipping
+// it back would show "playing" until the next poll corrected it.
+func TestHandlePlaybackResult_FailureRevertsOnlyItsOwnFlip(t *testing.T) {
+	tests := []struct {
+		name               string
+		op                 playbackOp
+		wantPlaying        bool
+		wantPlayPending    bool
+		wantShuffling      bool
+		wantShufflePending bool
+	}{
+		{"next fails", opPlayback, false, true, true, true},
+		{"seek fails", opSeek, false, true, true, true},
+		{"pause fails", opPlayPause, true, false, true, true},
+		{"shuffle fails", opShuffle, false, true, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := newTestModelWithClient("")
+			// The user paused and turned shuffle on; neither reply is in yet.
+			m.nowPlaying.playing, m.nowPlaying.playPausePending = false, true
+			m.nowPlaying.shuffling, m.nowPlaying.shufflePending = true, true
+
+			updated, _ := m.handlePlaybackResult(playbackResultMsg{op: tt.op, err: errTest})
+			np := updated.(Model).nowPlaying
+			if np.playing != tt.wantPlaying || np.playPausePending != tt.wantPlayPending {
+				t.Errorf("playing=%v playPausePending=%v, want %v/%v",
+					np.playing, np.playPausePending, tt.wantPlaying, tt.wantPlayPending)
+			}
+			if np.shuffling != tt.wantShuffling || np.shufflePending != tt.wantShufflePending {
+				t.Errorf("shuffling=%v shufflePending=%v, want %v/%v",
+					np.shuffling, np.shufflePending, tt.wantShuffling, tt.wantShufflePending)
+			}
+		})
+	}
+}
+
 // handleResize: each view in the stack gets a height budget equal to the
 // terminal height minus the now-playing bar, and minus the breadcrumb row
 // ONLY when the view declares a non-empty breadcrumb. A height miscalculation

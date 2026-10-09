@@ -22,7 +22,7 @@ func (m Model) playQueue(uris []string) tea.Cmd {
 		}
 		restoreShuffle(ctx, c, id, wasShuffling)
 		return nil
-	}, false)
+	}, opPlayback)
 }
 
 func (m Model) playItem(itemURI, contextURI string) tea.Cmd {
@@ -33,7 +33,7 @@ func (m Model) playItem(itemURI, contextURI string) tea.Cmd {
 		}
 		restoreShuffle(ctx, c, id, wasShuffling)
 		return nil
-	}, false)
+	}, opPlayback)
 }
 
 // restoreShuffle re-applies the user's shuffle state after a manual track
@@ -57,31 +57,31 @@ func (m Model) togglePlayPause(wasPlaying bool) tea.Cmd {
 			return c.Pause(ctx, id)
 		}
 		return c.Resume(ctx, id)
-	}, false)
+	}, opPlayPause)
 }
 
 func (m Model) nextTrack() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Next(ctx, id)
-	}, false)
+	}, opPlayback)
 }
 
 func (m Model) previousTrack() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Previous(ctx, id)
-	}, false)
+	}, opPlayback)
 }
 
 func (m Model) toggleShuffle(newState bool) tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Shuffle(ctx, newState, id)
-	}, false)
+	}, opShuffle)
 }
 
 func (m Model) stopPlayback() tea.Cmd {
 	return m.withDevice(func(ctx context.Context, c *spotify.Client, id string) error {
 		return c.Stop(ctx, id)
-	}, false)
+	}, opPlayback)
 }
 
 func (m *Model) seekRelative(deltaMs int) tea.Cmd {
@@ -115,8 +115,9 @@ func (m Model) transferDevice(dev spotify.Device) tea.Cmd {
 // withDevice wraps a Spotify API call with device resolution. If the user has
 // manually switched devices, it targets the active one; otherwise it prefers
 // the configured device and re-establishes playback if the preferred device
-// is present but inactive (e.g. librespot idle after a pause).
-func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, seek bool) tea.Cmd {
+// is present but inactive (e.g. librespot idle after a pause). op tags the
+// result so handlePlaybackResult knows which command it answers.
+func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, deviceID string) error, op playbackOp) tea.Cmd {
 	client := m.client
 	parent := m.rootCtx
 	trackURI := m.nowPlaying.trackURI
@@ -130,17 +131,17 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 			log.Printf("[withDevice] DeviceOverridden=true, finding active device")
 			deviceID, _, _, err := client.FindDevice(ctx, true)
 			if err != nil {
-				return playbackResultMsg{err: err, seek: seek}
+				return playbackResultMsg{err: err, op: op}
 			}
 			log.Printf("[withDevice] targeting overridden device: %s", deviceID)
-			return playbackResultMsg{err: fn(ctx, client, deviceID), seek: seek}
+			return playbackResultMsg{err: fn(ctx, client, deviceID), op: op}
 		}
 
 		findCtx, findCancel := context.WithTimeout(parent, 10*time.Second)
 		deviceID, active, preferred, err := client.FindDevice(findCtx, false)
 		findCancel()
 		if err != nil {
-			return playbackResultMsg{err: err, seek: seek}
+			return playbackResultMsg{err: err, op: op}
 		}
 		log.Printf("[withDevice] device=%s active=%v preferred=%v overridden=%v", deviceID, active, preferred, client.DeviceOverridden.Load())
 		// Re-establish playback only when the preferred device was found but is
@@ -165,6 +166,6 @@ func (m Model) withDevice(fn func(ctx context.Context, client *spotify.Client, d
 
 		fnCtx, fnCancel := context.WithTimeout(parent, 10*time.Second)
 		defer fnCancel()
-		return playbackResultMsg{err: fn(fnCtx, client, deviceID), seek: seek}
+		return playbackResultMsg{err: fn(fnCtx, client, deviceID), op: op}
 	}
 }
