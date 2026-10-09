@@ -155,6 +155,17 @@ func (l *lazyList) onError(err error) {
 		desc:    "press Enter to retry",
 		isError: true,
 	})
+	l.refreshList()
+}
+
+// refreshList redraws the inner list from l.items, through the filter
+// while one is open: a status row added mid-search must join the filtered
+// view, not replace it with the full list under the still-shown query.
+func (l *lazyList) refreshList() {
+	if l.searching {
+		l.applyFilter()
+		return
+	}
 	l.list.SetItems(l.items)
 }
 
@@ -199,7 +210,7 @@ func (l *lazyList) prepareRetry() {
 	l.loading = true
 	l.items = removeStatusItems(l.items)
 	l.items = append(l.items, loadingStatusItem)
-	l.list.SetItems(l.items)
+	l.refreshList()
 }
 
 // updateList forwards a message to the inner list and triggers a fetch if
@@ -372,8 +383,14 @@ func (l *lazyList) applyFilter() {
 	} else {
 		query := strings.ToLower(l.searchQuery)
 		var filtered []list.Item
+		var errRow list.Item
 		for _, item := range l.items {
-			if _, ok := item.(statusItem); ok {
+			if si, ok := item.(statusItem); ok {
+				// The failed-page row stays visible under the filter:
+				// it is how the user sees the error and retries.
+				if si.isError {
+					errRow = item
+				}
 				continue
 			}
 			di, ok := item.(list.DefaultItem)
@@ -387,6 +404,10 @@ func (l *lazyList) applyFilter() {
 		}
 		pending := l.hasMore || l.loading
 		switch {
+		case errRow != nil:
+			displayed = make([]list.Item, 0, len(filtered)+1)
+			displayed = append(displayed, filtered...)
+			displayed = append(displayed, errRow)
 		case len(filtered) == 0 && pending:
 			displayed = []list.Item{statusItem{text: "Searching…", desc: "loading more tracks", spinning: true}}
 		case len(filtered) == 0:

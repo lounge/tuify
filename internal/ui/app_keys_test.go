@@ -105,6 +105,32 @@ func TestHandleSearchKey_Enter_IgnoresStatusItem(t *testing.T) {
 	}
 }
 
+// Enter on the error row is the retry. The search stays open so the filter
+// is still applied when the reloaded page arrives; before, the row was
+// swallowed with the other status rows and retrying needed Esc first.
+func TestHandleSearchKey_Enter_OnErrorRowRetriesWithoutClosing(t *testing.T) {
+	items := []list.Item{statusItem{text: "Failed to load", isError: true}}
+	sc, closed, played := newSearchCtx(items, 0)
+	retried := false
+	sc.retry = func() tea.Cmd {
+		retried = true
+		return nil
+	}
+
+	if _, handled := pressEnter(t, sc); !handled {
+		t.Fatal("Enter should be handled")
+	}
+	if !retried {
+		t.Error("Enter on the error row did not retry")
+	}
+	if *closed {
+		t.Error("retry closed the search; the filter must survive the reload")
+	}
+	if *played != nil {
+		t.Error("play callback must not fire for the error row")
+	}
+}
+
 // Overlay priority: while showHelp is true, every key is swallowed except
 // close ('h'/'?'/'esc') and quit ('ctrl+c'/'q'). This documents the "help
 // blocks all input" contract that the rest of the dispatcher relies on.
@@ -431,6 +457,40 @@ func TestPlaylistAndPodcastSearch_KeepsFetchingWhileFiltering(t *testing.T) {
 				t.Error("a page loaded during an active filter with more pages left must fetch the next page")
 			}
 		})
+	}
+}
+
+// Through the shell: with a playlist filter open, Enter on the error row of
+// a failed page reloads it and keeps the filter and its query.
+func TestUpdate_EnterOnErrorRowWhileFilteringRetries(t *testing.T) {
+	m := newIntentTestModel()
+	tv := newTrackView(m.rootCtx, m.client, "pl", "PL", 80, 20, false)
+	m.viewStack = append(m.viewStack, tv)
+	tv.Update(pageLoadedMsg{listID: tv.id, fetched: 2, hasMore: true, items: []list.Item{
+		trackItem{uri: "spotify:track:a", name: "Hello"},
+		trackItem{uri: "spotify:track:b", name: "Other"},
+	}})
+	for _, key := range []string{"/", "h", "e", "l"} {
+		updated, _ := m.Update(keyMsg(key))
+		m = updated.(Model)
+	}
+	updated, _ := m.Update(pageLoadedMsg{listID: tv.id, err: errTest})
+	m = updated.(Model)
+	tv.list.Select(1) // the error row under the match
+	if si, ok := tv.list.SelectedItem().(statusItem); !ok || !si.isError {
+		t.Fatalf("setup: selected %+v, want the error row", tv.list.SelectedItem())
+	}
+
+	_, cmd := m.Update(keyMsg("enter"))
+
+	if cmd == nil || !tv.loading {
+		t.Errorf("Enter on the error row did not reload: cmd=%v loading=%v", cmd != nil, tv.loading)
+	}
+	if !tv.searching || tv.searchQuery != "hel" {
+		t.Errorf("filter not kept: searching=%v query=%q", tv.searching, tv.searchQuery)
+	}
+	if rows := tv.list.Items(); len(rows) != 2 {
+		t.Errorf("%d rows shown while retrying, want the match and the loading row", len(rows))
 	}
 }
 

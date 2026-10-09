@@ -97,6 +97,10 @@ func (m Model) handleSearchInput(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 				}
 				return nil
 			},
+			retry: func() tea.Cmd {
+				cmd, _ := sl.retryOnError()
+				return cmd
+			},
 			onChange: func() tea.Cmd {
 				sl.applyFilter()
 				return nil
@@ -257,7 +261,10 @@ func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
 		if selected == nil {
 			return nil, true
 		}
-		if _, ok := selected.(statusItem); ok {
+		if si, ok := selected.(statusItem); ok {
+			if si.isError {
+				return sc.retry(), true
+			}
 			return nil, true
 		}
 		sc.close()

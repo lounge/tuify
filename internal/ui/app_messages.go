@@ -57,5 +57,6 @@ type searchCtx struct {
 	list     *list.Model
 	close    func()
 	play     func(list.Item) tea.Cmd
+	retry    func() tea.Cmd // reload after a failed fetch; Enter on the error row
 	onChange func() tea.Cmd
 }

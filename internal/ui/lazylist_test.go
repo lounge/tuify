@@ -168,6 +168,55 @@ func TestLazyList_ApplyFilter_EmptyQuery(t *testing.T) {
 	}
 }
 
+// A page that fails while a filter is open must not replace the filtered
+// view with the full list under the still-shown query: the error row joins
+// the matches so the user sees the failure and retries from there, and the
+// retry's loading row does the same until the page arrives.
+func TestLazyList_PageErrorWhileFiltering_KeepsFilterThroughRetry(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = true
+	ll.items = []list.Item{
+		trackItem{name: "Hello World", uri: "u1"},
+		trackItem{name: "Goodbye Moon", uri: "u2"},
+	}
+	ll.list.SetItems(ll.items)
+	if !ll.openSearch() {
+		t.Fatal("setup: opening the filter with pages left must ask for a fetch")
+	}
+	ll.searchQuery = "hello"
+	ll.applyFilter()
+
+	ll.onPage(pageLoadedMsg{listID: ll.id, err: errTest})
+
+	displayed := ll.list.Items()
+	if len(displayed) != 2 {
+		t.Fatalf("after the error: %d rows, want the match and the error row", len(displayed))
+	}
+	if u, ok := displayed[0].(uriItem); !ok || u.URI() != "u1" {
+		t.Errorf("row 0 = %+v, want the filtered match", displayed[0])
+	}
+	if si, ok := displayed[1].(statusItem); !ok || !si.isError {
+		t.Errorf("row 1 = %+v, want the error row", displayed[1])
+	}
+
+	ll.list.Select(1)
+	cmd, handled := ll.retryOnError()
+	if !handled || cmd == nil {
+		t.Fatalf("retry from the error row: handled=%v cmd=%v, want a fetch", handled, cmd != nil)
+	}
+	if !ll.searching || ll.searchQuery != "hello" {
+		t.Errorf("retry closed the filter: searching=%v query=%q", ll.searching, ll.searchQuery)
+	}
+	displayed = ll.list.Items()
+	if len(displayed) != 2 {
+		t.Fatalf("while retrying: %d rows, want the match and the loading row", len(displayed))
+	}
+	if si, ok := displayed[1].(statusItem); !ok || si.text != "Loading more…" {
+		t.Errorf("row 1 = %+v, want the loading row", displayed[1])
+	}
+}
+
 func TestLazyList_SelectByURI_Found(t *testing.T) {
 	ll := newTestLazyList()
 	ll.loading = false

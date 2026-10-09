@@ -97,6 +97,7 @@ func (v *searchView) activeSearchInput() (searchCtx, bool) {
 			}
 			return v.playSelected(item)
 		},
+		retry: v.retry,
 		onChange: func() tea.Cmd {
 			v.debounceSeq++
 			_, term := parseSearch(v.searchQuery)
