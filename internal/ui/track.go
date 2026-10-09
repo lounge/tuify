@@ -54,7 +54,7 @@ func (v *trackView) onEnter() tea.Cmd {
 	if ti, ok := v.list.SelectedItem().(trackItem); ok {
 		return emitIntent(playItemIntent{
 			itemURI:    ti.uri,
-			contextURI: "spotify:playlist:" + v.playlistID,
+			contextURI: v.contextURI(),
 		})
 	}
 	cmd, _ := v.retryOnError()
@@ -65,9 +65,13 @@ func (v *trackView) breadcrumb() string {
 	return fmt.Sprintf("Home > Playlists > %s", v.playlistName)
 }
 
-func (v *trackView) syncTo(uri string) tea.Cmd {
-	if v.selectByURI(uri) {
-		return v.fetchMore()
-	}
-	return nil
+// contextURI is the playback context the tracks in this view play from.
+func (v *trackView) contextURI() string {
+	return "spotify:playlist:" + v.playlistID
+}
+
+// syncTo implements syncableView: pages for the playing track only when
+// it plays from this playlist.
+func (v *trackView) syncTo(uri, contextURI string) tea.Cmd {
+	return v.syncSelection(uri, contextURI == v.contextURI())
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
-	zone "github.com/lrstanley/bubblezone"
 )
 
 // listFetchTimeout bounds one list or search fetch Cmd. The auth HTTP client
@@ -39,9 +38,11 @@ type lazyList struct {
 	searchQuery string
 	syncURI     string
 
-	// id tags every page this list requests. The shell routes a
-	// pageLoadedMsg only to the list with the same id, so a late page from
-	// a popped screen can't land in a newer screen of the same type.
+	// id tags every page this list requests and every row it renders. The
+	// shell routes a pageLoadedMsg only to the list with the same id, so a
+	// late page from a popped screen can't land in a newer screen of the
+	// same type, and zoneListDelegate marks rows with it so a click
+	// resolves to this list's rows (see rowZoneID).
 	id   uint64
 	ctx  context.Context
 	load pageLoader
@@ -64,7 +65,8 @@ var fetchIDs atomic.Uint64
 func newFetchID() uint64 { return fetchIDs.Add(1) }
 
 func newLazyList(ctx context.Context, load pageLoader, width, height int, vimMode bool) lazyList {
-	l := newList(width, height, vimMode)
+	id := newFetchID()
+	l := newList(id, width, height, vimMode)
 	initial := []list.Item{loadingStatusItem}
 	l.SetItems(initial)
 	return lazyList{
@@ -72,7 +74,7 @@ func newLazyList(ctx context.Context, load pageLoader, width, height int, vimMod
 		items:   initial,
 		loading: true,
 		hasMore: true,
-		id:      newFetchID(),
+		id:      id,
 		ctx:     ctx,
 		load:    load,
 	}
@@ -235,21 +237,11 @@ func (l *lazyList) scrollUp() { l.list.CursorUp() }
 // scrollDown moves the cursor one item down.
 func (l *lazyList) scrollDown() { l.list.CursorDown() }
 
-// clickAt resolves a left-click against the zone-marked items on the
-// visible list. Selects the matched item and returns its URI; empty
-// return means the click missed every zoned row. Satisfies clickable.
+// clickAt resolves a left-click against the zone-marked rows of the
+// visible list. Selects the row under the pointer and returns its zone
+// id; empty return means the click missed every row. Satisfies clickable.
 func (l *lazyList) clickAt(msg tea.MouseMsg) string {
-	for i, item := range l.list.Items() {
-		u, ok := item.(uriItem)
-		if !ok || u.URI() == "" {
-			continue
-		}
-		if zone.Get(u.URI()).InBounds(msg) {
-			l.list.Select(i)
-			return u.URI()
-		}
-	}
-	return ""
+	return clickRow(&l.list, l.id, msg)
 }
 
 // SearchState reports whether the view is in filter-search mode.
@@ -319,6 +311,37 @@ func (l *lazyList) selectByURI(uri string) bool {
 		return true
 	}
 	return false
+}
+
+// selectLoadedByURI selects the loaded item matching uri and reports
+// whether there was one. It never asks for more pages, and it drops any
+// deferred selection so a sync queued for an earlier item can't land
+// later. Skipped while filtering for the same reason as selectByURI.
+func (l *lazyList) selectLoadedByURI(uri string) bool {
+	l.syncURI = ""
+	if l.searching {
+		return false
+	}
+	i, ok := l.findByURI(uri)
+	if ok {
+		l.list.Select(i)
+	}
+	return ok
+}
+
+// syncSelection moves the selection to the playing item uri. inContext
+// reports whether it plays from this list's own context; only then may
+// further pages be fetched to find it (see syncableView). Returns the
+// fetch Cmd when a page is needed, nil otherwise.
+func (l *lazyList) syncSelection(uri string, inContext bool) tea.Cmd {
+	if !inContext {
+		l.selectLoadedByURI(uri)
+		return nil
+	}
+	if l.selectByURI(uri) {
+		return l.fetchMore()
+	}
+	return nil
 }
 
 // resolveSync tries to select the pending syncURI after new items are loaded.

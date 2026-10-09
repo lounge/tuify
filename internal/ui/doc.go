@@ -47,7 +47,9 @@
 //     load data also have an Init, which the shell calls when it pushes
 //     them (lazyList provides it for the paged lists).
 //   - listProvider, searchableListProvider — for shared key handling
-//   - syncableView — for "sync selection to playing track"
+//   - syncableView — for "sync selection to playing track"; the view is
+//     told the playing context and pages for the item only when that
+//     context is its own
 //   - enterable — for Enter-key activation
 //   - scrollable, clickable — for mouse wheel / click dispatch
 //   - backable — for views that consume "go back" internally
@@ -68,19 +70,23 @@
 //
 // Every frame that shows the current view's list is wrapped in
 // bubblezone.Scan so mouse clicks can be resolved back to zone-marked items
-// (lists mark each row by Spotify URI; the home view marks each menu tab by
-// name). The list delegate (zoneListDelegate in styles.go) does the per-row
-// marking transparently. Help, visualizer, mini mode and the device overlay
-// carry no marks and skip the scan; handleMouse drops pointer events while
-// they are up so the previous list frame's zones can't be hit.
+// (lists mark each row by list id and row index, since a playlist can hold
+// the same track twice; the home view marks each menu tab by name). The
+// list delegate (zoneListDelegate in styles.go) does the per-row marking
+// transparently and clickRow resolves a click back to the row. Help,
+// visualizer, mini mode and the device overlay carry no marks and skip the
+// scan; handleMouse drops pointer events while they are up so the previous
+// list frame's zones can't be hit, and the Enter and "/" keys are ignored
+// for the same reason.
 //
 // # Lifetime
 //
 // NewModel takes a root context from bootstrap.Run that cancels on app
 // exit. It collects the ModelOptions first, then constructs
-// nowPlayingModel, visualizerModel and the home view once, passing that
-// context (and the audio source, vim mode) to their constructors. Every
-// fetching view constructor gets it too, so long-running operations
-// (polls, HTTP fetches, image/lyrics downloads) cancel cleanly at shutdown
-// rather than running to their per-op timeout.
+// nowPlayingModel and visualizerModel once, passing that context (and the
+// audio source) to their constructors; the home view fetches nothing and
+// takes only its size and the vim-mode flag. Every fetching view
+// constructor gets the context too, so long-running operations (polls,
+// HTTP fetches, image/lyrics downloads) cancel cleanly at shutdown rather
+// than running to their per-op timeout.
 package ui

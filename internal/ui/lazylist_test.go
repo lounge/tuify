@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
+	zone "github.com/lrstanley/bubblezone"
 )
 
 func newTestLazyList() lazyList {
@@ -455,6 +458,56 @@ func TestLazyList_ResolveSync_DuringSearch_Skips(t *testing.T) {
 
 	if ll.syncURI != "now-playing" {
 		t.Errorf("syncURI must remain queued for resolution after search closes, got %q", ll.syncURI)
+	}
+}
+
+// Rows are zone-marked by list id and index, not by URI, so a playlist
+// holding the same track twice has every row clickable and each click
+// lands on its own row.
+func TestLazyList_ClickAt_DuplicateTracksResolveToOwnRow(t *testing.T) {
+	ll := newTestLazyList()
+	ll.loading = false
+	ll.hasMore = false
+	ll.items = []list.Item{
+		trackItem{uri: "spotify:track:a", name: "A"},
+		trackItem{uri: "spotify:track:b", name: "B"},
+		trackItem{uri: "spotify:track:a", name: "A"},
+	}
+	ll.list.SetItems(ll.items)
+
+	ids := make([]string, len(ll.items))
+	for i := range ids {
+		ids[i] = rowZoneID(ll.id, i)
+	}
+	scanZones(t, ll.View(), ids...)
+
+	for i, id := range ids {
+		z := zone.Get(id)
+		click := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: z.StartX, Y: z.StartY}
+		if got := ll.clickAt(click); got != id {
+			t.Errorf("row %d: clickAt = %q, want %q", i, got, id)
+		}
+		if got := ll.list.Index(); got != i {
+			t.Errorf("row %d: cursor at %d after the click, want %d", i, got, i)
+		}
+	}
+}
+
+// scanZones runs frame through zone.Scan and returns once the zone manager
+// knows every id. Scan hands the bounds it finds to a worker goroutine, so
+// Get right after it can still miss them (see the Scan docs); the wait is
+// bounded only so a broken manager fails instead of hanging.
+func scanZones(t *testing.T, frame string, ids ...string) {
+	t.Helper()
+	zone.Scan(frame)
+	deadline := time.Now().Add(5 * time.Second)
+	for _, id := range ids {
+		for zone.Get(id) == nil {
+			if time.Now().After(deadline) {
+				t.Fatalf("zone %q was not registered", id)
+			}
+			time.Sleep(time.Millisecond)
+		}
 	}
 }
 

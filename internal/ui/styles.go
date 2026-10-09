@@ -3,8 +3,10 @@ package ui
 import (
 	"bytes"
 	"io"
+	"strconv"
 
 	"github.com/charmbracelet/bubbles/list"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/theme"
 	zone "github.com/lrstanley/bubblezone"
@@ -152,9 +154,11 @@ func newListDelegate() list.DefaultDelegate {
 }
 
 // zoneListDelegate wraps the default delegate so each uriItem row is
-// rendered inside a bubblezone Mark with the item's URI as the zone id.
-// The main Update loop resolves mouse clicks to item indices by checking
-// the URI-keyed zones against the click coordinates.
+// rendered inside a bubblezone Mark. The zone id is the owning list's id
+// plus the row index (rowZoneID), not the item's URI: a playlist can hold
+// the same track twice, and two rows sharing one id would leave one of
+// them unclickable and resolve the other to the wrong index. clickRow
+// walks the visible rows with the same ids to resolve a click.
 //
 // Height(), Spacing(), and Update() are promoted from the embedded
 // DefaultDelegate. If bubbles/list extends ItemDelegate in a future
@@ -162,6 +166,7 @@ func newListDelegate() list.DefaultDelegate {
 // the silent inheritance is worth keeping aware of during upgrades.
 type zoneListDelegate struct {
 	list.DefaultDelegate
+	listID uint64
 }
 
 func (d zoneListDelegate) Render(w io.Writer, m list.Model, index int, item list.Item) {
@@ -172,5 +177,31 @@ func (d zoneListDelegate) Render(w io.Writer, m list.Model, index int, item list
 	}
 	var buf bytes.Buffer
 	d.DefaultDelegate.Render(&buf, m, index, item)
-	_, _ = io.WriteString(w, zone.Mark(u.URI(), buf.String()))
+	_, _ = io.WriteString(w, zone.Mark(rowZoneID(d.listID, index), buf.String()))
+}
+
+// rowZoneID is the bubblezone id of the row at index in the list with the
+// given id. List ids come from newFetchID, so rows of different lists
+// never share an id even when they show the same item.
+func rowZoneID(listID uint64, index int) string {
+	return strconv.FormatUint(listID, 10) + ":" + strconv.Itoa(index)
+}
+
+// clickRow resolves a left-click against the zone-marked rows of l, whose
+// rows zoneListDelegate marked with listID. It selects the row under the
+// pointer and returns its zone id; empty return means the click missed
+// every row. Shared by the clickAt implementations of the list screens.
+func clickRow(l *list.Model, listID uint64, msg tea.MouseMsg) string {
+	for i, item := range l.Items() {
+		u, ok := item.(uriItem)
+		if !ok || u.URI() == "" {
+			continue
+		}
+		id := rowZoneID(listID, i)
+		if zone.Get(id).InBounds(msg) {
+			l.Select(i)
+			return id
+		}
+	}
+	return ""
 }

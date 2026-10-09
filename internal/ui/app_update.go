@@ -112,6 +112,9 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.nowPlaying.deviceName = ""
 		return m, tea.Batch(m.nowPlaying.pollState(), m.waitForLibrespotInactive())
 	case tokenSaveErrMsg:
+		// auth emits the error without logging it; this handler is the one
+		// place it is logged, next to the banner the user sees.
+		log.Printf("[auth] token save/refresh failed: %v", msg.Err)
 		return m, tea.Batch(
 			m.nowPlaying.setError("Auth: "+userMessage(msg.Err)),
 			m.waitForTokenSaveErr(),
@@ -230,10 +233,11 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.visualizer.loadImage(m.nowPlaying.imageURL)
 	}
 
-	// Sync list selection when the playing item changes
+	// Sync list selection when the playing item changes. The view pages
+	// for the item only when it plays from the view's own context.
 	if m.nowPlaying.trackURI != prevURI {
 		if sv, ok := m.currentView().(syncableView); ok {
-			if cmd := sv.syncTo(m.nowPlaying.trackURI); cmd != nil {
+			if cmd := sv.syncTo(m.nowPlaying.trackURI, m.nowPlaying.contextURI); cmd != nil {
 				cmds = append(cmds, cmd)
 			}
 		}
@@ -263,7 +267,14 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleEnter activates the current view's selection. It does nothing
+// while an overlay or mode hides the list (listHidden): the user can't
+// see what Enter would act on. Every Enter path — the key, vim's "l" and
+// a double-click — comes through here.
 func (m Model) handleEnter() (tea.Model, tea.Cmd) {
+	if m.listHidden() {
+		return m, nil
+	}
 	if e, ok := m.currentView().(enterable); ok {
 		return m, e.onEnter()
 	}

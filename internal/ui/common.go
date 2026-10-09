@@ -63,9 +63,15 @@ type inputSearcher interface {
 	activeSearchInput() (searchCtx, bool)
 }
 
-// syncableView is implemented by views that sync selection to the playing track.
+// syncableView is implemented by views that move their selection to the
+// playing item when it changes. contextURI is the context (playlist,
+// album, show) the item plays from. A view pages through unloaded items
+// to find it only when that is the view's own context; otherwise it
+// selects the item if it is already loaded and stops there. Paging a long
+// playlist to its end for an item playing from somewhere else costs a
+// request per page and never finds it.
 type syncableView interface {
-	syncTo(uri string) tea.Cmd
+	syncTo(uri, contextURI string) tea.Cmd
 }
 
 // enterable is implemented by views that handle the Enter key.
@@ -157,8 +163,11 @@ func (i statusItem) Description() string {
 }
 func (i statusItem) FilterValue() string { return "" }
 
-func newList(width, height int, vimMode bool) list.Model {
-	l := list.New(nil, zoneListDelegate{DefaultDelegate: newListDelegate()}, width, height)
+// newList builds the bubbles list every list screen renders. id is the
+// owning screen's id; zoneListDelegate marks each row with it so a click
+// resolves to that screen's rows and no other's.
+func newList(id uint64, width, height int, vimMode bool) list.Model {
+	l := list.New(nil, zoneListDelegate{DefaultDelegate: newListDelegate(), listID: id}, width, height)
 	l.SetShowTitle(false)
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)

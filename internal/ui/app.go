@@ -25,7 +25,9 @@ const wheelDebounceWindow = 40 * time.Millisecond
 // app_commands.go, and app_view.go respectively.
 
 const (
-	// now-playing: blank + status + blank + progress + blank (+ search when active)
+	// now-playing: blank + status + blank + progress + blank; the search
+	// prompt replaces the last blank while a filter is open, so the bar
+	// never grows past this.
 	nowPlayingHeight = 5
 	// breadcrumb text + margin-bottom: 2 lines
 	breadcrumbHeight = 2
@@ -61,9 +63,11 @@ type Model struct {
 	tokenRevokedCh      <-chan struct{}
 
 	// Click state for double-click detection. When a left click lands on a
-	// zoned item, we record the item URI and timestamp; a second click on
-	// the same URI within doubleClickWindow fires the enter action.
-	lastClickURI  string
+	// zoned item, we record its zone id and timestamp; a second click on
+	// the same id within doubleClickWindow fires the enter action. The id
+	// is a row (list id + index), not a URI, so two rows showing the same
+	// track don't pair up.
+	lastClickID   string
 	lastClickTime time.Time
 
 	// Wheel debounce: OS scroll acceleration emits multiple MouseMsg

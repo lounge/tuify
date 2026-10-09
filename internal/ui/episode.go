@@ -53,7 +53,7 @@ func (v *episodeView) onEnter() tea.Cmd {
 	if ei, ok := v.list.SelectedItem().(episodeItem); ok {
 		return emitIntent(playItemIntent{
 			itemURI:    ei.uri,
-			contextURI: "spotify:show:" + v.showID,
+			contextURI: v.contextURI(),
 		})
 	}
 	cmd, _ := v.retryOnError()
@@ -64,9 +64,13 @@ func (v *episodeView) breadcrumb() string {
 	return fmt.Sprintf("Home > Podcasts > %s", v.showName)
 }
 
-func (v *episodeView) syncTo(uri string) tea.Cmd {
-	if v.selectByURI(uri) {
-		return v.fetchMore()
-	}
-	return nil
+// contextURI is the playback context the episodes in this view play from.
+func (v *episodeView) contextURI() string {
+	return "spotify:show:" + v.showID
+}
+
+// syncTo implements syncableView: pages for the playing episode only when
+// it plays from this show.
+func (v *episodeView) syncTo(uri, contextURI string) tea.Cmd {
+	return v.syncSelection(uri, contextURI == v.contextURI())
 }

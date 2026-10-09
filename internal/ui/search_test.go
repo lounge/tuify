@@ -188,6 +188,64 @@ func TestSearchView_ContextURI(t *testing.T) {
 	}
 }
 
+// syncTo pages for the playing item only when it plays from the album or
+// show this view drilled into. Another context selects among the loaded
+// results and stops, as do depth-0 results, which play as a queue and have
+// no context of their own.
+func TestSearchView_SyncTo_PagesOnlyInOwnContext(t *testing.T) {
+	loaded := []list.Item{
+		trackItem{uri: "spotify:track:t1", name: "One"},
+		trackItem{uri: "spotify:track:t2", name: "Two"},
+	}
+	newAlbumTracks := func() *searchView {
+		v := newSearchView(context.Background(), nil, 80, 20, false)
+		v.prefix = prefixAlbum
+		v.depth = 1
+		v.selectedAlbum = selectedRef{id: "a1", uri: "spotify:album:a1", name: "Album"}
+		v.items = loaded
+		v.list.SetItems(v.items)
+		v.hasMore = true
+		return v
+	}
+	tests := []struct {
+		name        string
+		uri         string
+		contextURI  string
+		wantFetch   bool
+		wantIndex   int
+		wantSyncURI string
+	}{
+		{"own context, unloaded track", "spotify:track:t9", "spotify:album:a1", true, 0, "spotify:track:t9"},
+		{"other context, unloaded track", "spotify:track:t9", "spotify:playlist:p", false, 0, ""},
+		{"other context, loaded track", "spotify:track:t2", "spotify:playlist:p", false, 1, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := newAlbumTracks()
+			cmd := v.syncTo(tt.uri, tt.contextURI)
+			if (cmd != nil) != tt.wantFetch || (v.pending > 0) != tt.wantFetch {
+				t.Errorf("fetch issued = %v (pending %d), want %v", cmd != nil, v.pending, tt.wantFetch)
+			}
+			if got := v.list.Index(); got != tt.wantIndex {
+				t.Errorf("cursor = %d, want %d", got, tt.wantIndex)
+			}
+			if v.syncURI != tt.wantSyncURI {
+				t.Errorf("syncURI = %q, want %q", v.syncURI, tt.wantSyncURI)
+			}
+		})
+	}
+
+	t.Run("depth-0 results never page", func(t *testing.T) {
+		v := newSearchView(context.Background(), nil, 80, 20, false)
+		v.items = loaded
+		v.list.SetItems(v.items)
+		v.hasMore = true
+		if cmd := v.syncTo("spotify:track:t9", ""); cmd != nil || v.pending > 0 {
+			t.Errorf("track results paged for an unloaded item (pending %d)", v.pending)
+		}
+	})
+}
+
 func TestSearchView_Breadcrumb(t *testing.T) {
 	tests := []struct {
 		name string

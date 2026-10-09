@@ -9,7 +9,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
-	zone "github.com/lrstanley/bubblezone"
 )
 
 const maxQueueURIs = 50
@@ -27,13 +26,17 @@ type searchView struct {
 	query       string // committed search term (after prefix, e.g. "queen")
 	prefix      searchPrefix
 	debounceSeq int
-	epoch       uint64 // replaced on every state reset (newFetchID) to discard stale results
-	depth       int    // 0 = search results, 1 = container detail, 2 = artist→album→tracks
-	offset      int
-	hasMore     bool
-	pending     int
-	searchErr   error
-	syncURI     string
+	// id tags the rows this view renders (see zoneListDelegate). Unlike
+	// epoch it never changes, so a click resolves against the rows on
+	// screen whichever search produced them.
+	id        uint64
+	epoch     uint64 // replaced on every state reset (newFetchID) to discard stale results
+	depth     int    // 0 = search results, 1 = container detail, 2 = artist→album→tracks
+	offset    int
+	hasMore   bool
+	pending   int
+	searchErr error
+	syncURI   string
 
 	// drill-down state
 	selectedArtist selectedRef
@@ -45,13 +48,15 @@ type searchView struct {
 }
 
 func newSearchView(ctx context.Context, client *spotify.Client, width, height int, vimMode bool) *searchView {
-	l := newList(width, height, vimMode)
+	id := newFetchID()
+	l := newList(id, width, height, vimMode)
 	l.SetItems(nil)
 	return &searchView{
 		list:      l,
 		ctx:       ctx,
 		client:    client,
 		searching: true,
+		id:        id,
 		// Epochs come from the same process-wide counter as list ids, so a
 		// result for an earlier search view can never match this one.
 		epoch: newFetchID(),
@@ -222,17 +227,7 @@ func (v *searchView) scrollUp()   { v.list.CursorUp() }
 func (v *searchView) scrollDown() { v.list.CursorDown() }
 
 func (v *searchView) clickAt(msg tea.MouseMsg) string {
-	for i, item := range v.list.Items() {
-		u, ok := item.(uriItem)
-		if !ok || u.URI() == "" {
-			continue
-		}
-		if zone.Get(u.URI()).InBounds(msg) {
-			v.list.Select(i)
-			return u.URI()
-		}
-	}
-	return ""
+	return clickRow(&v.list, v.id, msg)
 }
 
 func (v *searchView) back() (tea.Cmd, bool) {
@@ -247,8 +242,16 @@ func (v *searchView) back() (tea.Cmd, bool) {
 
 func (v *searchView) searchState() (bool, string) { return v.searching, v.searchQuery }
 
-func (v *searchView) syncTo(uri string) tea.Cmd {
+// syncTo implements syncableView. Only a drilled-into album or show has a
+// context of its own to page through; track and episode results at depth
+// 0 play as a queue built from the loaded results, so the playing item is
+// found among them or not at all.
+func (v *searchView) syncTo(uri, contextURI string) tea.Cmd {
 	if !v.isPlayable() {
+		return nil
+	}
+	if own := v.contextURI(); own == "" || contextURI != own {
+		v.selectLoadedByURI(uri)
 		return nil
 	}
 	if v.selectByURI(uri) {

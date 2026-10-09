@@ -163,7 +163,7 @@ func TestHandleMouse_IgnoredWhileListHidden(t *testing.T) {
 			if cmd != nil {
 				t.Errorf("click on hidden list returned a cmd: %v", cmd)
 			}
-			if got := model.(Model).lastClickURI; got != "" {
+			if got := model.(Model).lastClickID; got != "" {
 				t.Errorf("click registered on hidden row %q", got)
 			}
 		})

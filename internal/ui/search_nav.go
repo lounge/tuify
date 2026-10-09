@@ -5,13 +5,26 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-func (v *searchView) selectByURI(uri string) bool {
+// selectLoadedByURI selects the loaded result matching uri and reports
+// whether there was one. It never pages for the item, and it drops any
+// deferred selection so a sync queued for an earlier item can't land
+// later.
+func (v *searchView) selectLoadedByURI(uri string) bool {
+	v.syncURI = ""
 	for i, item := range v.list.Items() {
 		if u, ok := item.(uriItem); ok && u.URI() == uri {
 			v.list.Select(i)
-			v.syncURI = ""
-			return false
+			return true
 		}
+	}
+	return false
+}
+
+// selectByURI selects uri, or queues it for selection as further results
+// arrive. Returns true when the caller should fetch the next page.
+func (v *searchView) selectByURI(uri string) bool {
+	if v.selectLoadedByURI(uri) {
+		return false
 	}
 	v.syncURI = uri
 	return v.pending == 0 && v.hasMore

@@ -159,13 +159,13 @@ func (m Model) handleMouseClick(msg tea.MouseMsg) (handled bool, model tea.Model
 // handleEnter if this click closes a double-click pair on the same id.
 func (m Model) registerClick(id string) (handled bool, model tea.Model, cmd tea.Cmd) {
 	now := time.Now()
-	if m.lastClickURI == id && now.Sub(m.lastClickTime) < doubleClickWindow {
-		m.lastClickURI = ""
+	if m.lastClickID == id && now.Sub(m.lastClickTime) < doubleClickWindow {
+		m.lastClickID = ""
 		m.lastClickTime = time.Time{}
 		nm, c := m.handleEnter()
 		return true, nm, c
 	}
-	m.lastClickURI = id
+	m.lastClickID = id
 	m.lastClickTime = now
 	return true, m, nil
 }
