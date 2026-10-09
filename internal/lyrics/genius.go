@@ -19,6 +19,11 @@ import (
 // ErrInstrumental is returned when Genius marks a song as instrumental.
 var ErrInstrumental = errors.New("instrumental")
 
+// maxBodyBytes caps how much of a Genius response is read. A search
+// result is a few KB and a song page a few hundred KB; anything past the
+// cap is cut off instead of being buffered into memory.
+const maxBodyBytes = 4 << 20
+
 var (
 	reRemix  = regexp.MustCompile(`(?i)\s*[-–—]\s*(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)\b.*$`)
 	reParens = regexp.MustCompile(`(?i)\s*\([^)]*?(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)[^)]*?\)`)
@@ -94,7 +99,7 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 			} `json:"hits"`
 		} `json:"response"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&result); err != nil {
 		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
 	if result.Meta.Status != 200 {
@@ -128,7 +133,31 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 	return songResult{}, nil
 }
 
+// checkSongURL rejects a song URL that does not point at genius.com (or a
+// subdomain) over https. The URL comes from Genius's search response, and
+// following it anywhere else would turn the scraper into a request proxy
+// for whatever host that response names.
+func checkSongURL(raw string) error {
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("genius fetch: song url: %w", err)
+	}
+	host := strings.ToLower(u.Hostname())
+	switch {
+	case u.Scheme != "https":
+		return fmt.Errorf("genius fetch: song url scheme %q is not https", u.Scheme)
+	case host != "genius.com" && !strings.HasSuffix(host, ".genius.com"):
+		return fmt.Errorf("genius fetch: song url host %q is not genius.com", host)
+	case u.Port() != "" || u.User != nil:
+		return fmt.Errorf("genius fetch: song url carries a port or userinfo")
+	}
+	return nil
+}
+
 func scrapeLyrics(ctx context.Context, client *http.Client, songURL string) (string, error) {
+	if err := checkSongURL(songURL); err != nil {
+		return "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, songURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("genius fetch: %w", err)
@@ -141,7 +170,7 @@ func scrapeLyrics(ctx context.Context, client *http.Client, songURL string) (str
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("genius fetch: status %d", resp.StatusCode)
 	}
-	text, err := extractLyrics(resp.Body)
+	text, err := extractLyrics(io.LimitReader(resp.Body, maxBodyBytes))
 	if err != nil {
 		return "", err
 	}

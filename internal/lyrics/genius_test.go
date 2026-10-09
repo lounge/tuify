@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/lounge/tuify/internal/testutil"
@@ -299,6 +300,147 @@ func TestSearchSong_APIError(t *testing.T) {
 	_, err := searchSong(context.Background(), client, "query", "Song", "Artist")
 	if err == nil {
 		t.Fatal("expected error for 500 status")
+	}
+}
+
+// --- checkSongURL / scrapeLyrics ---
+
+func TestCheckSongURL(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		url    string
+		wantOK bool
+	}{
+		{"https://genius.com/the-artist-my-song-lyrics", true},
+		{"https://www.genius.com/x", true},
+		{"https://GENIUS.com/x", true},
+		{"http://192.168.1.1/x", false},
+		{"https://evil.com/x", false},
+		{"https://genius.com.evil.com/x", false},
+		{"https://notgenius.com/x", false},
+		{"http://genius.com/x", false},
+		{"ftp://genius.com/x", false},
+		{"https://genius.com:8443/x", false},
+		{"https://user@genius.com/x", false},
+		{"file:///etc/passwd", false},
+		{"", false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.url, func(t *testing.T) {
+			err := checkSongURL(tc.url)
+			if (err == nil) != tc.wantOK {
+				t.Errorf("checkSongURL(%q) = %v, want ok=%v", tc.url, err, tc.wantOK)
+			}
+		})
+	}
+}
+
+// The song URL comes from Genius's own search response. Pointed anywhere
+// but genius.com it must be refused before any request is made, or the
+// scraper fetches whatever host the response names.
+func TestSearch_RejectsForeignSongURL(t *testing.T) {
+	t.Parallel()
+
+	for _, foreign := range []string{"http://192.168.1.1/x", "https://evil.com/x"} {
+		t.Run(foreign, func(t *testing.T) {
+			t.Parallel()
+
+			var fetches atomic.Int32
+			client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+				if strings.HasPrefix(r.URL.Path, "/api/search") {
+					json.NewEncoder(w).Encode(geniusSearchResponse([]map[string]any{
+						songHit("My Song", "The Artist", foreign, false),
+					}))
+					return
+				}
+				fetches.Add(1)
+				w.Write([]byte(`<div data-lyrics-container="true">should never be read</div>`))
+			})
+			defer cleanup()
+
+			text, err := Search(context.Background(), client, "My Song", "The Artist")
+			if err == nil {
+				t.Fatalf("Search followed %q and returned %q", foreign, text)
+			}
+			if !strings.Contains(err.Error(), "genius fetch") {
+				t.Errorf("err = %v, want one naming the refused fetch", err)
+			}
+			if n := fetches.Load(); n != 0 {
+				t.Errorf("%d request(s) were made to the foreign URL", n)
+			}
+		})
+	}
+}
+
+// streamUntilClosed writes prefix, then repeats filler until the client
+// has gone away (or a hard cap, so a missing read limit fails the test
+// instead of looping for ever). It returns the number of bytes accepted.
+func streamUntilClosed(w http.ResponseWriter, prefix, filler string) int64 {
+	const hardCap = 64 << 20
+	var served int64
+	if n, err := w.Write([]byte(prefix)); err != nil {
+		return int64(n)
+	}
+	served += int64(len(prefix))
+	chunk := []byte(filler)
+	for served < hardCap {
+		n, err := w.Write(chunk)
+		served += int64(n)
+		if err != nil {
+			break
+		}
+	}
+	return served
+}
+
+// A song page that never ends must be cut off at maxBodyBytes: the lyrics
+// before the cut are returned and the rest is never buffered.
+func TestScrapeLyrics_OversizeBodyIsCutOff(t *testing.T) {
+	t.Parallel()
+
+	var served atomic.Int64
+	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		served.Store(streamUntilClosed(w,
+			`<html><body><div data-lyrics-container="true">First line</div>`,
+			strings.Repeat("<p>filler</p>", 4096)))
+	})
+	defer cleanup()
+
+	text, err := scrapeLyrics(context.Background(), client, "https://genius.com/endless")
+	if err != nil {
+		t.Fatalf("scrapeLyrics: %v", err)
+	}
+	if !strings.Contains(text, "First line") {
+		t.Errorf("lyrics before the cut were lost: %q", text)
+	}
+	// The server can push a little past the cap before it notices the
+	// client stopped reading; a missing limit shows up as tens of MiB.
+	if n := served.Load(); n > 3*maxBodyBytes {
+		t.Errorf("server pushed %d bytes; the body was not cut off near %d", n, maxBodyBytes)
+	}
+}
+
+// A search response that never ends must fail at maxBodyBytes rather
+// than being decoded from an unbounded buffer.
+func TestSearchSong_OversizeBodyIsCutOff(t *testing.T) {
+	t.Parallel()
+
+	var served atomic.Int64
+	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		hit, _ := json.Marshal(songHit("Song", "Artist", "https://genius.com/song", false))
+		served.Store(streamUntilClosed(w,
+			`{"meta":{"status":200},"response":{"hits":[`,
+			strings.Repeat(string(hit)+",", 1024)))
+	})
+	defer cleanup()
+
+	_, err := searchSong(context.Background(), client, "artist song", "Song", "Artist")
+	if err == nil {
+		t.Fatal("searchSong decoded an endless response without error")
+	}
+	if n := served.Load(); n > 3*maxBodyBytes {
+		t.Errorf("server pushed %d bytes; the body was not cut off near %d", n, maxBodyBytes)
 	}
 }
 
