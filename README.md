@@ -35,7 +35,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 
 ### macOS / Linux
 
-Go 1.27 builds require macOS 13 (Ventura) or later.
+On macOS, tuify requires macOS 13 (Ventura) or later.
 
 ```bash
 brew install lounge/tap/tuify
@@ -234,7 +234,7 @@ Tuify writes a debug log to `~/.config/tuify/debug.log` on each run. Starting tu
 
 ### Build from source
 
-Requires Go 1.27+. On Linux, also install `libasound2-dev`.
+Requires Go 1.27+ (which targets macOS 13 or later). On Linux, also install `libasound2-dev`.
 
 ```bash
 git clone https://github.com/lounge/tuify.git

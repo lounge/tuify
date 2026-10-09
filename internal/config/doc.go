@@ -10,7 +10,9 @@
 // (auth, librespot cache, debug log) can place their files next to
 // config.json without re-implementing the path logic.
 //
-// WriteFileAtomic is the one way files in that directory are written: via
-// a synced temp file renamed into place, with 0600 permissions, so a crash
-// mid-write can't leave a truncated config.json or token.json behind.
+// WriteFileAtomic is the one way config.json and token.json are written:
+// via a synced temp file renamed into place, with 0600 permissions, so a
+// crash mid-write can't leave a truncated file behind. Append-style files
+// in the same directory (debug.log, the librespot cache) use plain os
+// calls, since a torn write there costs nothing.
 package config

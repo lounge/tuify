@@ -25,7 +25,7 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.27+.
 
 1. Load/setup config → `theme.Apply(cfg.Theme)` → `ui.RebuildStyles()` **before** any rendering (see Hard rule on Lipgloss style construction).
 2. `authenticate` returns an `*authSession`: the `*spotify.Client` plus channels for revoked-token + token-save errors that are wired into the UI via `ModelOption`s, and a cleanup func.
-3. `startLibrespot` is optional; when active it provides additional `ModelOption`s (audio pipe → FFT, device reconnect callbacks).
+3. `startLibrespot` is optional; when active it provides additional `ModelOption`s (`WithAudioSource` for the pipe → FFT path, `WithLibrespotInactive` for the device-dropped banner) and wires `Process.OnReconnect` to the transfer-back handler.
 4. `zone.NewGlobal()` then `tea.NewProgram(..., WithAltScreen(), WithMouseCellMotion())`.
 
 ### UI shell + screens + submodels (`internal/ui`)
@@ -34,11 +34,11 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.27+.
 - **Screens** (home/playlist/track/podcast/episode/search) own local state and render themselves. They communicate with the shell via *intent messages* (`app_intents.go`).
 - **Submodels** (`nowPlayingModel`, `visualizerModel`, `deviceSelectorModel`) are long-lived state on `Model` that transcends the view stack.
 - The shell dispatches via small **capability interfaces** in `common.go` (`listProvider`, `scrollable`, `clickable`, `enterable`, `searchAware`, `syncableView`, `backable`, …). Adding a new screen means implementing the capabilities it cares about and listing them in the compile-time checks at the end of `common.go` (the shell finds capabilities by type assertion, so a missing or misnamed method fails silently otherwise). Capability methods are lowercase except those mirroring bubbletea/bubbles (`Init`, `Update`, `View`, `SetSize`).
-- Every frame that shows a list is wrapped in `bubblezone.Scan`; list rows are marked by Spotify URI via `zoneListDelegate` (in `styles.go`) so clicks resolve back to specific items. Overlays and the visualizer skip the scan, and `handleMouse` ignores the pointer while they are up.
+- Every frame that shows a list is wrapped in `bubblezone.Scan`; list rows are marked by list id and row index via `zoneListDelegate` (in `styles.go`) so clicks resolve back to specific rows even when a playlist repeats a track. Overlays and the visualizer skip the scan, and `handleMouse` ignores the pointer while they are up.
 
 ### Audio pipeline (`internal/audio` + `internal/librespot`)
 
-When `audio_backend == "pipe"`, `librespot.Process` pipes raw little-endian s16le stereo to `audio.PipeReader`. The FFT layer emits `FrequencyData` (log-spaced bands + bass/mid/high averages + a `ProgressMs` derived from sample count, so visualizers don't need a separate Spotify poll). Visualizers in `internal/ui/visualizers` opt into data by implementing `AudioAware`/`ProgressAware`/`ImageAware`/`LyricsAware`; the `visualizerModel` pushes to whoever implements each.
+When `audio_backend == "pipe"`, `librespot.Process` pipes raw little-endian s16le stereo to `audio.PipeReader`. The FFT layer emits `FrequencyData` (log-spaced bands + bass/mid/high averages + a `StreamMs` derived from sample count — stream time since the pipe opened, not playback position; a visualizer that needs the position in the track implements `ProgressAware` and gets it from the Spotify poll). Visualizers in `internal/ui/visualizers` opt into data by implementing `AudioAware`/`ProgressAware`/`ImageAware`/`LyricsAware`; the `visualizerModel` pushes to whoever implements each.
 
 `librespot.Process.OnReconnect` is how playback gets transferred back after a drop. `spotify.Client.DeviceOverridden` (atomic) coordinates with the UI so a manual device switch is respected and not clobbered by reconnect.
 
@@ -48,7 +48,7 @@ Wraps `zmb3/spotify` with the higher-level ops tuify needs. `New` takes the auth
 
 ### Auth (`internal/auth`)
 
-OAuth2 PKCE. `NewSavingClient` returns an `*http.Client` that refreshes and re-persists tokens automatically, plus `saveErrCh` (non-fatal problems: token.json write failures and a failed startup refresh → UI banner) and `revokedCh` (refresh-token permanently rejected → bootstrap replaces the tea error with a re-login message and deletes `token.json`).
+OAuth2 PKCE. `NewSavingClient` returns an `*http.Client` that refreshes and re-persists tokens automatically, plus `saveErrCh` (non-fatal problems: token.json write failures and a failed startup refresh → UI banner) and `revokedCh` (refresh-token permanently rejected → auth deletes `token.json` once and bootstrap replaces the tea error with a re-login message).
 
 ## Hard rules
 
