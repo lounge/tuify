@@ -187,8 +187,8 @@ func isEpisodeURI(uri string) bool {
 }
 
 func idFromURI(uri string) string {
-	if i := strings.LastIndex(uri, ":"); i >= 0 {
-		return uri[i+1:]
+	if _, id, ok := strings.CutLast(uri, ":"); ok {
+		return id
 	}
 	return uri
 }

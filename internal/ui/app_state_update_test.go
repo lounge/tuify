@@ -3,6 +3,7 @@ package ui
 import (
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"testing"
 	"time"
 
@@ -64,12 +65,7 @@ func collectMsgs(cmd tea.Cmd) []tea.Msg {
 }
 
 func hasMsg(msgs []tea.Msg, want tea.Msg) bool {
-	for _, m := range msgs {
-		if m == want {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(msgs, want)
 }
 
 func TestHandleStateUpdate_ForwardsVolumeChangesToAudioSource(t *testing.T) {
