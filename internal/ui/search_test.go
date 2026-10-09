@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -330,6 +331,43 @@ func TestSearchHintText_UsesThemeStyles(t *testing.T) {
 	withTrueColor(t)
 	if got := searchHintText(); !strings.Contains(got, "\x1b[") {
 		t.Errorf("search hint has no colour escapes; styles were captured before RebuildStyles: %q", got)
+	}
+}
+
+// rebuildList keeps the cursor row across a rebuild but never past the end:
+// bubbles' SetItems clamps the page, not the cursor, so fewer rows than
+// before (a new search, or the error row replacing the results) used to
+// leave no row selected and Enter a no-op until the cursor moved.
+func TestSearchView_RebuildList_KeepsCursorInBounds(t *testing.T) {
+	tests := []struct {
+		name      string
+		shrink    func(v *searchView)
+		wantIndex int
+	}{
+		{"fewer results", func(v *searchView) { v.items = v.items[:5] }, 4},
+		{"error row replaces the results", func(v *searchView) { v.items, v.searchErr = nil, errTest }, 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Tall enough to hold the results on one page, so the page
+			// clamp can't mask a cursor past the end.
+			v := newSearchView(context.Background(), nil, 80, 60, false)
+			for i := range 20 {
+				v.items = append(v.items, trackItem{uri: fmt.Sprintf("spotify:track:%d", i)})
+			}
+			v.rebuildList()
+			v.list.Select(15)
+
+			tt.shrink(v)
+			v.rebuildList()
+
+			if got := v.list.Index(); got != tt.wantIndex {
+				t.Errorf("cursor = %d, want %d", got, tt.wantIndex)
+			}
+			if v.list.SelectedItem() == nil {
+				t.Error("no row selected after the rebuild")
+			}
+		})
 	}
 }
 

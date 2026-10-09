@@ -179,9 +179,14 @@ func (v *searchView) rebuildList() {
 		}
 	}
 
+	// Keep the cursor row across the rebuild, clamped to the new length:
+	// bubbles' SetItems clamps the page but not the cursor, so a cursor
+	// left past the end of a shorter result set would select nothing (no
+	// highlighted row, Enter a no-op) until the user moved it.
+	v.list.ResetSelected()
 	v.list.SetItems(items)
-	if prev < len(items) {
-		v.list.Select(prev)
+	if n := len(items); n > 0 {
+		v.list.Select(min(prev, n-1))
 	}
 
 	if v.syncURI != "" {
