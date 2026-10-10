@@ -23,7 +23,7 @@ A terminal-based Spotify client. Browse playlists, search for music and podcasts
 - **Mini Mode** — Compact single-line view with track info and progress
 - **Mouse Support** — Scroll wheel to navigate lists, click to select, double-click to play or drill down
 - **Visualizers** — Album art, starfield, spectrum, oscillogram, spectrogram, VU meter, and Milkdrop-style presets (spiral, tunnel, kaleidoscope, ripple)
-- **Lyrics** — Fetches and displays lyrics from Genius.com
+- **Lyrics** — Time-synced lyrics from LRCLIB, with Genius.com as fallback
 - **Dark & Light Terminals** — Adaptive color palette that adjusts automatically
 
 ## Requirements
@@ -254,10 +254,10 @@ golangci-lint run ./...   # matches CI lint job
 | `internal/spotify` | Spotify Web API client ([zmb3/spotify](https://github.com/zmb3/spotify)) |
 | `internal/audio` | Real-time audio pipeline — FFT analysis, PCM pipe reader ([oto](https://github.com/ebitengine/oto)) |
 | `internal/librespot` | [Librespot](https://github.com/librespot-org/librespot) process lifecycle |
-| `internal/lyrics` | Genius.com lyrics scraping |
+| `internal/lyrics` | Lyrics lookup: LRCLIB synced lyrics, Genius.com scraping as fallback |
 | `internal/auth` | OAuth2 PKCE authentication |
 | `internal/config` | Configuration management |
-| `internal/termsafe` | Strips terminal control characters from Spotify and Genius text |
+| `internal/termsafe` | Strips terminal control characters from Spotify, LRCLIB and Genius text |
 | `internal/theme` | Color palette + user theme overrides applied at startup |
 | `internal/testutil` | Test-only helpers shared across packages (HTTP stubbing) |
 
