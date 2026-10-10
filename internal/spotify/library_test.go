@@ -184,12 +184,17 @@ func TestGetPlaylistTracks(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	tracks, more, err := c.GetPlaylistTracks(context.Background(), "playlist1", 0, 50)
+	tracks, rawCount, more, err := c.GetPlaylistTracks(context.Background(), "playlist1", 0, 50)
 	if err != nil {
 		t.Fatalf("GetPlaylistTracks: %v", err)
 	}
 	if len(tracks) != 2 {
 		t.Fatalf("expected 2 tracks (filtered empty), got %d", len(tracks))
+	}
+	// The dropped entry still occupies a slot in the playlist, so the
+	// caller must advance its offset by the raw page size.
+	if rawCount != 3 {
+		t.Errorf("rawCount = %d, want 3 (page size before filtering)", rawCount)
 	}
 	if tracks[0].Name != "Track One" {
 		t.Errorf("track 0 name: got %q", tracks[0].Name)

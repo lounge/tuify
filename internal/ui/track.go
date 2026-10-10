@@ -33,7 +33,10 @@ type trackView struct {
 
 func newTrackView(ctx context.Context, client *spotify.Client, playlistID, playlistName string, width, height int, vimMode bool) *trackView {
 	load := func(ctx context.Context, offset int) ([]list.Item, int, bool, error) {
-		tracks, hasMore, err := client.GetPlaylistTracks(ctx, playlistID, offset, 50)
+		// fetched is the raw page size, not len(tracks): the client drops
+		// entries without a track, and advancing by the filtered count
+		// would re-fetch those rows and repeat the page after them.
+		tracks, fetched, hasMore, err := client.GetPlaylistTracks(ctx, playlistID, offset, 50)
 		items := make([]list.Item, 0, len(tracks))
 		for _, t := range tracks {
 			items = append(items, trackItem{
@@ -41,7 +44,7 @@ func newTrackView(ctx context.Context, client *spotify.Client, playlistID, playl
 				artist: t.Artist, album: t.Album, duration: t.Duration,
 			})
 		}
-		return items, len(tracks), hasMore, err
+		return items, fetched, hasMore, err
 	}
 	return &trackView{
 		lazyList:     newLazyList(ctx, load, width, height, vimMode),

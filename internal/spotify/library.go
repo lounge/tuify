@@ -47,8 +47,13 @@ func (c *Client) GetPlaylists(ctx context.Context, offset, limit int) (playlists
 }
 
 // GetPlaylistTracks returns tracks from a playlist, starting at offset.
-// The bool indicates whether more pages are available.
-func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit int) ([]Track, bool, error) {
+// Entries without a track (local files, removed or region-locked tracks)
+// are dropped, so rawCount reports how many entries the page held and is
+// what a caller advances its offset by: advancing by len(tracks) would
+// re-fetch the dropped rows and repeat the tracks after them, and a page
+// of nothing but dropped rows would never advance at all. more reports
+// whether another page is available.
+func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit int) (tracks []Track, rawCount int, more bool, err error) {
 	url := fmt.Sprintf("https://api.spotify.com/v1/playlists/%s/items?limit=%d&offset=%d", id, limit, offset)
 	var page struct {
 		Offset int `json:"offset"`
@@ -58,7 +63,7 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit
 		} `json:"items"`
 	}
 	if err := c.apiGet(ctx, url, &page); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	var raw []rawTrack
 	for _, item := range page.Items {
@@ -66,7 +71,7 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit
 			raw = append(raw, item.Item)
 		}
 	}
-	return convertTracks(raw), hasMore(page.Offset, len(page.Items), page.Total), nil
+	return convertTracks(raw), len(page.Items), hasMore(page.Offset, len(page.Items), page.Total), nil
 }
 
 // GetSavedShows returns the user's followed podcast shows.
