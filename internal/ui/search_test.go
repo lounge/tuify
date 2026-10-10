@@ -383,3 +383,42 @@ func TestSearchView_IgnoresResultFromEarlierSearchView(t *testing.T) {
 		t.Errorf("result from an earlier search view was applied: pending=%d items=%d", cur.pending, len(cur.items))
 	}
 }
+
+// Reopening search discards the session that was in flight: a result from
+// a fetch started before openSearch must not fill the emptied list or
+// drive pending negative, which would block paging for the new session.
+func TestSearchView_OpenSearchDiscardsInFlightResult(t *testing.T) {
+	v := newSearchView(context.Background(), nil, 80, 20, false)
+	v.pending = 1
+	stale := searchResultMsg{epoch: v.epoch, items: []list.Item{trackItem{uri: "spotify:track:old"}}}
+
+	v.openSearch()
+	v.Update(stale)
+
+	if v.pending != 0 || len(v.items) != 0 {
+		t.Errorf("stale result applied after openSearch: pending=%d items=%d", v.pending, len(v.items))
+	}
+}
+
+// A debounce tick scheduled before search was reopened carries the old
+// query; running it would search for text the user no longer sees.
+func TestSearchView_OpenSearchDropsPendingDebounce(t *testing.T) {
+	v := newSearchView(context.Background(), nil, 80, 20, false)
+	v.openSearch()
+	v.searchQuery = "queen"
+	sc, ok := v.activeSearchInput()
+	if !ok {
+		t.Fatal("search input should be active after openSearch")
+	}
+	if cmd := sc.onChange(); cmd == nil {
+		t.Fatal("onChange should schedule a debounce for a two-rune term")
+	}
+	stale := searchDebounceMsg{seq: v.debounceSeq, query: "queen"}
+
+	v.openSearch()
+	cmd := v.Update(stale)
+
+	if cmd != nil || v.pending != 0 || v.query != "" {
+		t.Errorf("stale debounce ran after openSearch: fetched=%v pending=%d query=%q", cmd != nil, v.pending, v.query)
+	}
+}

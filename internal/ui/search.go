@@ -110,6 +110,13 @@ func (v *searchView) activeSearchInput() (searchCtx, bool) {
 }
 
 func (v *searchView) resetToDepth0() {
+	// A fetch or debounce still in flight belongs to the session being
+	// discarded. Rotate the epoch so a late result is dropped instead of
+	// filling the emptied list and driving pending negative, and bump
+	// debounceSeq so a tick scheduled before the reset does not run its
+	// stale query.
+	v.epoch = newFetchID()
+	v.debounceSeq++
 	v.depth = 0
 	v.items = nil
 	v.offset = 0
