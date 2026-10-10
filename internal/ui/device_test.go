@@ -3,13 +3,98 @@ package ui
 import (
 	"context"
 	"errors"
+	"io"
+	"net/http"
 	"strings"
+	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
 )
+
+// fakePlayer answers the player calls transferDeviceCmd makes, in memory
+// so the post-transfer settle delay runs on synctest's clock, and records
+// each call as "METHOD /path body".
+type fakePlayer struct {
+	mu    sync.Mutex
+	calls []string
+}
+
+func (f *fakePlayer) RoundTrip(req *http.Request) (*http.Response, error) {
+	var body []byte
+	if req.Body != nil {
+		body, _ = io.ReadAll(req.Body)
+	}
+	f.mu.Lock()
+	f.calls = append(f.calls, strings.TrimSpace(req.Method+" "+req.URL.Path+" "+string(body)))
+	f.mu.Unlock()
+	return &http.Response{
+		StatusCode: http.StatusNoContent,
+		Header:     http.Header{"Content-Type": {"application/json"}},
+		Body:       io.NopCloser(strings.NewReader("")),
+		Request:    req,
+	}, nil
+}
+
+func (f *fakePlayer) snapshot() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.calls...)
+}
+
+// A transfer with play=true starts playback on the target, so a paused
+// session must transfer with play=false. The exception is the seek that
+// restores progress when leaving the librespot device: it needs an active
+// target, so that path forces play and then re-pauses.
+func TestTransferDeviceCmd_PreservesPausedState(t *testing.T) {
+	tuify := spotify.Device{ID: "tuify-id", Name: "tuify"}
+	phone := spotify.Device{ID: "phone", Name: "Phone"}
+	const transfer, seek, pause = "PUT /v1/me/player ", "PUT /v1/me/player/seek", "PUT /v1/me/player/pause"
+	tests := []struct {
+		name       string
+		dev        spotify.Device
+		current    string
+		progressMs int
+		playing    bool
+		wantPlay   bool     // the play flag sent with the transfer
+		wantCalls  []string // path prefixes, in order
+	}{
+		{"paused, to the preferred device", tuify, "phone", 30000, false, false, []string{transfer}},
+		{"playing, to the preferred device", tuify, "phone", 30000, true, true, []string{transfer}},
+		{"paused, away from the preferred device at 0ms", phone, "tuify-id", 0, false, false, []string{transfer}},
+		{"paused, away from the preferred device mid-track", phone, "tuify-id", 30000, false, true, []string{transfer, seek, pause}},
+		{"playing, away from the preferred device mid-track", phone, "tuify-id", 30000, true, true, []string{transfer, seek}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				fake := &fakePlayer{}
+				client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
+
+				msg := transferDeviceCmd(t.Context(), client, tc.dev, tc.current, tc.progressMs, tc.playing)()
+				if tm, ok := msg.(transferDeviceMsg); !ok || tm.err != nil {
+					t.Fatalf("transfer result = %#v", msg)
+				}
+
+				calls := fake.snapshot()
+				if len(calls) != len(tc.wantCalls) {
+					t.Fatalf("calls = %q, want %d: %q", calls, len(tc.wantCalls), tc.wantCalls)
+				}
+				for i, want := range tc.wantCalls {
+					if !strings.HasPrefix(calls[i], want) {
+						t.Errorf("call %d = %q, want prefix %q", i, calls[i], want)
+					}
+				}
+				if gotPlay := strings.Contains(calls[0], `"play":true`); gotPlay != tc.wantPlay {
+					t.Errorf("transfer sent play=%v, want %v: %s", gotPlay, tc.wantPlay, calls[0])
+				}
+			})
+		})
+	}
+}
 
 func twoDevices() []spotify.Device {
 	return []spotify.Device{

@@ -232,15 +232,18 @@ func transferDeviceCmd(parent context.Context, client *spotify.Client, dev spoti
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 		defer cancel()
-		if err := client.TransferPlayback(ctx, dev.ID, true); err != nil {
-			return transferDeviceMsg{err: err, deviceName: dev.Name}
-		}
-
 		// Spotify's server reports position_ms=0 for the librespot pipe
 		// backend, so after transferring away the target starts from the
 		// beginning. Seek the target to the progress we tracked locally.
 		// Only needed when leaving the preferred (librespot) device.
-		if currentDeviceID != "" && dev.Name != client.PreferredDevice() && progressMs > 0 {
+		needsSeek := currentDeviceID != "" && dev.Name != client.PreferredDevice() && progressMs > 0
+		// play=false keeps the current play/pause state on the new device,
+		// so a paused session stays paused. The seek path forces play so
+		// the seek lands on an active device, then restores the pause.
+		if err := client.TransferPlayback(ctx, dev.ID, wasPlaying || needsSeek); err != nil {
+			return transferDeviceMsg{err: err, deviceName: dev.Name}
+		}
+		if needsSeek {
 			// Small delay so the new device is fully active before we
 			// seek — Spotify 404s seeks at devices that aren't yet ready.
 			select {
