@@ -1,8 +1,8 @@
 package config
 
 import (
-	"bytes"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"os"
@@ -83,7 +83,8 @@ func Path() (string, error) {
 
 // Load reads and parses config.json. It returns (nil, nil) when the file
 // doesn't exist yet, which callers treat as "run first-time setup".
-// Unknown keys are an error. Load does not call Validate.
+// Unknown, duplicate, or wrongly cased keys and trailing content are
+// errors. Load does not call Validate.
 func Load() (*Config, error) {
 	path, err := Path()
 	if err != nil {
@@ -96,21 +97,18 @@ func Load() (*Config, error) {
 		}
 		return nil, err
 	}
-	// DisallowUnknownFields surfaces typo'd keys as errors instead of
+	// RejectUnknownMembers surfaces typo'd keys as errors instead of
 	// silently dropping them. Without it, a mistyped field name (a missing
 	// letter, swapped order, etc.) would leave the user puzzling over why
 	// their setting "doesn't work" while the value never reached the code.
-	dec := json.NewDecoder(bytes.NewReader(data))
-	dec.DisallowUnknownFields()
+	// json/v2 adds the rest of the strictness for free: names match
+	// case-sensitively (so "Client_ID" is unknown, not a lucky hit), a key
+	// written twice is an error instead of last-one-wins, and anything
+	// after the config object (a second object pasted in, a stray
+	// fragment) is rejected rather than ignored.
 	var cfg Config
-	if err := dec.Decode(&cfg); err != nil {
+	if err := json.Unmarshal(data, &cfg, json.RejectUnknownMembers(true)); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
-	}
-	// Decode stops after the first JSON value. Anything after it (a
-	// second object pasted in, a stray fragment) would be ignored
-	// silently, unknown keys included.
-	if dec.More() {
-		return nil, fmt.Errorf("parse %s: unexpected content after the config object", path)
 	}
 	return &cfg, nil
 }
@@ -125,7 +123,7 @@ func Save(cfg *Config) error {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
-	data, err := json.MarshalIndent(cfg, "", "  ")
+	data, err := json.Marshal(cfg, jsontext.Multiline(true), jsontext.WithIndent("  "))
 	if err != nil {
 		return err
 	}

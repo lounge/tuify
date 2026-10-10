@@ -151,9 +151,11 @@ func TestSave_OmitsEmptyFields(t *testing.T) {
 		t.Fatalf("ReadFile: %v", err)
 	}
 
-	// omitempty fields should not appear
+	// Zero-valued optional fields must not appear. json/v2 redefined
+	// omitempty so that false and 0 are written out; the bool and int
+	// fields rely on omitzero to keep the file layout stable.
 	s := string(data)
-	for _, field := range []string{"enable_librespot", "librespot_path", "device_name", "bitrate", "vim_mode", "appearance", "theme"} {
+	for _, field := range []string{"enable_librespot", "librespot_path", "device_name", "bitrate", "vim_mode", "nerd_font", "appearance", "theme"} {
 		if strings.Contains(s, field) {
 			t.Errorf("expected %q to be omitted from JSON, got: %s", field, s)
 		}
@@ -219,30 +221,45 @@ func TestLoad_RejectsUnknownFields(t *testing.T) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	// "vim_mod" mimics a realistic user typo (truncated "vim_mode") —
-	// silently ignored without DisallowUnknownFields. With it, Load must
-	// surface the unknown key.
-	bad := []byte(`{"client_id":"abc","vim_mod":true}`)
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), bad, 0o600); err != nil {
-		t.Fatalf("WriteFile: %v", err)
+	cases := []struct {
+		name string
+		body string
+		key  string // substring the error must name
+	}{
+		// "vim_mod" mimics a realistic user typo (truncated "vim_mode"),
+		// silently ignored without RejectUnknownMembers. With it, Load
+		// must surface the unknown key.
+		{"typo", `{"client_id":"abc","vim_mod":true}`, "vim_mod"},
+		// json/v2 matches names case-sensitively, so a wrongly cased key
+		// is unknown rather than a lucky match the user comes to rely on.
+		{"case mismatch", `{"Client_ID":"abc"}`, "Client_ID"},
+		// A key written twice used to resolve last-one-wins; json/v2
+		// rejects it so the user sees the conflict.
+		{"duplicate", `{"client_id":"abc","client_id":"def"}`, "client_id"},
 	}
-
-	_, err := Load()
-	if err == nil {
-		t.Fatal("expected error for unknown field, got nil")
-	}
-	if !strings.Contains(err.Error(), "vim_mod") {
-		t.Errorf("error should name the offending key, got: %v", err)
-	}
-	// Path of the offending file should be wrapped in for clarity.
-	if !strings.Contains(err.Error(), "config.json") {
-		t.Errorf("error should include the file path, got: %v", err)
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(tc.body), 0o600); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			_, err := Load()
+			if err == nil {
+				t.Fatalf("Load accepted %s", tc.body)
+			}
+			if !strings.Contains(err.Error(), tc.key) {
+				t.Errorf("error should name the offending key %q, got: %v", tc.key, err)
+			}
+			// Path of the offending file should be wrapped in for clarity.
+			if !strings.Contains(err.Error(), "config.json") {
+				t.Errorf("error should include the file path, got: %v", err)
+			}
+		})
 	}
 }
 
-// json.Decoder stops after the first value, so trailing content, including
-// a second object with keys DisallowUnknownFields never sees, used to be
-// ignored silently.
+// Trailing content after the config object (a stray fragment, a second
+// object with keys the unknown-member check never sees) must be an
+// error, not silently ignored.
 func TestLoad_RejectsTrailingContent(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", tmp)

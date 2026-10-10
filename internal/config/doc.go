@@ -6,7 +6,10 @@
 //
 // The zero-value Config is not usable — callers construct a Config via
 // Load (existing file) or first-time setup in bootstrap, then call
-// Validate before handing it off. Dir is exported so other packages
+// Validate before handing it off. Load parses config.json strictly
+// (encoding/json/v2 with RejectUnknownMembers): an unknown, duplicate or
+// wrongly cased key and any content after the object are errors, so a
+// typo surfaces at startup instead of silently doing nothing. Dir is exported so other packages
 // (auth, librespot cache, debug log) can place their files next to
 // config.json without re-implementing the path logic.
 //
