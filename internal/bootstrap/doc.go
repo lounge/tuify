@@ -14,6 +14,13 @@
 // closing) cancels the program the same way SIGINT/SIGTERM do, so the
 // terminal is restored and librespot is stopped instead of orphaned.
 //
+// Reconnect: when librespot re-authenticates, reconnectHandler transfers
+// playback back to it, and only to it. The device can take a moment to
+// appear in Spotify's list, so the handler waits a settle delay and looks
+// again a bounded number of times rather than transfer to whichever
+// device FindDevice fell back to; a manual device switch (DeviceOverridden)
+// stops it at any point.
+//
 // Icons: useNerdFont resolves the nerd_font setting; when it is omitted,
 // the OS font directories are scanned for an installed Nerd Font. This
 // only proves the font exists, not that the terminal uses it, so an

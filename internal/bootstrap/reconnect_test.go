@@ -13,13 +13,34 @@ import (
 	"github.com/lounge/tuify/internal/spotify"
 )
 
+const (
+	devicesWithTuify    = `{"devices":[{"id":"phone","name":"Phone","is_active":true},{"id":"tuify-id","name":"tuify"}]}`
+	devicesWithoutTuify = `{"devices":[{"id":"phone","name":"Phone","is_active":true}]}`
+)
+
 // fakeSpotify answers the two calls reconnectHandler makes, in memory so
 // it works inside a synctest bubble: the device list, and the transfer,
 // whose body it records.
 type fakeSpotify struct {
 	mu        sync.Mutex
+	devices   []string // device-list bodies served in order; the last repeats. Empty: devicesWithTuify.
 	transfers []string // PUT /v1/me/player bodies
 	requests  int
+	lookups   int // device-list requests
+}
+
+// nextDevices returns the device-list body for the next lookup. The
+// caller holds mu.
+func (f *fakeSpotify) nextDevices() string {
+	f.lookups++
+	if len(f.devices) == 0 {
+		return devicesWithTuify
+	}
+	body := f.devices[0]
+	if len(f.devices) > 1 {
+		f.devices = f.devices[1:]
+	}
+	return body
 }
 
 func (f *fakeSpotify) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -31,7 +52,7 @@ func (f *fakeSpotify) RoundTrip(req *http.Request) (*http.Response, error) {
 	switch {
 	case req.Method == http.MethodGet && req.URL.Path == "/v1/me/player/devices":
 		status = http.StatusOK
-		body = `{"devices":[{"id":"phone","name":"Phone","is_active":true},{"id":"tuify-id","name":"tuify"}]}`
+		body = f.nextDevices()
 	case req.Method == http.MethodPut && req.URL.Path == "/v1/me/player":
 		b, _ := io.ReadAll(req.Body)
 		f.transfers = append(f.transfers, strings.TrimSpace(string(b)))
@@ -50,6 +71,12 @@ func (f *fakeSpotify) snapshot() (requests int, transfers []string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.requests, append([]string(nil), f.transfers...)
+}
+
+func (f *fakeSpotify) lookupCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lookups
 }
 
 // TestReconnectHandler runs on synctest's fake clock, so the handler's
@@ -100,6 +127,57 @@ func TestReconnectHandler(t *testing.T) {
 				want := `{"device_ids":["tuify-id"],"play":true}`
 				if len(transfers) != 1 || transfers[0] != want {
 					t.Errorf("transfers = %q, want one %s", transfers, want)
+				}
+			})
+		})
+	}
+}
+
+// FindDevice falls back to the active device, or any device, when tuify
+// is not listed. The handler must never transfer there: it waits a settle
+// delay and looks again while tuify registers, and gives up rather than
+// start playback on the fallback.
+func TestReconnectHandler_WaitsForPreferredDevice(t *testing.T) {
+	tests := []struct {
+		name          string
+		devices       []string
+		wantLookups   int
+		wantTransfers int
+	}{
+		{"listed on the second lookup", []string{devicesWithoutTuify, devicesWithTuify}, 2, 1},
+		{"never listed", []string{devicesWithoutTuify}, reconnectAttempts, 0},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				fake := &fakeSpotify{devices: tc.devices}
+				client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
+
+				done := make(chan struct{})
+				go func() {
+					reconnectHandler(t.Context(), client, "tuify")()
+					close(done)
+				}()
+
+				// The first lookup misses; nothing may be transferred before
+				// the second settle delay has elapsed.
+				synctest.Sleep(2*reconnectSettleDelay - time.Millisecond)
+				if _, transfers := fake.snapshot(); len(transfers) != 0 {
+					t.Fatalf("transferred after a missed lookup: %q", transfers)
+				}
+				<-done
+
+				_, transfers := fake.snapshot()
+				if got := fake.lookupCount(); got != tc.wantLookups {
+					t.Errorf("device lookups = %d, want %d", got, tc.wantLookups)
+				}
+				if len(transfers) != tc.wantTransfers {
+					t.Fatalf("transfers = %q, want %d", transfers, tc.wantTransfers)
+				}
+				for _, tr := range transfers {
+					if !strings.Contains(tr, `"tuify-id"`) {
+						t.Errorf("transferred to a fallback device: %s", tr)
+					}
 				}
 			})
 		})

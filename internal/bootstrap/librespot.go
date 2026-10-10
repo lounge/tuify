@@ -106,10 +106,25 @@ func startLibrespot(ctx context.Context, rc runtimeConfig, client *spotify.Clien
 	}, nil
 }
 
+// reconnectSettleDelay is how long reconnectHandler waits before each
+// device lookup: librespot logs the reconnect a moment before the device
+// shows up in Spotify's list. reconnectAttempts bounds how many lookups
+// a single reconnect makes before giving up.
+const (
+	reconnectSettleDelay = 2 * time.Second
+	reconnectAttempts    = 3
+)
+
 // reconnectHandler returns a callback for librespot reconnection that
 // transfers playback back to the preferred device (unless overridden).
 // parent is the app's root context; cancelling it aborts any in-flight
 // reconnect transfer instead of letting it linger past shutdown.
+//
+// Only the preferred device is ever a transfer target. FindDevice falls
+// back to the active device, or any device, when the preferred one is not
+// listed, and transferring there with play=true would start playback on
+// whatever the user has open instead of on tuify. While the device is not
+// listed the handler waits and looks again, up to reconnectAttempts times.
 //
 // librespot can re-authenticate several times in quick succession, and each
 // time the callback runs in its own goroutine. Only one runs at a time;
@@ -124,26 +139,44 @@ func reconnectHandler(parent context.Context, client *spotify.Client, deviceName
 			return
 		}
 		defer running.Store(false)
-		select {
-		case <-time.After(2 * time.Second):
-		case <-parent.Done():
-			return
+		for attempt := 1; attempt <= reconnectAttempts; attempt++ {
+			select {
+			case <-time.After(reconnectSettleDelay):
+			case <-parent.Done():
+				return
+			}
+			if client.DeviceOverridden.Load() {
+				log.Printf("[librespot] reconnect: device was manually switched, skipping transfer")
+				return
+			}
+			if transferToPreferred(parent, client, deviceName, attempt) {
+				return
+			}
 		}
-		if client.DeviceOverridden.Load() {
-			log.Printf("[librespot] reconnect: device was manually switched, skipping transfer")
-			return
-		}
-		ctx, cancel := context.WithTimeout(parent, 10*time.Second)
-		defer cancel()
-		devID, _, _, err := client.FindDevice(ctx, false)
-		if err != nil {
-			log.Printf("[librespot] reconnect: could not find device: %v", err)
-			return
-		}
-		if err := client.TransferPlayback(ctx, devID, true); err != nil {
-			log.Printf("[librespot] reconnect: transfer playback failed: %v", err)
-		} else {
-			log.Printf("[librespot] reconnect: playback transferred to %s", deviceName)
-		}
+		log.Printf("[librespot] reconnect: %s not listed after %d attempts, giving up", deviceName, reconnectAttempts)
 	}
+}
+
+// transferToPreferred looks the preferred device up and transfers
+// playback to it. It reports whether the reconnect is settled: true once
+// a transfer was attempted, false when the device is not listed yet or
+// the lookup failed, so the caller can try again.
+func transferToPreferred(parent context.Context, client *spotify.Client, deviceName string, attempt int) bool {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
+	devID, _, preferred, err := client.FindDevice(ctx, false)
+	if err != nil {
+		log.Printf("[librespot] reconnect: could not list devices (attempt %d/%d): %v", attempt, reconnectAttempts, err)
+		return false
+	}
+	if !preferred {
+		log.Printf("[librespot] reconnect: %s not listed yet (attempt %d/%d)", deviceName, attempt, reconnectAttempts)
+		return false
+	}
+	if err := client.TransferPlayback(ctx, devID, true); err != nil {
+		log.Printf("[librespot] reconnect: transfer playback failed: %v", err)
+	} else {
+		log.Printf("[librespot] reconnect: playback transferred to %s", deviceName)
+	}
+	return true
 }
