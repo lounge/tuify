@@ -287,3 +287,69 @@ func TestLoad_RejectsTrailingContent(t *testing.T) {
 		t.Errorf("trailing whitespace rejected: %v", err)
 	}
 }
+
+// The XDG spec says a relative XDG_CONFIG_HOME is to be ignored. Honoring
+// one would put config.json, token.json and debug.log under whatever
+// directory tuify was started from.
+func TestDir_IgnoresRelativeXDG(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join("relative", "dir"))
+	got, err := Dir()
+	if err != nil {
+		t.Fatalf("Dir: %v", err)
+	}
+	home, _ := os.UserHomeDir()
+	want := filepath.Join(home, ".config", "tuify")
+	if got != want {
+		t.Errorf("Dir() = %q, want %q", got, want)
+	}
+}
+
+func TestValidate_AudioBackend(t *testing.T) {
+	for _, backend := range append([]string{""}, AudioBackends...) {
+		cfg := &Config{ClientID: "id", AudioBackend: backend}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("audio_backend %q should be valid, got: %v", backend, err)
+		}
+	}
+	for _, backend := range []string{"Pipe", "pipes", "coreaudio", "rodio-jack"} {
+		cfg := &Config{ClientID: "id", AudioBackend: backend}
+		err := cfg.Validate()
+		if err == nil {
+			t.Errorf("audio_backend %q accepted", backend)
+			continue
+		}
+		if !strings.Contains(err.Error(), "audio_backend") || !strings.Contains(err.Error(), backend) {
+			t.Errorf("error should name audio_backend and quote %q, got: %v", backend, err)
+		}
+	}
+}
+
+// auth.Login listens on the redirect URL's host:port and serves plain
+// HTTP, so anything else fails at login time with a worse message.
+func TestValidate_RedirectURL(t *testing.T) {
+	valid := []string{"", DefaultRedirectURL, "http://localhost:8888/callback", "http://[::1]:4444/callback", "http://127.0.0.1:4444"}
+	for _, raw := range valid {
+		cfg := &Config{ClientID: "id", RedirectURL: raw}
+		if err := cfg.Validate(); err != nil {
+			t.Errorf("redirect_url %q should be valid, got: %v", raw, err)
+		}
+	}
+	invalid := []struct{ raw, want string }{
+		{"://bad", "redirect_url"},
+		{"https://127.0.0.1:4444/callback", "scheme"},
+		{"127.0.0.1:4444/callback", "parse"},
+		{"http:///callback", "host"},
+		{"http://127.0.0.1/callback", "port"},
+	}
+	for _, tc := range invalid {
+		cfg := &Config{ClientID: "id", RedirectURL: tc.raw}
+		err := cfg.Validate()
+		if err == nil {
+			t.Errorf("redirect_url %q accepted", tc.raw)
+			continue
+		}
+		if !strings.Contains(err.Error(), "redirect_url") || !strings.Contains(err.Error(), tc.want) {
+			t.Errorf("redirect_url %q: error should name redirect_url and mention %q, got: %v", tc.raw, tc.want, err)
+		}
+	}
+}

@@ -5,8 +5,10 @@ import (
 	"encoding/json/v2"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"github.com/lounge/tuify/internal/theme"
 )
@@ -14,6 +16,13 @@ import (
 // DefaultRedirectURL is the OAuth redirect used when the config sets none.
 // It must be registered for the app in the Spotify dashboard.
 const DefaultRedirectURL = "http://127.0.0.1:4444/callback"
+
+// AudioBackends lists the audio_backend values Validate accepts: every
+// backend librespot itself accepts. "pipe" is the one tuify plays through
+// itself; the rest hand audio to librespot's own output, and all but
+// rodio, alsa, pulseaudio and subprocess need librespot built with the
+// matching cargo feature.
+var AudioBackends = []string{"pipe", "rodio", "alsa", "pulseaudio", "jackaudio", "portaudio", "gstreamer", "sdl", "subprocess", "rodiojack"}
 
 // Config mirrors config.json. Omitted fields keep their zero value and
 // get defaults at runtime (bootstrap.resolveRuntime, librespot.Config).
@@ -37,12 +46,15 @@ type Config struct {
 	Theme      theme.Theme `json:"theme,omitzero"`
 }
 
-// Dir returns the tuify config directory. Honors $XDG_CONFIG_HOME, otherwise
+// Dir returns the tuify config directory. Honors $XDG_CONFIG_HOME when it
+// is an absolute path (the XDG spec says a relative value is to be
+// ignored, and honoring one would scatter config.json, token.json and
+// debug.log under whatever directory tuify was started from), otherwise
 // derives from the user's home directory. Returns an error if neither is
 // available — silently defaulting to an empty path meant every downstream
 // "failed to open" error pointed at a phantom file at the repo root.
 func Dir() (string, error) {
-	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" && filepath.IsAbs(dir) {
 		return filepath.Join(dir, "tuify"), nil
 	}
 	home, err := os.UserHomeDir()
@@ -66,8 +78,38 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf(`invalid appearance %q: must be "dark", "light", or empty for auto`, c.Appearance)
 	}
+	if c.AudioBackend != "" && !slices.Contains(AudioBackends, c.AudioBackend) {
+		return fmt.Errorf("invalid audio_backend %q: must be one of %v", c.AudioBackend, AudioBackends)
+	}
+	if err := validateRedirectURL(c.RedirectURL); err != nil {
+		return err
+	}
 	if err := theme.Validate(c.Theme); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateRedirectURL checks a non-empty redirect_url is one the login
+// flow can serve: an http URL with a host and a port, since auth.Login
+// listens on exactly that host:port. The host itself is not restricted
+// (Spotify's dashboard wants a loopback IP literal such as 127.0.0.1, but
+// an existing config naming localhost must keep loading).
+func validateRedirectURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return fmt.Errorf("invalid redirect_url %q: %w", raw, err)
+	}
+	switch {
+	case u.Scheme != "http":
+		return fmt.Errorf("invalid redirect_url %q: scheme must be http, the login callback server speaks plain HTTP", raw)
+	case u.Hostname() == "":
+		return fmt.Errorf("invalid redirect_url %q: missing host", raw)
+	case u.Port() == "":
+		return fmt.Errorf("invalid redirect_url %q: missing port (for example %s)", raw, DefaultRedirectURL)
 	}
 	return nil
 }

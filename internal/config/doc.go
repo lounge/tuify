@@ -1,5 +1,6 @@
 // Package config manages the tuify config file. Dir resolves the config
-// directory: $XDG_CONFIG_HOME/tuify when that is set, otherwise
+// directory: $XDG_CONFIG_HOME/tuify when that is set to an absolute path
+// (a relative value is ignored, as the XDG spec requires), otherwise
 // ~/.config/tuify, on every OS including macOS and Windows. The package
 // loads and validates the on-disk JSON and writes updates with safe
 // permissions.
@@ -9,13 +10,21 @@
 // Validate before handing it off. Load parses config.json strictly
 // (encoding/json/v2 with RejectUnknownMembers): an unknown, duplicate or
 // wrongly cased key and any content after the object are errors, so a
-// typo surfaces at startup instead of silently doing nothing. Dir is exported so other packages
-// (auth, librespot cache, debug log) can place their files next to
-// config.json without re-implementing the path logic.
+// typo surfaces at startup instead of silently doing nothing. Validate
+// checks every set value against what the rest of the app can act on:
+// the bitrate and appearance enums, audio_backend against AudioBackends
+// (the librespot backends README lists), redirect_url as an http URL
+// with host and port (auth.Login listens on exactly that address), and
+// every theme color. Dir is exported so other packages (auth, librespot
+// cache, debug log) can place their files next to config.json without
+// re-implementing the path logic.
 //
 // WriteFileAtomic is the one way config.json and token.json are written:
 // via a synced temp file renamed into place, with 0600 permissions, so a
-// crash mid-write can't leave a truncated file behind. Append-style files
-// in the same directory (debug.log, the librespot cache) use plain os
-// calls, since a torn write there costs nothing.
+// crash mid-write can't leave a truncated file behind. A symlink at the
+// path is written through rather than replaced, so a file linked in from
+// a dotfiles repository stays linked; the directory is synced after the
+// rename. Append-style files in the same directory (debug.log, the
+// librespot cache) use plain os calls, since a torn write there costs
+// nothing.
 package config
