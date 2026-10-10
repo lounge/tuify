@@ -19,17 +19,17 @@ const DefaultRedirectURL = "http://127.0.0.1:4444/callback"
 // get defaults at runtime (bootstrap.resolveRuntime, librespot.Config).
 type Config struct {
 	ClientID        string `json:"client_id"`
-	EnableLibrespot bool   `json:"enable_librespot,omitempty"`
+	EnableLibrespot bool   `json:"enable_librespot,omitzero"`
 	LibrespotPath   string `json:"librespot_path,omitempty"`
 	DeviceName      string `json:"device_name,omitempty"`
-	Bitrate         int    `json:"bitrate,omitempty"`
+	Bitrate         int    `json:"bitrate,omitzero"`
 	SpotifyUsername string `json:"spotify_username,omitempty"`
 	RedirectURL     string `json:"redirect_url,omitempty"`
 	AudioBackend    string `json:"audio_backend,omitempty"`
-	VimMode         bool   `json:"vim_mode,omitempty"`
+	VimMode         bool   `json:"vim_mode,omitzero"`
 	// NerdFont selects Nerd Font glyphs (e.g. the shuffle icon). Nil
 	// (omitted) auto-detects an installed Nerd Font; true/false forces it.
-	NerdFont *bool `json:"nerd_font,omitempty"`
+	NerdFont *bool `json:"nerd_font,omitzero"`
 	// Appearance forces dark or light palette selection. Empty (omitted)
 	// uses lipgloss's terminal-background autodetection. Valid: "", "dark",
 	// "light".
