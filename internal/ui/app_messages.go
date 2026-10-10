@@ -5,9 +5,14 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+// seekFireMsg fires a debounced seek. trackURI is the track the position
+// was computed for; handleSeekFire drops the message when another track
+// is playing by the time it fires, so the old track's position is never
+// applied to the new one.
 type seekFireMsg struct {
-	seq   int
-	posMs int
+	seq      int
+	posMs    int
+	trackURI string
 }
 
 type clipboardResultMsg struct{ err error }

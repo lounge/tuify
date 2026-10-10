@@ -89,9 +89,9 @@ func (m *Model) seekRelative(deltaMs int) tea.Cmd {
 	m.nowPlaying.progressMs = posMs
 	m.nowPlaying.seekPending = true
 	m.seekSeq++
-	seq := m.seekSeq
+	seq, trackURI := m.seekSeq, m.nowPlaying.trackURI
 	return tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg {
-		return seekFireMsg{seq: seq, posMs: posMs}
+		return seekFireMsg{seq: seq, posMs: posMs, trackURI: trackURI}
 	})
 }
 

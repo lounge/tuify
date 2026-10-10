@@ -92,6 +92,14 @@ func (m Model) handleSeekFire(msg seekFireMsg) (tea.Model, tea.Cmd) {
 	if msg.seq != m.seekSeq {
 		return m, nil // outdated, a newer seek superseded this one
 	}
+	if msg.trackURI != m.nowPlaying.trackURI {
+		// The track changed during the debounce and the position was
+		// computed for the old one. No seek reply will arrive to clear
+		// seekPending, so release it here or polls would keep showing the
+		// stale position.
+		m.nowPlaying.seekPending = false
+		return m, nil
+	}
 	return m, m.seekTo(msg.posMs)
 }
 

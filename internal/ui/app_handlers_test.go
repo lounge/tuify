@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"testing"
+	"testing/synctest"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -38,6 +39,39 @@ func TestHandleSeekFire_CurrentSequenceFires(t *testing.T) {
 	if cmd == nil {
 		t.Fatal("matching seq should return a seek command")
 	}
+}
+
+// A seek position is computed for the track playing when the key was
+// pressed. If the track changes during the debounce (it ended, or the
+// user skipped), applying that position to the new track would jump into
+// it.
+func TestHandleSeekFire_TrackChangedIsDropped(t *testing.T) {
+	np := &nowPlayingModel{trackURI: "spotify:track:new", seekPending: true}
+	m := Model{nowPlaying: np, client: &spotify.Client{}, seekSeq: 7}
+
+	_, cmd := m.handleSeekFire(seekFireMsg{seq: 7, posMs: 42000, trackURI: "spotify:track:old"})
+	if cmd != nil {
+		t.Error("seek scheduled for another track should not fire")
+	}
+	if np.seekPending {
+		t.Error("seekPending must be released: no seek reply will clear it, and polls would never update progress")
+	}
+}
+
+func TestSeekRelative_StampsCurrentTrack(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		m := &Model{
+			nowPlaying: &nowPlayingModel{trackURI: "spotify:track:a", progressMs: 10000, durationMs: 100000},
+			client:     &spotify.Client{},
+		}
+		fire, ok := m.seekRelative(5000)().(seekFireMsg)
+		if !ok {
+			t.Fatal("seekRelative did not produce a seekFireMsg")
+		}
+		if fire.trackURI != "spotify:track:a" || fire.posMs != 15000 || fire.seq != m.seekSeq {
+			t.Errorf("seekFireMsg = %+v, want track spotify:track:a at 15000ms with seq %d", fire, m.seekSeq)
+		}
+	})
 }
 
 // handlePlaybackResult reverts an optimistic flip only when the failed
