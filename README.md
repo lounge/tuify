@@ -57,7 +57,7 @@ Pre-built binaries for all platforms are available on the [Releases](https://git
 ## Getting Started
 
 1. Go to https://developer.spotify.com/dashboard and create an app
-2. Set the redirect URI to `http://127.0.0.1:4444/callback`
+2. Set the redirect URI to `http://127.0.0.1:4444/callback` (Spotify requires a loopback IP literal such as `127.0.0.1` or `[::1]`, not `localhost`)
 3. Check the **Web API** checkbox
 4. Copy your **Client ID**
 5. Run `tuify` — it will ask for your Client ID on first launch
@@ -71,6 +71,8 @@ Pre-built binaries for all platforms are available on the [Releases](https://git
 |-----|--------|
 | `Enter` | Select / play |
 | `Esc` | Go back |
+| `b` / `f` (or `PgUp` / `PgDn`) | Page up / down in a list |
+| `g` / `G` (or `Home` / `End`) | Jump to first / last item |
 | `Space` | Play / pause |
 | `n` | Next track |
 | `p` | Previous track |
@@ -108,6 +110,7 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config file.
 | `j` / `k` | Cursor down / up |
 | `g` / `G` | Jump to first / last item |
 | `Ctrl+d` / `Ctrl+u` | Half-page down / up |
+| `b` or `u` / `f` | Page up / down |
 | `,` / `.` | Seek backward / forward |
 | `?` | Show help overlay |
 
@@ -126,6 +129,8 @@ Enable vim-style keybindings by setting `"vim_mode": true` in your config file.
 | Milkdrop Tunnel | Yes |
 | Milkdrop Kaleidoscope | Yes |
 | Milkdrop Ripple | Yes |
+
+Album art and lyrics are fetched (from Spotify's image CDN, [LRCLIB](https://lrclib.net) and, as a fallback, Genius) only while the visualizer pane is open, so with it closed no track information leaves your machine beyond the Spotify API itself.
 
 Album Art and Lyrics work out of the box. The audio-reactive visualizers require [librespot](https://github.com/librespot-org/librespot) — see the section below.
 
@@ -151,7 +156,7 @@ Add these to `~/.config/tuify/config.json`:
 | `librespot_path` | `"librespot"` | Path to librespot binary |
 | `device_name` | `"tuify"` | Spotify Connect device name |
 | `bitrate` | `320` | Audio bitrate (96, 160, or 320 kbps) |
-| `audio_backend` | `"pipe"` | Audio backend (see below) |
+| `audio_backend` | `"pipe"` | Audio backend (see below; any other value is rejected at startup) |
 | `spotify_username` | `""` | Spotify username for direct auth |
 
 ### Audio Backends
@@ -165,16 +170,16 @@ Only `"pipe"` enables audio-reactive visualizers.
 | **alsa** | Direct ALSA output (Linux). |
 | **pulseaudio** | Audio via PulseAudio (Linux). |
 
-Other backends (jackaudio, portaudio, gstreamer, sdl) require enabling cargo features when building librespot. See the [librespot Audio Backends wiki](https://github.com/librespot-org/librespot/wiki/Audio-Backends).
+librespot also has a built-in subprocess backend. The others (jackaudio, portaudio, gstreamer, sdl, rodiojack) require enabling cargo features when building librespot. See the [librespot Audio Backends wiki](https://github.com/librespot-org/librespot/wiki/Audio-Backends).
 
 ## Configuration
 
-All configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/`).
+All configuration is stored in `~/.config/tuify/` (or `$XDG_CONFIG_HOME/tuify/` when that is an absolute path).
 
 | Option | Default | Description |
 |--------|---------|-------------|
 | `client_id` | `""` | Spotify Developer App Client ID |
-| `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings) |
+| `redirect_url` | `"http://127.0.0.1:4444/callback"` | OAuth callback URL (must match your Spotify app settings). Must be `http://` with a host and port; use a loopback IP such as `127.0.0.1`. |
 | `vim_mode` | `false` | Enable vim-style keybindings |
 | `nerd_font` | _(auto)_ | Use [Nerd Font](https://www.nerdfonts.com/) icons (e.g. 󰒝 for shuffle). Omitted: auto-detected from installed fonts, falling back to `⇄`. Set `false` if your terminal uses a different font. |
 | `appearance` | `""` (auto) | Force `"dark"` or `"light"` palette. Empty/omitted uses terminal-background autodetection. |
