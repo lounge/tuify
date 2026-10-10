@@ -18,22 +18,36 @@
 // Errors: non-2xx responses surface as *APIError (carrying status and
 // truncated body) from every Client method, whether the call went
 // through the raw REST path or the SDK. SDK failures are normalized by
-// wrapSDKErr; the one exception is an SDK error response whose body is
-// empty or not JSON, which the SDK reports as a plain error without a
-// status. A cooldown short-circuit surfaces as an *APIError with status
-// 429 wrapping *RateLimitedError, so errors.As can recover the deadline.
-// Context and network errors are returned unwrapped.
+// wrapSDKErr. An error response whose body is not Spotify's error JSON
+// (an HTML page from a gateway, an empty body) is given that shape by the
+// transport before either path reads it, so the status survives and the
+// page itself never becomes an error message; the dropped body is logged
+// once, truncated. A cooldown short-circuit surfaces as an *APIError with
+// status 429 wrapping *RateLimitedError, so errors.As can recover the
+// deadline. Context and network errors are returned unwrapped.
 //
 // When Spotify rate-limits the client, a shared cooldown is armed so
 // subsequent calls short-circuit before hitting the network; callers
 // polling on a timer should consult RateLimitWait to extend their
 // interval past the deadline. A 429 whose Retry-After is missing, zero or
 // negative arms the cooldown; only a positive value of a few seconds is
-// retried inline. Consecutive 429s escalate
+// retried inline, and a request whose inline retries are all throttled
+// arms it too, as one throttle. Consecutive 429s escalate
 // the cooldown exponentially (up to one hour) so a persistent throttle
 // backs off instead of retrying at a fixed interval; the streak resets
 // on the first non-429 response. 429s for requests that were in flight
 // together count as one throttle.
+//
+// Paging: every paged method reports whether another page follows. An
+// empty page never does, whatever Spotify's total says, so a caller that
+// loops on it always terminates; search paging also stops at the
+// endpoint's 1000-result cap, past which Spotify answers 400. Methods that
+// drop entries (GetPlaylists, GetPlaylistTracks) also return the raw page
+// size, which is what a caller must advance its offset by.
+//
+// Devices: FindDevice never returns a device Spotify lists without an ID,
+// and its last-resort pick skips restricted devices, which accept no Web
+// API commands.
 //
 // Text: every name the package returns (tracks, artists, albums,
 // playlists and their owners, shows, episodes, devices), along with

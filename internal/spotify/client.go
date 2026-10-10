@@ -30,6 +30,12 @@ const (
 	opTransfer = "PUT /me/player"
 )
 
+// userIDRetryInterval is how long ownUserID waits after a failed GET /me
+// before asking again. A playlist fetch loops over several pages in a
+// row; without the pause every page would repeat the failing request and
+// its log line.
+const userIDRetryInterval = time.Minute
+
 // Client wraps the zmb3 Spotify SDK with the higher-level operations tuify
 // needs (playlists, search, player control, device selection). Safe for
 // concurrent use by multiple goroutines.
@@ -42,9 +48,10 @@ type Client struct {
 	sp              *sp.Client
 	httpClient      *http.Client
 	rl              *rateLimitTransport
-	userMu          sync.Mutex // guards userID
+	userMu          sync.Mutex // guards userID and userIDRetryAt
 	userID          string
-	preferredDevice string // set by WithPreferredDevice; immutable after New
+	userIDRetryAt   time.Time // earliest time ownUserID retries a failed GET /me
+	preferredDevice string    // set by WithPreferredDevice; immutable after New
 
 	// DeviceOverridden is set when the user manually switches playback to
 	// another device in Spotify. Checked by the librespot OnReconnect
@@ -54,13 +61,14 @@ type Client struct {
 
 // New constructs a Client from the auth-wrapped httpClient.
 //
-// New first installs a rate-limit gate on httpClient.Transport, then builds
-// the zmb3 SDK client on top of that same *http.Client. SDK calls (playback
-// control, devices) and raw REST calls therefore share token refresh and
-// the 429 cooldown by construction, rather than relying on the caller to
-// wire both clients to one transport.
+// New first installs a rate-limit gate on httpClient.Transport, over the
+// error-shape layer that gives every error response Spotify's JSON form,
+// then builds the zmb3 SDK client on top of that same *http.Client. SDK
+// calls (playback control, devices) and raw REST calls therefore share
+// token refresh, the 429 cooldown and the error shape by construction,
+// rather than relying on the caller to wire both clients to one transport.
 func New(httpClient *http.Client, opts ...Option) *Client {
-	rl := newRateLimitTransport(httpClient.Transport)
+	rl := newRateLimitTransport(newErrorShapeTransport(httpClient.Transport))
 	httpClient.Transport = rl
 	c := &Client{sp: sp.New(httpClient), httpClient: httpClient, rl: rl}
 	for _, opt := range opts {
@@ -120,16 +128,28 @@ func (c *Client) FetchUserID(ctx context.Context) error {
 
 // ownUserID returns the cached user ID, fetching it on first use if the
 // startup fetch failed. Returns "" if it still can't be fetched, in which
-// case callers skip ownership filtering rather than fail.
+// case callers skip ownership filtering rather than fail. A failed fetch
+// is not repeated for userIDRetryInterval, so a paged fetch does not ask
+// again on every page; a cancelled context is the caller leaving, not a
+// failure, and does not start the pause.
 func (c *Client) ownUserID(ctx context.Context) string {
 	c.userMu.Lock()
-	id := c.userID
+	id, retryAt := c.userID, c.userIDRetryAt
 	c.userMu.Unlock()
 	if id != "" {
 		return id
 	}
+	if time.Now().Before(retryAt) {
+		return ""
+	}
 	if err := c.FetchUserID(ctx); err != nil {
-		log.Printf("[spotify] could not fetch user ID, not filtering by owner: %v", err)
+		if errors.Is(err, context.Canceled) {
+			return ""
+		}
+		log.Printf("[spotify] could not fetch user ID, not filtering by owner for %v: %v", userIDRetryInterval, err)
+		c.userMu.Lock()
+		c.userIDRetryAt = time.Now().Add(userIDRetryInterval)
+		c.userMu.Unlock()
 		return ""
 	}
 	c.userMu.Lock()
@@ -170,8 +190,11 @@ func (e *APIError) Unwrap() error {
 // doWithRetry performs a GET request with inline 429 retry for short
 // Retry-After throttles. Long throttles and missing-Retry-After 429s arm
 // the shared rateLimitTransport cooldown instead, so subsequent calls
-// short-circuit before hitting the network. Returns an *APIError for
-// non-2xx responses; callers can errors.As to inspect the status.
+// short-circuit before hitting the network; so does a request whose
+// inline retries are all throttled, since three short 429s in a row are
+// a sustained throttle that every caller would otherwise spend its own
+// deadline sleeping through. Returns an *APIError for non-2xx responses;
+// callers can errors.As to inspect the status.
 func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
 	for range 3 {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -227,21 +250,26 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		}
 		return body, resp.StatusCode, &APIError{Status: resp.StatusCode, Body: truncateForLog(body), Endpoint: url}
 	}
-	return nil, http.StatusTooManyRequests, &APIError{
+	apiErr := &APIError{
 		Status:   http.StatusTooManyRequests,
 		Body:     []byte("rate limited after retries"),
 		Endpoint: url,
 	}
+	if c.rl != nil {
+		apiErr.Err = &RateLimitedError{Until: c.rl.throttled()}
+	}
+	return nil, http.StatusTooManyRequests, apiErr
 }
 
 // wrapSDKErr normalizes an error from the zmb3 SDK into an *APIError so SDK
 // methods honor the same error contract as the raw REST path. op names the
 // operation (e.g. "PUT /me/player/play") and is stored in APIError.Endpoint.
 //
-// The SDK reports non-2xx responses as the value type sp.Error, and a
-// cooldown short-circuit from rateLimitTransport as *RateLimitedError
-// wrapped in *url.Error. Anything else (context cancellation, network
-// failures, SDK decode errors) is returned unchanged.
+// The SDK reports non-2xx responses as the value type sp.Error (every
+// error response has Spotify's JSON shape by the time the SDK reads it;
+// see errorShapeTransport), and a cooldown short-circuit from
+// rateLimitTransport as *RateLimitedError wrapped in *url.Error. Anything
+// else (context cancellation, network failures) is returned unchanged.
 func wrapSDKErr(err error, op string) error {
 	if err == nil {
 		return nil

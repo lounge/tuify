@@ -11,11 +11,12 @@ import (
 )
 
 type apiDevice struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Type   string `json:"type"`
-	Active bool   `json:"is_active"`
-	Volume int    `json:"volume_percent"`
+	ID         string `json:"id"`
+	Name       string `json:"name"`
+	Type       string `json:"type"`
+	Active     bool   `json:"is_active"`
+	Restricted bool   `json:"is_restricted"`
+	Volume     int    `json:"volume_percent"`
 }
 
 // newDevicesClient serves devices from GET /v1/me/player/devices.
@@ -108,6 +109,12 @@ func TestFindDevice(t *testing.T) {
 		{"activeOnly ignores preferred", "tuify", true, []apiDevice{tuify, phone}, "p", true, false, ""},
 		{"activeOnly with none active", "", true, []apiDevice{tv}, "", false, false, "no active Spotify device"},
 		{"no devices", "tuify", false, nil, "", false, false, "no Spotify devices found"},
+		{"fallback skips restricted", "", false, []apiDevice{{ID: "r", Name: "Car", Restricted: true}, tv}, "tv", false, false, ""},
+		{"fallback skips empty id", "", false, []apiDevice{{Name: "Ghost"}, tv}, "tv", false, false, ""},
+		{"only restricted devices", "", false, []apiDevice{{ID: "r", Name: "Car", Restricted: true}}, "", false, false, "no controllable Spotify device"},
+		{"only empty-id devices", "", false, []apiDevice{{Name: "Ghost"}}, "", false, false, "no controllable Spotify device"},
+		{"active with empty id is skipped", "", true, []apiDevice{{Name: "Ghost", Active: true}}, "", false, false, "no active Spotify device"},
+		{"preferred with empty id falls through", "tuify", false, []apiDevice{{Name: "tuify"}, phone}, "p", true, false, ""},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

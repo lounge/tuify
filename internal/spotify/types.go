@@ -151,8 +151,12 @@ type page[T any] struct {
 	Items  []T `json:"items"`
 }
 
+// hasMore reports whether another page follows the one just fetched. An
+// empty page never has more: Spotify's total can run ahead of what it
+// serves (playlists it withholds are still counted), and a caller that
+// trusted total would re-request the same offset until its deadline.
 func hasMore(offset, count, total int) bool {
-	return offset+count < total
+	return count > 0 && offset+count < total
 }
 
 // Converters lift raw JSON rows into domain types.
@@ -187,9 +191,15 @@ func convertTracks(raw []rawTrack) []Track {
 	return tracks
 }
 
+// convertEpisodes and convertShows drop entries without an ID: Spotify
+// sends null for items it withholds, which decode to a zero struct and
+// would render as a blank row that plays nothing.
 func convertEpisodes(raw []rawEpisode) []Episode {
 	var episodes []Episode
 	for _, e := range raw {
+		if e.ID == "" {
+			continue
+		}
 		episodes = append(episodes, Episode{
 			ID:          e.ID,
 			URI:         e.URI,
@@ -231,6 +241,9 @@ func cleanAll(ss []string) []string {
 func convertShows(raw []rawShow) []Show {
 	var shows []Show
 	for _, s := range raw {
+		if s.ID == "" {
+			continue
+		}
 		shows = append(shows, Show{
 			ID:            s.ID,
 			URI:           s.URI,

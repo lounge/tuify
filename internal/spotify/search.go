@@ -8,6 +8,11 @@ import (
 	neturl "net/url"
 )
 
+// searchMaxOffset is the deepest result Spotify's search endpoint serves:
+// offset plus limit must stay at or below it, and a request past it is a
+// 400, so paging stops there whatever total claims.
+const searchMaxOffset = 1000
+
 // SearchTracks runs a track search against the Spotify catalog.
 func (c *Client) SearchTracks(ctx context.Context, query string, offset, limit int) ([]Track, bool, error) {
 	return search(ctx, c, query, "track", "tracks", offset, limit, convertTracks)
@@ -51,5 +56,6 @@ func search[Raw, T any](ctx context.Context, c *Client, query, searchType, key s
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return nil, false, err
 	}
-	return convert(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
+	more := hasMore(p.Offset, len(p.Items), p.Total) && p.Offset+len(p.Items) < searchMaxOffset
+	return convert(p.Items), more, nil
 }

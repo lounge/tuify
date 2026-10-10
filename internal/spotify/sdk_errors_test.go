@@ -117,6 +117,40 @@ func TestSDKMethods_CooldownIsAPIError429(t *testing.T) {
 	}
 }
 
+// An HTML 502 from a gateway, or an empty error body, reached the SDK as a
+// body it could not decode, so the status was lost and the page itself
+// became the banner text. The transport now gives it Spotify's error
+// shape, and every SDK call reports an *APIError with the real status.
+func TestSDKMethods_NonJSONErrorBodyKeepsStatus(t *testing.T) {
+	t.Parallel()
+
+	for _, body := range []string{"<html><body><h1>502 Bad Gateway</h1></body></html>", ""} {
+		for _, tc := range sdkCalls {
+			t.Run(tc.name, func(t *testing.T) {
+				c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+					w.Header().Set("Content-Type", "text/html")
+					w.WriteHeader(http.StatusBadGateway)
+					w.Write([]byte(body))
+				})
+				err := tc.call(context.Background(), c)
+				apiErr, ok := errors.AsType[*APIError](err)
+				if !ok {
+					t.Fatalf("body %q: expected *APIError, got %T: %v", body, err, err)
+				}
+				if apiErr.Status != http.StatusBadGateway {
+					t.Errorf("Status = %d, want 502", apiErr.Status)
+				}
+				if strings.Contains(err.Error(), "<html") {
+					t.Errorf("error carries the HTML page: %v", err)
+				}
+				if apiErr.Endpoint != tc.op {
+					t.Errorf("Endpoint = %q, want %q", apiErr.Endpoint, tc.op)
+				}
+			})
+		}
+	}
+}
+
 func TestWrapSDKErr_PassThrough(t *testing.T) {
 	t.Parallel()
 

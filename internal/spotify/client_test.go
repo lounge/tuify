@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
+	"time"
 	"unicode/utf8"
 
 	"github.com/lounge/tuify/internal/testutil"
@@ -91,7 +92,9 @@ func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
 	t.Parallel()
 
 	synctest.Test(t, func(t *testing.T) {
+		var hits atomic.Int32
 		c := newBubbleClient(t, func(w http.ResponseWriter, r *http.Request) {
+			hits.Add(1)
 			w.Header().Set("Retry-After", "1")
 			w.WriteHeader(http.StatusTooManyRequests)
 			w.Write([]byte("rate limited"))
@@ -110,6 +113,57 @@ func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
 		}
 		if apiErr.Status != http.StatusTooManyRequests {
 			t.Errorf("APIError.Status: got %d, want 429", apiErr.Status)
+		}
+
+		// Three short throttles in a row for one request are a sustained
+		// throttle: the cooldown is armed at the base level, the streak
+		// counts it once, and the next call does not reach the network.
+		if _, ok := errors.AsType[*RateLimitedError](err); !ok {
+			t.Error("exhausted retries: *RateLimitedError not reachable, caller cannot see the deadline")
+		}
+		if got := c.RateLimitWait(); got != rateLimitMinBackoff {
+			t.Errorf("cooldown after exhausted retries = %v, want %v", got, rateLimitMinBackoff)
+		}
+		if got := c.rl.consecutive.Load(); got != 1 {
+			t.Errorf("consecutive = %d, want 1", got)
+		}
+		before := hits.Load()
+		if _, _, err := c.doWithRetry(t.Context(), "https://api.spotify.com/v1/test"); err == nil {
+			t.Fatal("call during the cooldown succeeded")
+		}
+		if hits.Load() != before {
+			t.Error("call during the cooldown reached the network")
+		}
+
+		// A second exhausted storm after the cooldown escalates it.
+		time.Sleep(c.RateLimitWait())
+		c.doWithRetry(t.Context(), "https://api.spotify.com/v1/test")
+		if got := c.RateLimitWait(); got != 2*rateLimitMinBackoff {
+			t.Errorf("second storm cooldown = %v, want %v", got, 2*rateLimitMinBackoff)
+		}
+	})
+}
+
+// A single short Retry-After is still retried inline without arming the
+// shared cooldown.
+func TestDoWithRetry_429_SingleShortRetryAfterDoesNotArm(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		var attempts atomic.Int32
+		c := newBubbleClient(t, func(w http.ResponseWriter, r *http.Request) {
+			if attempts.Add(1) == 1 {
+				w.Header().Set("Retry-After", "2")
+				w.WriteHeader(http.StatusTooManyRequests)
+				return
+			}
+			w.Write([]byte(`{}`))
+		})
+		if _, _, err := c.doWithRetry(t.Context(), "https://api.spotify.com/v1/test"); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if c.IsRateLimited() {
+			t.Error("one short Retry-After armed the cooldown")
 		}
 	})
 }
@@ -209,6 +263,30 @@ func TestApiGet_NonOK(t *testing.T) {
 	err := c.apiGet(context.Background(), "https://api.spotify.com/v1/test", &result)
 	if err == nil {
 		t.Fatal("expected error for 404")
+	}
+}
+
+// A gateway in front of the API answers with an HTML page. The raw REST
+// path must keep the status and must not carry the page in its error.
+func TestApiGet_HTMLErrorBodyKeepsStatus(t *testing.T) {
+	t.Parallel()
+
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/html")
+		w.WriteHeader(http.StatusBadGateway)
+		w.Write([]byte("<html><body><h1>502 Bad Gateway</h1></body></html>"))
+	})
+	var result struct{}
+	err := c.apiGet(context.Background(), "https://api.spotify.com/v1/test", &result)
+	apiErr, ok := errors.AsType[*APIError](err)
+	if !ok {
+		t.Fatalf("expected *APIError, got %T: %v", err, err)
+	}
+	if apiErr.Status != http.StatusBadGateway {
+		t.Errorf("Status = %d, want 502", apiErr.Status)
+	}
+	if strings.Contains(err.Error(), "<html") {
+		t.Errorf("error carries the HTML page: %v", err)
 	}
 }
 

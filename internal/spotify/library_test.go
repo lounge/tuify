@@ -342,3 +342,114 @@ func TestGetAlbumTracks(t *testing.T) {
 		t.Error("expected more=false")
 	}
 }
+
+// IDs are interpolated into the URL path, so one carrying a slash must be
+// escaped rather than change which endpoint is called.
+func TestGetAlbumTracks_EscapesID(t *testing.T) {
+	t.Parallel()
+
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if got, want := r.URL.EscapedPath(), "/v1/albums/a%2F..%2Fb/tracks"; got != want {
+			t.Errorf("path = %q, want %q", got, want)
+		}
+		json.MarshalWrite(w, map[string]any{"offset": 0, "total": 0, "items": []any{}})
+	})
+	if _, _, err := c.GetAlbumTracks(context.Background(), "a/../b", 0, 50); err != nil {
+		t.Fatalf("GetAlbumTracks: %v", err)
+	}
+}
+
+// A failing GET /me used to be repeated on every page of a playlist fetch,
+// doubling the request rate and the log lines. One failure pauses the
+// lookup for the rest of the fetch.
+func TestGetPlaylists_FailedUserIDNotRetriedPerPage(t *testing.T) {
+	t.Parallel()
+
+	var meCalls atomic.Int32
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/me" {
+			meCalls.Add(1)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		json.MarshalWrite(w, map[string]any{"offset": 0, "total": 100, "items": []map[string]any{
+			{"id": "p1", "name": "A", "owner": map[string]any{"id": "x"}},
+		}})
+	})
+	for page := range 2 {
+		if _, _, _, err := c.GetPlaylists(context.Background(), page*50, 50); err != nil {
+			t.Fatalf("page %d: %v", page, err)
+		}
+	}
+	if n := meCalls.Load(); n != 1 {
+		t.Errorf("/v1/me requested %d times across two pages, want 1", n)
+	}
+}
+
+// Spotify can return a null in place of an item it withholds. It decodes
+// to a zero struct and used to become a blank row that plays nothing; it
+// is dropped now, while the raw count still covers it so paging advances
+// past it.
+func TestPagedEndpoints_DropNullEntries(t *testing.T) {
+	t.Parallel()
+
+	t.Run("playlists without user ID", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/me" {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.Write([]byte(`{"offset":0,"total":2,"items":[null,{"id":"p1","name":"A","owner":{"id":"x"}}]}`))
+		})
+		got, raw, _, err := c.GetPlaylists(context.Background(), 0, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "p1" || raw != 2 {
+			t.Errorf("got %+v raw=%d, want only p1 and raw 2", got, raw)
+		}
+	})
+	t.Run("show episodes", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"offset":0,"total":2,"items":[null,{"id":"e1","uri":"spotify:episode:e1","name":"E"}]}`))
+		})
+		got, _, err := c.GetShowEpisodes(context.Background(), "s", 0, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "e1" {
+			t.Errorf("got %+v, want only e1", got)
+		}
+	})
+	t.Run("saved shows", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"offset":0,"total":2,"items":[{"show":null},{"show":{"id":"s1","uri":"spotify:show:s1","name":"S"}}]}`))
+		})
+		got, _, err := c.GetSavedShows(context.Background(), 0, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "s1" {
+			t.Errorf("got %+v, want only s1", got)
+		}
+	})
+}
+
+// An empty page whose total runs ahead of what Spotify serves must not
+// report more, or the playlist loader re-requests the same offset until
+// its deadline.
+func TestGetPlaylists_EmptyPageWithStaleTotalEnds(t *testing.T) {
+	t.Parallel()
+
+	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(`{"offset":40,"total":60,"items":[]}`))
+	})
+	c.userID = "me"
+	_, raw, more, err := c.GetPlaylists(context.Background(), 40, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if more || raw != 0 {
+		t.Errorf("empty page: more=%v raw=%d, want false and 0", more, raw)
+	}
+}

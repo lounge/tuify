@@ -108,14 +108,24 @@ func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error
 		// retry loop handles this without locking out everything else.
 		return resp, nil
 	}
-	cooldown := max(time.Duration(wait)*time.Second, rateLimitMinBackoff)
+	t.arm(sentUntil, time.Duration(wait)*time.Second)
+	return resp, nil
+}
+
+// arm sets the cooldown for a throttle whose Retry-After, if any, is wait.
+// sentUntil is the deadline the caller saw before its request went out:
+// when it has moved since, a parallel request of the same burst already
+// counted this throttle, so only this response's own Retry-After is
+// honoured; otherwise the streak escalates. Returns the deadline in force.
+func (t *rateLimitTransport) arm(sentUntil int64, wait time.Duration) time.Time {
+	cooldown := max(wait, rateLimitMinBackoff)
 	t.armMu.Lock()
 	defer t.armMu.Unlock()
 	if t.until.Load() != sentUntil {
 		// Same burst: honour this response's own Retry-After but don't
 		// count it as another consecutive throttle.
 		t.setUntil(time.Now().Add(min(cooldown, rateLimitMaxBackoff)))
-		return resp, nil
+		return time.Unix(0, t.until.Load())
 	}
 	// Exponential backoff: each consecutive 429 doubles the base cooldown.
 	// Shift capped so overflow can't produce a negative Duration; the
@@ -127,7 +137,17 @@ func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error
 		cooldown = rateLimitMaxBackoff
 	}
 	t.setUntil(time.Now().Add(cooldown))
-	return resp, nil
+	return time.Unix(0, t.until.Load())
+}
+
+// throttled records a throttle that an inline retry loop could not clear:
+// three short Retry-After 429s in a row for one request are a sustained
+// throttle, not a blip, so the cooldown is armed and escalated like any
+// consecutive 429. The deadline the loop started under is not known here;
+// a cooldown armed meanwhile by another request is extended, not
+// escalated again, as for a burst. Returns the deadline in force.
+func (t *rateLimitTransport) throttled() time.Time {
+	return t.arm(t.until.Load(), 0)
 }
 
 func (t *rateLimitTransport) setUntil(deadline time.Time) {

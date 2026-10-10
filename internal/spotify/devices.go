@@ -31,6 +31,11 @@ func (c *Client) GetDevices(ctx context.Context) ([]Device, error) {
 // whether the returned device is the configured preferred device.
 // When activeOnly is true, only a device currently marked active by Spotify is
 // returned; an error is returned if no device is active.
+//
+// A device Spotify lists without an ID is never returned, since no command
+// can target it. The last-resort pick (no preferred match, nothing active)
+// also skips restricted devices, which accept no Web API commands at all;
+// when nothing else is listed the error says so.
 func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, active bool, preferred bool, err error) {
 	devices, err := c.sp.PlayerDevices(ctx)
 	if err != nil {
@@ -42,20 +47,25 @@ func (c *Client) FindDevice(ctx context.Context, activeOnly bool) (id string, ac
 	// When not restricted to active-only, prefer the configured device.
 	if !activeOnly && c.preferredDevice != "" {
 		for _, d := range devices {
-			if d.Name == c.preferredDevice {
+			if d.Name == c.preferredDevice && d.ID != "" {
 				return string(d.ID), d.Active, true, nil
 			}
 		}
 	}
 	for _, d := range devices {
-		if d.Active {
+		if d.Active && d.ID != "" {
 			return string(d.ID), true, false, nil
 		}
 	}
 	if activeOnly {
 		return "", false, false, fmt.Errorf("no active Spotify device found")
 	}
-	return string(devices[0].ID), false, false, nil
+	for _, d := range devices {
+		if d.ID != "" && !d.Restricted {
+			return string(d.ID), false, false, nil
+		}
+	}
+	return "", false, false, fmt.Errorf("no controllable Spotify device found — open Spotify on any device")
 }
 
 // TransferPlayback moves active playback to the given device. If play is

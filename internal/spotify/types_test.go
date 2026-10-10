@@ -17,6 +17,8 @@ func TestHasMore(t *testing.T) {
 		{10, 10, 20, false},
 		{0, 0, 0, false},
 		{5, 5, 11, true},
+		// An empty page with a stale total must end the paging loop.
+		{40, 0, 60, false},
 	}
 	for _, tt := range tests {
 		got := hasMore(tt.offset, tt.count, tt.total)

@@ -263,3 +263,34 @@ func TestSearch_CleansText(t *testing.T) {
 		})
 	}
 }
+
+// Spotify's search endpoint serves at most 1000 results (offset+limit must
+// stay at or below 1000), so paging must stop at the cap even when total
+// claims more; the next request would be a 400.
+func TestSearch_StopsAtOffsetCap(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		offset, n int
+		want      bool
+	}{
+		{980, 10, true},  // ends at 990, still under the cap
+		{990, 10, false}, // ends exactly at the cap
+		{995, 5, false},
+	} {
+		items := make([]map[string]any, tc.n)
+		for i := range items {
+			items[i] = map[string]any{"id": "t", "uri": "spotify:track:t", "name": "T"}
+		}
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			json.MarshalWrite(w, map[string]any{"tracks": map[string]any{"offset": tc.offset, "total": 50000, "items": items}})
+		})
+		_, more, err := c.SearchTracks(context.Background(), "q", tc.offset, tc.n)
+		if err != nil {
+			t.Fatalf("offset %d: %v", tc.offset, err)
+		}
+		if more != tc.want {
+			t.Errorf("offset %d + %d items: more = %v, want %v", tc.offset, tc.n, more, tc.want)
+		}
+	}
+}
