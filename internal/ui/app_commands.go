@@ -194,3 +194,11 @@ func (m Model) withDeviceFlip(fn func(ctx context.Context, client *spotify.Clien
 		return playbackResultMsg{err: fn(fnCtx, client, deviceID), op: op, flip: flip}
 	}
 }
+
+// quitOnKey logs which key ended the session and quits. bootstrap logs
+// the exit itself, but a quit key and a SIGTERM both reach it as a plain
+// quit; this line is what says a key did it.
+func quitOnKey(key string) tea.Cmd {
+	log.Printf("[ui] quit: %s pressed", key)
+	return tea.Quit
+}

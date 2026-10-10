@@ -26,7 +26,7 @@ func (m Model) handleKeyMsg(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "ctrl+c", "q":
-		return m, tea.Quit
+		return m, quitOnKey(msg.String())
 	}
 	if m, cmd, handled := m.handlePlaybackKey(msg); handled {
 		return m, cmd
@@ -43,7 +43,7 @@ func (m Model) handleOverlayKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		case "h", "?", "esc":
 			m.showHelp = false
 		case "ctrl+c", "q":
-			return m, tea.Quit, true
+			return m, quitOnKey(msg.String()), true
 		}
 		return m, nil, true
 	}
@@ -65,7 +65,7 @@ func (m Model) handleOverlayKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 				return m, m.transferDevice(dev), true
 			}
 		case "ctrl+c", "q":
-			return m, tea.Quit, true
+			return m, quitOnKey(msg.String()), true
 		}
 		return m, nil, true
 	}
@@ -254,7 +254,7 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 func handleSearchKey(sc searchCtx, msg tea.KeyMsg) (tea.Cmd, bool) {
 	switch msg.String() {
 	case "ctrl+c":
-		return tea.Quit, true
+		return quitOnKey(msg.String()), true
 	case "esc":
 		sc.close()
 		return nil, true

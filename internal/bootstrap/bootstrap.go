@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"os"
 	"os/signal"
 	"path/filepath"
 	"sync/atomic"
@@ -143,13 +145,29 @@ func Run() error {
 	// the terminal is restored and every deferred cleanup runs.
 	hupCtx, stopHup := signal.NotifyContext(ctx, syscall.SIGHUP)
 	defer stopHup()
+	// bubbletea turns SIGTERM into an ordinary quit, which would look the
+	// same as pressing q in the exit log; a second subscriber tells them
+	// apart. Notify delivers the signal to every registered channel.
+	termCh := make(chan os.Signal, 1)
+	signal.Notify(termCh, syscall.SIGTERM)
+	defer signal.Stop(termCh)
 	p := tea.NewProgram(
-		ui.NewModel(ctx, session.Client, opts...),
+		panicLogModel{inner: ui.NewModel(ctx, session.Client, opts...)},
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 		tea.WithContext(hupCtx),
 	)
 	_, err = p.Run()
+	// Say why the TUI returned before the cleanups run: their own lines
+	// ("[librespot] stopping") are the same on every path, so without
+	// this the log cannot tell a quit from a signal or a crash.
+	terminated := false
+	select {
+	case <-termCh:
+		terminated = true
+	default:
+	}
+	log.Printf("[tuify] exiting: %s", exitReason(err, tokenRevoked.Load(), hupCtx.Err() != nil && ctx.Err() == nil, terminated))
 	// Cancel now rather than via defer: the deferred cleanups (librespot
 	// Stop can wait up to 5s) run before a deferred cancel would, so
 	// in-flight Cmds, the reconnect handler and token refresh would keep

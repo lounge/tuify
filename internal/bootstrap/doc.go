@@ -27,5 +27,11 @@
 // explicit false always wins.
 //
 // Logging: setupLog moves the previous run's debug.log to debug.log.1 and
-// opens a fresh 0600 debug.log in the config directory.
+// opens a fresh 0600 debug.log in the config directory. When the TUI
+// returns, Run logs one "[tuify] exiting:" line naming why (quit, SIGINT,
+// SIGHUP, SIGTERM, panic, revoked token or another error) before any
+// cleanup runs; the ui package logs the key behind a quit. The UI model
+// is wrapped so a panic in Init, Update, View or one of their commands is
+// logged with its stack, then re-raised so Bubble Tea still restores the
+// terminal: Bubble Tea itself prints a panic only to the terminal.
 package bootstrap
