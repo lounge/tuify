@@ -53,6 +53,14 @@ func newAnalyzer(windowSize int) *analyzer {
 	}
 
 	// Map FFT bins to 64 logarithmically spaced frequency bands (20 Hz – 20 kHz).
+	//
+	// The window bounds the resolution at the low end: at 2048 samples and
+	// 44.1 kHz a bin is 21.5 Hz wide, so bands 0–6 (20–43 Hz) all resolve
+	// to bin 1, band 0 also averaging in bin 0, the DC bin, and band 7
+	// reaches bin 2. Bass (bands 0–7) is therefore two or three distinct
+	// bins repeated, and a DC offset in the PCM lights band 0 on silence.
+	// Band detail below 100 Hz needs a larger window or zero-padding; the
+	// current visualizers do not need it.
 	nyquist := float64(defaultFormat.SampleRate) / 2.0
 	binHz := nyquist / float64(n/2)
 	logMin := math.Log10(20.0)

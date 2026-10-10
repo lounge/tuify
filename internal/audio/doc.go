@@ -12,9 +12,11 @@
 // per-channel peak amplitudes shared-AGC normalized to 0–1, for
 // visualizers (e.g. the VU meter) that need true stereo loudness rather
 // than the post-mix spectral peak. StreamMs is derived from the running
-// sample count: it is the stream time of the current pipe, not the playback
-// position (it is never reset by a track change or seek), so it suits
-// time-based effects but not anything that must line up with the track.
+// count of analyzed samples, so it is exact for the frame it stamps
+// however the pipe's bytes were split across reads: it is the stream time
+// of the current pipe, not the playback position (it is never reset by a
+// track change or seek), so it suits time-based effects but not anything
+// that must line up with the track.
 // PipeReader is safe to call Start/Stop from any goroutine; reads are
 // internally synchronized.
 //

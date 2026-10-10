@@ -591,8 +591,11 @@ func TestBridgeRead_OddReadSizesMatchWholeChunks(t *testing.T) {
 		if got[c].Bands != want.Bands {
 			t.Errorf("frame %d bands differ from a direct Analyze of the same chunk", c)
 		}
-		if wantMs := int64(c+1) * WindowSize * 1000 / int64(defaultFormat.SampleRate); got[c].StreamMs > wantMs+100 || got[c].StreamMs < wantMs {
-			t.Errorf("frame %d StreamMs = %d, want about %d", c, got[c].StreamMs, wantMs)
+		// Exact: stream time counts analyzed chunks, so the 3001-byte reads
+		// (750.25 sample frames each) must not floor a quarter frame away
+		// on every read and drift the stamps behind the audio.
+		if wantMs := streamMsAfter(c + 1); got[c].StreamMs != wantMs {
+			t.Errorf("frame %d StreamMs = %d, want %d", c, got[c].StreamMs, wantMs)
 		}
 	}
 }

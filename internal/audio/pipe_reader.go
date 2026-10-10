@@ -282,13 +282,13 @@ func (pr *PipeReader) storeFrame(fd *FrequencyData) {
 // pipeReaderBridge implements io.Reader for oto. It tees audio data to the
 // FFT analyzer and stores frequency data via the store callback.
 type pipeReaderBridge struct {
-	pipe        io.Reader
-	analyzer    *analyzer
-	format      pCMFormat
-	totalFrames int64   // mono samples read so far
-	accum       []byte  // bytes not yet analyzed; compacted in place, never re-sliced from the front
-	samples     []int16 // decoded chunk, reused across chunks
-	store       func(*FrequencyData)
+	pipe     io.Reader
+	analyzer *analyzer
+	format   pCMFormat
+	frames   int64   // mono sample frames analyzed so far, in whole chunks
+	accum    []byte  // bytes not yet analyzed; compacted in place, never re-sliced from the front
+	samples  []int16 // decoded chunk, reused across chunks
+	store    func(*FrequencyData)
 }
 
 // Read implements io.Reader. oto calls this to get PCM data for playback.
@@ -298,11 +298,6 @@ func (b *pipeReaderBridge) Read(p []byte) (int, error) {
 	if n <= 0 {
 		return n, err
 	}
-
-	// Count mono samples for stream-time tracking.
-	bytesPerFrame := b.format.Channels * (b.format.BitDepth / 8)
-	monoSamples := int64(n / bytesPerFrame)
-	b.totalFrames += monoSamples
 
 	// Accumulate data for FFT analysis.
 	b.accum = append(b.accum, p[:n]...)
@@ -319,7 +314,13 @@ func (b *pipeReaderBridge) Read(p []byte) (int, error) {
 		}
 
 		fd := b.analyzer.Analyze(b.samples)
-		fd.StreamMs = b.totalFrames * 1000 / int64(b.format.SampleRate)
+		// Stream time is counted in whole analyzed chunks, so it is exact
+		// for the frame it stamps and does not depend on how the pipe's
+		// bytes were split across reads. Counting the bytes of each read
+		// instead would floor away a partial sample frame on every
+		// unaligned read, and the stamps would drift behind the audio.
+		b.frames += WindowSize
+		fd.StreamMs = b.frames * 1000 / int64(b.format.SampleRate)
 
 		b.store(&fd)
 
@@ -419,6 +420,14 @@ func defaultPlayerFactory(src io.Reader, format pCMFormat) (player, error) {
 		// Driver init runs asynchronously; oto reports its outcome only
 		// through Err after ready closes. A nil error from NewContext
 		// alone says nothing about whether a device was opened.
+		//
+		// Should ready never close (a driver that hangs in init), this
+		// Do blocks for the life of the process, and so does every later
+		// factory call behind it: createPlayer abandons the goroutine
+		// running the factory, so each librespot restart then parks one
+		// more goroutine here. The growth is per restart, not one-off,
+		// and bounded by the restart count; it is the accepted price of
+		// never letting driver init hold up Stop.
 		<-ready
 		otoCtxErr = otoCtx.Err()
 	})
