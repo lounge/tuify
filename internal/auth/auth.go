@@ -5,7 +5,9 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
+	jsonv1 "encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"log"
@@ -534,7 +536,13 @@ func saveTokenAt(token *oauth2.Token, authorizedAt time.Time) error {
 		return err
 	}
 	st := storedToken{Token: *token, AuthorizedAt: authorizedAt}
-	data, err := json.MarshalIndent(st, "", "  ")
+	// oauth2.Token tags expires_in (an int64) with omitempty, which under
+	// json/v2 semantics no longer omits 0. The v1 omitempty rule keeps
+	// token.json free of a spurious "expires_in": 0 line; the tag lives
+	// upstream so it cannot be switched to omitzero here.
+	data, err := json.Marshal(st,
+		jsontext.Multiline(true), jsontext.WithIndent("  "),
+		jsonv1.OmitEmptyWithLegacySemantics(true))
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,7 @@ package auth
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -74,6 +74,14 @@ func TestSaveAndLoadToken(t *testing.T) {
 	}
 	if parsed["access_token"] != "access-123" {
 		t.Errorf("raw JSON access_token: got %v", parsed["access_token"])
+	}
+	// The on-disk layout is pinned: a zero expires_in must stay omitted
+	// (oauth2.Token tags it omitempty, which json/v2 would write as 0) and
+	// a zero authorized_at is omitzero.
+	for _, key := range []string{"expires_in", "authorized_at"} {
+		if _, ok := parsed[key]; ok {
+			t.Errorf("token.json should omit zero %q, got: %s", key, data)
+		}
 	}
 }
 
