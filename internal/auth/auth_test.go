@@ -6,12 +6,15 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -1011,5 +1014,260 @@ func TestLoadTokenWithAuth_CorruptFile(t *testing.T) {
 	_, _, err := LoadTokenWithAuth()
 	if !errors.Is(err, ErrTokenCorrupt) {
 		t.Errorf("err = %v, want ErrTokenCorrupt", err)
+	}
+}
+
+// --- proxy tests ---
+
+// newProxyRecorder stands in for an HTTPS proxy: it records the CONNECT
+// requests it gets and refuses them, which is enough to tell which
+// clients route through it.
+func newProxyRecorder(t *testing.T) (*httptest.Server, func() []string) {
+	t.Helper()
+	var mu sync.Mutex
+	var targets []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodConnect {
+			mu.Lock()
+			targets = append(targets, r.Host)
+			mu.Unlock()
+		}
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, func() []string {
+		mu.Lock()
+		defer mu.Unlock()
+		return slices.Clone(targets)
+	}
+}
+
+// Token refreshes and API requests must go through the proxy named in the
+// environment, like the login exchange (http.DefaultTransport) already
+// does; a transport without a Proxy field ignores it, and a user behind a
+// corporate proxy could log in and then never reach the API.
+func TestClients_HonorProxyEnvironment(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	proxy, targets := newProxyRecorder(t)
+	t.Setenv("HTTPS_PROXY", proxy.URL)
+	t.Setenv("NO_PROXY", "")
+	t.Setenv("no_proxy", "")
+
+	if resp, err := newRefreshClient().Get("https://accounts.spotify.com/api/token"); err == nil {
+		resp.Body.Close()
+		t.Fatal("refresh request succeeded although the proxy refuses CONNECT")
+	}
+
+	// A token good for an hour, so the request goes straight to the API
+	// transport; the injected refresh client is only there to keep the
+	// startup refresh off the proxy.
+	refresh, _ := newTokenServer(t, refreshOK)
+	tok := &oauth2.Token{AccessToken: "ok", RefreshToken: "r", Expiry: time.Now().Add(time.Hour)}
+	client, _, _, cleanup, err := newSavingClient(t.Context(), NewAuthenticator("id", "http://127.0.0.1:4444/cb"), tok, refresh)
+	if err != nil {
+		t.Fatalf("newSavingClient: %v", err)
+	}
+	defer cleanup()
+	if resp, err := client.Get("https://api.spotify.com/v1/me"); err == nil {
+		resp.Body.Close()
+		t.Fatal("API request succeeded although the proxy refuses CONNECT")
+	}
+
+	want := []string{"accounts.spotify.com:443", "api.spotify.com:443"}
+	if got := targets(); !slices.Equal(got, want) {
+		t.Errorf("CONNECT targets at the proxy = %q, want %q", got, want)
+	}
+}
+
+// --- stop tests ---
+
+// cleanup must not return while the refresh goroutine is still running:
+// bootstrap closes the log file right after it, and a refresh that was
+// mid-flight would log into a closed file.
+func TestStop_WaitsForRefreshGoroutine(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	synctest.Test(t, func(t *testing.T) {
+		entered := make(chan struct{})
+		release := make(chan struct{})
+		ts := &savingTokenSource{
+			base: tokenSourceFunc(func() (*oauth2.Token, error) {
+				close(entered)
+				<-release
+				return &oauth2.Token{AccessToken: "late", Expiry: time.Now().Add(time.Hour)}, nil
+			}),
+			last: &oauth2.Token{AccessToken: "initial", Expiry: time.Now().Add(10 * time.Second)},
+		}
+		ts.startProactiveRefresh(t.Context())
+
+		// The refresh fires 5s before expiry and then blocks in Token().
+		synctest.Sleep(5 * time.Second)
+		<-entered
+
+		stopped := make(chan struct{})
+		go func() {
+			ts.stop()
+			close(stopped)
+		}()
+		synctest.Wait()
+		select {
+		case <-stopped:
+			t.Fatal("stop returned while the refresh goroutine was still inside Token()")
+		default:
+		}
+
+		close(release)
+		<-stopped
+	})
+}
+
+func TestStop_WithoutStartIsANoop(t *testing.T) {
+	ts := &savingTokenSource{}
+	ts.stop()
+}
+
+// --- Login server tests ---
+
+// freePort reserves a loopback port and releases it for login to bind.
+func freePort(t *testing.T) string {
+	t.Helper()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	addr := ln.Addr().String()
+	ln.Close()
+	return addr
+}
+
+// A callback port that is already taken (a second tuify logging in, a
+// stale process) must fail the login before the browser opens: after it,
+// the user authorizes and Spotify redirects to whoever holds the port.
+func TestLogin_PortInUseFailsBeforeBrowserOpens(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ln.Close()
+	redirect := "http://" + ln.Addr().String() + "/callback"
+
+	opened := make(chan string, 1)
+	_, err = login(t.Context(), NewAuthenticator("id", redirect), redirect, func(u string) { opened <- u }, &http.Client{})
+	if err == nil {
+		t.Fatal("login succeeded with the callback port already bound")
+	}
+	if !strings.Contains(err.Error(), "auth server") {
+		t.Errorf("err = %v, want it to name the auth server", err)
+	}
+	select {
+	case u := <-opened:
+		t.Errorf("browser opened on %s although the port was taken", u)
+	default:
+	}
+}
+
+// The whole flow with the browser played by the test: the auth URL it is
+// handed carries the state and the PKCE challenge, a stray hit on the
+// callback is refused, the real redirect completes the exchange with the
+// matching verifier, and the port is free again once login returns.
+func TestLogin_CompletesFromCallback(t *testing.T) {
+	addr := freePort(t)
+	redirect := "http://" + addr + "/callback"
+	a := NewAuthenticator("id", redirect)
+
+	var mu sync.Mutex
+	var exchangeForm url.Values
+	exchangeClient, _ := newTokenServer(t, func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Errorf("ParseForm: %v", err)
+		}
+		mu.Lock()
+		exchangeForm = r.PostForm
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, `{"access_token":"exchanged","token_type":"Bearer","refresh_token":"r","expires_in":3600}`)
+	})
+
+	hit := func(query string) {
+		resp, err := http.Get(redirect + "?" + query)
+		if err != nil {
+			t.Errorf("GET callback: %v", err)
+			return
+		}
+		resp.Body.Close()
+	}
+	var authURL string
+	var browser sync.WaitGroup
+	defer browser.Wait()
+	open := func(u string) {
+		authURL = u
+		parsed, err := url.Parse(u)
+		if err != nil {
+			t.Errorf("auth URL: %v", err)
+			return
+		}
+		state := parsed.Query().Get("state")
+		browser.Go(func() {
+			hit("state=not-this-login&code=stray")
+			hit("state=" + url.QueryEscape(state) + "&code=the-code")
+		})
+	}
+
+	tok, err := login(t.Context(), a, redirect, open, exchangeClient)
+	if err != nil {
+		t.Fatalf("login: %v", err)
+	}
+	if tok.AccessToken != "exchanged" {
+		t.Errorf("AccessToken = %q, want exchanged", tok.AccessToken)
+	}
+
+	parsed, err := url.Parse(authURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := parsed.Query().Get("code_challenge_method"); got != "S256" {
+		t.Errorf("code_challenge_method = %q, want S256", got)
+	}
+	mu.Lock()
+	form := exchangeForm
+	mu.Unlock()
+	if got := form.Get("code"); got != "the-code" {
+		t.Errorf("exchanged code = %q, want the-code (the stray hit must not have been exchanged)", got)
+	}
+	if challenge := parsed.Query().Get("code_challenge"); generateCodeChallenge(form.Get("code_verifier")) != challenge {
+		t.Errorf("exchange verifier does not match the auth URL's challenge %q", challenge)
+	}
+
+	// The callback server is shut down with the login, so the port can be
+	// bound again right away.
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Errorf("callback port still held after login returned: %v", err)
+	} else {
+		ln.Close()
+	}
+}
+
+// Cancelling the login's context ends it and releases the port.
+func TestLogin_CancelReleasesPort(t *testing.T) {
+	addr := freePort(t)
+	redirect := "http://" + addr + "/callback"
+	ctx, cancel := context.WithCancel(t.Context())
+
+	opened := make(chan struct{}, 1)
+	open := func(string) {
+		opened <- struct{}{}
+		cancel()
+	}
+	_, err := login(ctx, NewAuthenticator("id", redirect), redirect, open, &http.Client{})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
+	}
+	<-opened
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		t.Errorf("callback port still held after login was cancelled: %v", err)
+	} else {
+		ln.Close()
 	}
 }

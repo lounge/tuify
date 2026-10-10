@@ -23,6 +23,7 @@ import (
 
 	"github.com/lounge/tuify/internal/config"
 	spotifyauth "github.com/zmb3/spotify/v2/auth"
+	"golang.org/x/net/http/httpproxy"
 	"golang.org/x/oauth2"
 )
 
@@ -69,6 +70,7 @@ type savingTokenSource struct {
 	base   oauth2.TokenSource
 	last   *oauth2.Token
 	cancel context.CancelFunc
+	done   chan struct{} // closed once the proactive-refresh goroutine has exited
 
 	// saveMu serializes token.json writes. It is taken only when the token
 	// changed, so the per-request path (unchanged token) never waits on disk
@@ -169,12 +171,13 @@ func (s *savingTokenSource) notifySaveErr(err error) {
 
 // startProactiveRefresh runs a background goroutine that refreshes the token
 // before it expires, preventing request-time refresh blocking. The goroutine
-// exits when the context is cancelled. Call the returned cancel function (also
-// stored as s.cancel) to stop the goroutine.
+// exits when the context is cancelled; stop cancels it and waits for that.
 func (s *savingTokenSource) startProactiveRefresh(ctx context.Context) {
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
+	s.done = make(chan struct{})
 	go func() {
+		defer close(s.done)
 		retry := proactiveRetryMin
 		for {
 			s.mu.Lock()
@@ -226,6 +229,61 @@ func (s *savingTokenSource) startProactiveRefresh(ctx context.Context) {
 	}()
 }
 
+// stop ends the proactive-refresh goroutine and returns once it has
+// exited, so nothing from this package logs after the caller has moved on
+// (bootstrap closes the log file right after the session cleanup). A
+// refresh request in flight is bound to the context the goroutine was
+// started with; cancelling that first keeps the wait short.
+func (s *savingTokenSource) stop() {
+	if s.cancel == nil {
+		return
+	}
+	s.cancel()
+	<-s.done
+}
+
+// proxyFromEnvironment returns a Transport.Proxy that honors HTTP_PROXY,
+// HTTPS_PROXY and NO_PROXY, like http.DefaultTransport. It reads the
+// variables when the client is built rather than once per process as
+// http.ProxyFromEnvironment does, which is what lets a test set them.
+func proxyFromEnvironment() func(*http.Request) (*url.URL, error) {
+	proxy := httpproxy.FromEnvironment().ProxyFunc()
+	return func(req *http.Request) (*url.URL, error) {
+		return proxy(req.URL)
+	}
+}
+
+// newRefreshClient returns the client oauth2 refreshes tokens with.
+// Without one, refreshes use http.DefaultClient (no timeouts) and a
+// hanging refresh blocks every API call behind the oauth2 mutex.
+func newRefreshClient() *http.Client {
+	return &http.Client{
+		Timeout: 15 * time.Second,
+		Transport: &http.Transport{
+			Proxy:                 proxyFromEnvironment(),
+			TLSHandshakeTimeout:   10 * time.Second,
+			ResponseHeaderTimeout: 10 * time.Second,
+		},
+	}
+}
+
+// newAPITransport returns the transport API requests go out on. Polls
+// arrive every few seconds, so connections are kept alive between them
+// instead of paying a TCP and TLS handshake per request; the dial and
+// header timeouts bound a connection that has gone stale.
+func newAPITransport() *http.Transport {
+	return &http.Transport{
+		Proxy: proxyFromEnvironment(),
+		DialContext: (&net.Dialer{
+			Timeout: 10 * time.Second,
+		}).DialContext,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 15 * time.Second,
+		IdleConnTimeout:       90 * time.Second,
+		MaxIdleConns:          4,
+	}
+}
+
 // NewAuthenticator returns a PKCE authenticator for clientID with the
 // scopes tuify needs: reading and controlling playback, and reading the
 // user's playlists and saved shows. redirectURL must match one registered
@@ -247,8 +305,9 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 // NewSavingClient creates an HTTP client that auto-refreshes OAuth tokens
 // and persists them to disk on each refresh.
 //
-// cleanup stops the proactive-refresh goroutine; callers must invoke it on
-// shutdown. saveErrCh emits non-fatal problems (buffered, lossy on full) so
+// cleanup stops the proactive-refresh goroutine and returns once it has
+// exited; callers must invoke it on shutdown, after cancelling ctx so a
+// refresh in flight is cut short. saveErrCh emits non-fatal problems (buffered, lossy on full) so
 // the caller can surface them to the user: token.json write failures, and
 // a failed refresh at startup that is not a revocation. revokedCh fires
 // exactly once if Spotify rejects the refresh token as permanently invalid
@@ -259,6 +318,9 @@ func NewAuthenticator(clientID, redirectURL string) *spotifyauth.Authenticator {
 //
 // ctx is the parent lifetime: when it is cancelled, the proactive-refresh
 // goroutine exits and in-flight oauth2 refresh requests are cancelled too.
+//
+// Both the returned client and the one refreshes go through honor the
+// HTTP_PROXY, HTTPS_PROXY and NO_PROXY environment variables.
 func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *oauth2.Token) (
 	client *http.Client,
 	saveErrCh <-chan error,
@@ -266,17 +328,7 @@ func NewSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *o
 	cleanup func(),
 	err error,
 ) {
-	// Provide a timeout-configured client for oauth2 token refresh requests.
-	// Without this, token refreshes use http.DefaultClient (no timeouts) and
-	// a hanging refresh blocks ALL API calls behind the oauth2 mutex.
-	refreshClient := &http.Client{
-		Timeout: 15 * time.Second,
-		Transport: &http.Transport{
-			TLSHandshakeTimeout:   10 * time.Second,
-			ResponseHeaderTimeout: 10 * time.Second,
-		},
-	}
-	return newSavingClient(ctx, a, token, refreshClient)
+	return newSavingClient(ctx, a, token, newRefreshClient())
 }
 
 // newSavingClient is NewSavingClient with the token-refresh HTTP client
@@ -317,31 +369,29 @@ func newSavingClient(ctx context.Context, a *spotifyauth.Authenticator, token *o
 		log.Printf("[auth] token valid until %v", freshTok.Expiry.Local().Format("15:04:05"))
 	}
 	ts.startProactiveRefresh(ctx)
-	transport := &http.Transport{
-		DialContext: (&net.Dialer{
-			Timeout: 10 * time.Second,
-		}).DialContext,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ResponseHeaderTimeout: 15 * time.Second,
-		DisableKeepAlives:     true,
-	}
-	cleanup := func() {
-		if ts.cancel != nil {
-			ts.cancel()
-		}
-	}
 	return &http.Client{
 		Transport: &oauth2.Transport{
 			Source: ts,
-			Base:   transport,
+			Base:   newAPITransport(),
 		},
-	}, saveErrCh, revokedCh, cleanup, nil
+	}, saveErrCh, revokedCh, ts.stop, nil
 }
 
 // Login runs the interactive PKCE flow: spins up a local callback server,
 // opens the browser, and blocks until the user completes auth. Cancel ctx
 // to abort a login that is stuck waiting for the browser callback.
+//
+// The callback port is bound before the browser opens, so a port that is
+// already taken fails the login right away instead of after the user has
+// authorized and Spotify has redirected to whoever holds it.
 func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string) (*oauth2.Token, error) {
+	return login(ctx, a, redirectURL, openBrowser, &http.Client{Timeout: exchangeClientTimeout})
+}
+
+// login is Login with the browser opener and the exchange's HTTP client
+// injected, so tests can answer the callback themselves and point the
+// code-for-token exchange at a stub.
+func login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string, open func(url string), exchangeClient *http.Client) (*oauth2.Token, error) {
 	parsed, err := url.Parse(redirectURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid redirect URL: %w", err)
@@ -384,13 +434,19 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
-	exchange := newExchange(ctx, a, verifier, &http.Client{Timeout: exchangeClientTimeout})
+	exchange := newExchange(ctx, a, verifier, exchangeClient)
 	mux.Handle(callbackPath, callbackHandler(state, exchange, tokenCh, errCh))
 
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to start auth server: %w", err)
+	}
+	served := make(chan struct{})
 	go func() {
-		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		defer close(served)
+		if err := server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			select {
-			case errCh <- fmt.Errorf("failed to start auth server: %w", err):
+			case errCh <- fmt.Errorf("auth server failed: %w", err):
 			default:
 			}
 		}
@@ -399,13 +455,19 @@ func Login(ctx context.Context, a *spotifyauth.Authenticator, redirectURL string
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 		defer cancel()
 		_ = server.Shutdown(ctx) // best-effort; login handler already returned
+		// Shutdown only closes listeners Serve has already registered. A
+		// login cancelled before the goroutine got that far would leave the
+		// port bound until Serve noticed, so close it here and wait for
+		// Serve to return: the port is free once Login returns.
+		_ = ln.Close()
+		<-served
 	}()
 
 	authURL := a.AuthURL(state,
 		oauth2.SetAuthURLParam("code_challenge_method", "S256"),
 		oauth2.SetAuthURLParam("code_challenge", challenge),
 	)
-	openBrowser(authURL)
+	open(authURL)
 	fmt.Fprintln(os.Stderr, "Waiting for authentication...")
 	fmt.Fprintf(os.Stderr, "If the browser doesn't open, visit:\n  %s\n", authURL)
 
