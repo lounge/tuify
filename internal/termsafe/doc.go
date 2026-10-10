@@ -9,6 +9,12 @@
 // the clipboard, others retitle the window, clear the screen or plant
 // hyperlinks.
 //
+// Clean also drops Unicode format characters. They execute nothing, but a
+// bidirectional override makes a name read backwards and zero-width
+// characters let two entries in the device list look identical. The
+// zero-width joiner and non-joiner stay, since emoji sequences and the
+// Arabic, Persian and Indic scripts depend on them.
+//
 // Clean is applied where the spotify and lyrics packages map API responses
 // into their own types, so everything above them can treat those strings
 // as plain text. It is not applied in View; rendering stays free of it.
