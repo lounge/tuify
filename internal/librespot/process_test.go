@@ -734,3 +734,113 @@ func TestLaunch_LogsOutputWrittenBeforeExit(t *testing.T) {
 		t.Error("stderr reader hit a closed pipe")
 	}
 }
+
+// Credential values must not land in debug.log: the launch line is logged
+// with the value after --username (and the other credential flags
+// librespot takes) replaced. The argument vector itself is left alone.
+func TestRedactArgs(t *testing.T) {
+	t.Parallel()
+
+	args := []string{
+		"--name", "tuify",
+		"--username", "alice@example.com",
+		"-u", "alice",
+		"--password", "hunter2",
+		"-p", "x",
+		"--access-token", "tok",
+		"-k", "tok2",
+		"--bitrate", "320",
+	}
+	want := []string{
+		"--name", "tuify",
+		"--username", "<redacted>",
+		"-u", "<redacted>",
+		"--password", "<redacted>",
+		"-p", "<redacted>",
+		"--access-token", "<redacted>",
+		"-k", "<redacted>",
+		"--bitrate", "320",
+	}
+	got := redactArgs(args)
+	if !slices.Equal(got, want) {
+		t.Errorf("redactArgs = %q, want %q", got, want)
+	}
+	if args[3] != "alice@example.com" {
+		t.Error("redactArgs modified its argument")
+	}
+	// A credential flag at the end with no value is left alone.
+	if got := redactArgs([]string{"--username"}); !slices.Equal(got, []string{"--username"}) {
+		t.Errorf("trailing flag: got %q", got)
+	}
+}
+
+// The launch line goes through redactArgs: the configured username must
+// not appear in the log, the flag must.
+//
+// Not parallel: it redirects the global logger.
+func TestLaunch_RedactsUsernameInLog(t *testing.T) {
+	script := fakeLibrespot(t, "exit 0\n")
+
+	var logs logBuffer
+	prev := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	p := fastProcess(t, script)
+	p.config.Username = "alice@example.com"
+	if err := p.Start(); err != nil {
+		t.Fatal(err)
+	}
+	p.Stop()
+
+	out := logs.String()
+	if strings.Contains(out, "alice@example.com") {
+		t.Errorf("username was logged:\n%s", out)
+	}
+	if !strings.Contains(out, "--username <redacted>") {
+		t.Errorf("launch line does not show the redacted flag:\n%s", out)
+	}
+}
+
+// Stop can land between the restart timer firing and the launch it
+// triggers; the launch then fails because the process is stopped, and
+// that must end the cycle quietly rather than be logged as a failed
+// relaunch that will be retried.
+//
+// Not parallel: it redirects the global logger.
+func TestScheduleRestart_StopDuringDelayIsQuiet(t *testing.T) {
+	var logs logBuffer
+	prev := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(prev) })
+
+	synctest.Test(t, func(t *testing.T) {
+		p := NewProcess(Config{BinaryPath: filepath.Join(t.TempDir(), "missing-librespot")})
+		p.restartBaseDelay = 10 * time.Millisecond
+		p.restartMaxDelay = 10 * time.Millisecond
+
+		returned := make(chan struct{})
+		go func() {
+			p.scheduleRestart(time.Now())
+			close(returned)
+		}()
+		synctest.Wait() // scheduleRestart is now waiting on its timer
+
+		// Stop's state change without its stopCh close, so the timer wins
+		// the select and launch is the one to see the stopped process.
+		p.mu.Lock()
+		p.stopped = true
+		p.mu.Unlock()
+
+		synctest.Sleep(p.restartMaxDelay)
+		synctest.Wait()
+		select {
+		case <-returned:
+		default:
+			t.Fatal("scheduleRestart did not return after launch saw Stop")
+		}
+		if out := logs.String(); strings.Contains(out, "retrying") || strings.Contains(out, "restart failed") {
+			t.Errorf("a restart that lost the race with Stop was logged as a failed relaunch:\n%s", out)
+		}
+	})
+}

@@ -2,11 +2,13 @@ package librespot
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -113,12 +115,38 @@ func (p *Process) args() []string {
 	return args
 }
 
+// credentialFlags are the librespot flags whose value identifies or
+// authenticates the user; redactArgs hides their values in the log.
+var credentialFlags = map[string]bool{
+	"--username": true, "-u": true,
+	"--password": true, "-p": true,
+	"--access-token": true, "-k": true,
+}
+
+// redactArgs returns a copy of args for logging, with the value after
+// each credential flag replaced, so a debug.log attached to a bug report
+// does not carry the user's Spotify account. args itself is unchanged.
+func redactArgs(args []string) []string {
+	out := slices.Clone(args)
+	for i := 0; i+1 < len(out); i++ {
+		if credentialFlags[out[i]] {
+			out[i+1] = "<redacted>"
+			i++
+		}
+	}
+	return out
+}
+
 // Start launches the librespot process. If the process crashes, it will be
 // automatically restarted with backoff proportional to how quickly it died
 // (2s–30s). The delay resets after 60 seconds of stable uptime.
 func (p *Process) Start() error {
 	return p.launch()
 }
+
+// errStopped is returned by launch once Stop has been called, so a restart
+// that lost the race with Stop can tell that from a launch failure.
+var errStopped = errors.New("librespot process has been stopped")
 
 // launch starts the underlying OS process (no restart logic here).
 func (p *Process) launch() error {
@@ -129,7 +157,7 @@ func (p *Process) launch() error {
 		return fmt.Errorf("librespot already running")
 	}
 	if p.stopped {
-		return fmt.Errorf("librespot process has been stopped")
+		return errStopped
 	}
 
 	args := p.args()
@@ -182,7 +210,7 @@ func (p *Process) launch() error {
 	// the next child or announce a reconnect for it.
 	p.cmd.Stderr = logTo("[librespot:err]", func(line string) { p.monitorStderr(cmd, line) })
 
-	log.Printf("[librespot] starting: %s %v", p.config.BinaryPath, args)
+	log.Printf("[librespot] starting: %s %v", p.config.BinaryPath, redactArgs(args))
 
 	if err := p.cmd.Start(); err != nil {
 		if stdout != nil {
@@ -282,6 +310,11 @@ func (p *Process) scheduleRestart(lastStart time.Time) {
 
 		err := p.launch()
 		if err == nil {
+			return
+		}
+		if errors.Is(err, errStopped) {
+			// Stop landed between the timer firing and this launch. The
+			// cycle is over; it is not a failed relaunch to retry.
 			return
 		}
 		delay = p.restartMaxDelay

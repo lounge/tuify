@@ -7,7 +7,9 @@
 // an interrupt (SIGINT), waits up to 5s, then kills it, and suppresses any
 // further restarts.
 //
-// Output: stderr is logged and scanned for events. OnReconnect fires after
+// Output: the launch command is logged with credential values (the
+// --username argument) redacted. stderr is logged and scanned for
+// events. OnReconnect fires after
 // librespot authenticates (initially and after every restart; used to
 // transfer playback back to the preferred device); OnInactive fires when
 // the device has been idle long enough that the UI may want to release it;
@@ -22,7 +24,8 @@
 // delay between 2s and 30s: the sooner after starting it died, the longer
 // the wait; a run that stayed up for a minute restarts after 2s. A relaunch
 // that fails outright (the binary cannot be started) is retried every 30s
-// until Stop.
+// until Stop. A Stop that lands while a relaunch is pending ends the cycle
+// quietly; it is not logged as a failed relaunch.
 //
 // On Linux the child also gets a parent-death signal, so it is terminated
 // even if tuify is killed without running Stop.
