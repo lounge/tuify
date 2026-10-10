@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -55,7 +55,7 @@ func TestLoadLyrics_CachesSyncedLinesAndSendsDuration(t *testing.T) {
 			mu.Lock()
 			gotDuration = r.URL.Query().Get("duration")
 			mu.Unlock()
-			json.NewEncoder(w).Encode(map[string]any{
+			json.MarshalWrite(w, map[string]any{
 				"artistName":   "Band",
 				"duration":     200.0,
 				"instrumental": false,

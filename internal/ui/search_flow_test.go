@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -52,7 +52,7 @@ func (s *searchStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		body = map[string]any{q.Get("type") + "s": page}
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(body)
+	_ = json.MarshalWrite(w, body)
 }
 
 func newStubSearchView(t *testing.T, total int) (*searchView, *searchStub) {
