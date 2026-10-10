@@ -173,8 +173,10 @@ func (m Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pushView(ev)
 		return m, ev.Init()
 	case playItemIntent:
+		m.client.SetPlayIntent(true)
 		return m, m.playItem(msg.itemURI, msg.contextURI)
 	case playQueueIntent:
+		m.client.SetPlayIntent(true)
 		return m, m.playQueue(msg.uris)
 	}
 

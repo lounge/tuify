@@ -109,10 +109,14 @@ func startLibrespot(ctx context.Context, rc runtimeConfig, client *spotify.Clien
 // reconnectSettleDelay is how long reconnectHandler waits before each
 // device lookup: librespot logs the reconnect a moment before the device
 // shows up in Spotify's list. reconnectAttempts bounds how many lookups
-// a single reconnect makes before giving up.
+// a single reconnect makes before giving up. resumeCheckDelay is how long
+// after a transfer the handler looks whether playback really started, and
+// resumeChecks bounds how many times it looks.
 const (
 	reconnectSettleDelay = 2 * time.Second
 	reconnectAttempts    = 3
+	resumeCheckDelay     = 3 * time.Second
+	resumeChecks         = 2
 )
 
 // reconnectHandler returns a callback for librespot reconnection that
@@ -126,63 +130,144 @@ const (
 // whatever the user has open instead of on tuify. While the device is not
 // listed the handler waits and looks again, up to reconnectAttempts times.
 //
+// Whether the transfer asks Spotify to play follows the user's intent
+// (spotify.Client.PlayIntent): a pause the user made survives the
+// reconnect. When the user wanted playback running, the handler then
+// checks that it did start and resumes it if not: after a broken session
+// Spotify can accept a transfer with play=true and leave the restarted
+// librespot paused on the loaded track.
+//
 // librespot can re-authenticate several times in quick succession, and each
-// time the callback runs in its own goroutine. Only one runs at a time;
-// triggers that arrive meanwhile are dropped, since the running one will
-// transfer anyway. Two overlapping transfers with play=true could resume
-// playback the user had just paused.
+// time the callback runs in its own goroutine. Only one transfer runs at a
+// time; triggers that arrive meanwhile are dropped, since the running one
+// will transfer anyway. Two overlapping transfers with play=true could
+// resume playback the user had just paused. The playback check runs after
+// that guard is released, so a restart during the check still gets its
+// transfer, and a newer reconnect ends an older check.
 func reconnectHandler(parent context.Context, client *spotify.Client, deviceName string) func() {
 	var running atomic.Bool
+	var generation atomic.Uint64
 	return func() {
 		if !running.CompareAndSwap(false, true) {
 			log.Printf("[librespot] reconnect: transfer already in progress, skipping")
 			return
 		}
-		defer running.Store(false)
-		for attempt := 1; attempt <= reconnectAttempts; attempt++ {
-			select {
-			case <-time.After(reconnectSettleDelay):
-			case <-parent.Done():
-				return
-			}
-			if client.DeviceOverridden.Load() {
-				log.Printf("[librespot] reconnect: device was manually switched, skipping transfer")
-				return
-			}
-			if transferToPreferred(parent, client, deviceName, attempt) {
-				return
-			}
+		gen := generation.Add(1)
+		devID, resume := transferWithRetries(parent, client, deviceName)
+		running.Store(false)
+		if resume {
+			superseded := func() bool { return generation.Load() != gen }
+			ensurePlaying(parent, client, deviceName, devID, superseded)
 		}
-		log.Printf("[librespot] reconnect: %s not listed after %d attempts, giving up", deviceName, reconnectAttempts)
 	}
 }
 
+// transferWithRetries waits for the preferred device to be listed and
+// transfers playback to it. It returns the device ID and whether the
+// transfer was made for playback the user wants running, in which case
+// the caller checks that it started.
+func transferWithRetries(parent context.Context, client *spotify.Client, deviceName string) (devID string, resume bool) {
+	for attempt := 1; attempt <= reconnectAttempts; attempt++ {
+		select {
+		case <-time.After(reconnectSettleDelay):
+		case <-parent.Done():
+			return "", false
+		}
+		if client.DeviceOverridden.Load() {
+			log.Printf("[librespot] reconnect: device was manually switched, skipping transfer")
+			return "", false
+		}
+		if devID, settled, resume := transferToPreferred(parent, client, deviceName, attempt); settled {
+			return devID, resume
+		}
+	}
+	log.Printf("[librespot] reconnect: %s not listed after %d attempts, giving up", deviceName, reconnectAttempts)
+	return "", false
+}
+
 // transferToPreferred looks the preferred device up and transfers
-// playback to it. It reports whether the reconnect is settled: true once
-// a transfer was attempted or a manual device switch made it moot, false
-// when the device is not listed yet or the lookup failed, so the caller
-// can try again. The override is checked again after the lookup, so a
-// switch the user makes while the device list is in flight still wins.
-func transferToPreferred(parent context.Context, client *spotify.Client, deviceName string, attempt int) bool {
+// playback to it. settled reports whether the reconnect is done: true
+// once a transfer was attempted or a manual device switch made it moot,
+// false when the device is not listed yet or the lookup failed, so the
+// caller can try again. The override is checked again after the lookup,
+// so a switch the user makes while the device list is in flight still
+// wins. resume is true when a transfer succeeded for playback the user
+// wants running (PlayIntentPlaying); an unknown intent, as at startup,
+// still transfers with play=true but is not followed up.
+func transferToPreferred(parent context.Context, client *spotify.Client, deviceName string, attempt int) (devID string, settled, resume bool) {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 	devID, _, preferred, err := client.FindDevice(ctx, false)
 	if err != nil {
 		log.Printf("[librespot] reconnect: could not list devices (attempt %d/%d): %v", attempt, reconnectAttempts, err)
-		return false
+		return "", false, false
 	}
 	if !preferred {
 		log.Printf("[librespot] reconnect: %s not listed yet (attempt %d/%d)", deviceName, attempt, reconnectAttempts)
-		return false
+		return "", false, false
 	}
 	if client.DeviceOverridden.Load() {
 		log.Printf("[librespot] reconnect: device was manually switched during lookup, skipping transfer")
+		return "", true, false
+	}
+	intent := client.PlayIntent()
+	play := intent != spotify.PlayIntentPaused
+	if err := client.TransferPlayback(ctx, devID, play); err != nil {
+		log.Printf("[librespot] reconnect: transfer playback failed: %v", err)
+		return devID, true, false
+	}
+	log.Printf("[librespot] reconnect: playback transferred to %s (play=%v)", deviceName, play)
+	return devID, true, intent == spotify.PlayIntentPlaying
+}
+
+// ensurePlaying checks, after a transfer made for playback the user wants
+// running, that the preferred device is actually playing, and resumes it
+// when it is not. It looks up to resumeChecks times, resumeCheckDelay
+// apart, and stops early once playback runs, the root context ends, a
+// newer reconnect supersedes it, the user switches device, or the user's
+// intent is no longer to play (they paused meanwhile).
+func ensurePlaying(parent context.Context, client *spotify.Client, deviceName, devID string, superseded func() bool) {
+	for check := 1; check <= resumeChecks; check++ {
+		select {
+		case <-time.After(resumeCheckDelay):
+		case <-parent.Done():
+			return
+		}
+		if superseded() || client.DeviceOverridden.Load() || client.PlayIntent() != spotify.PlayIntentPlaying {
+			return
+		}
+		if resumeIfPaused(parent, client, deviceName, devID, check) {
+			return
+		}
+	}
+	log.Printf("[librespot] reconnect: %s still not playing after %d checks", deviceName, resumeChecks)
+}
+
+// resumeIfPaused reads the player state once and resumes playback on
+// devID if it is paused. It reports whether the check is done: playback
+// is running, or it is on another device and none of the handler's
+// business.
+func resumeIfPaused(parent context.Context, client *spotify.Client, deviceName, devID string, check int) bool {
+	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
+	defer cancel()
+	state, err := client.GetPlayerState(ctx)
+	if err != nil {
+		log.Printf("[librespot] reconnect: could not read player state (check %d/%d): %v", check, resumeChecks, err)
+		return false
+	}
+	if state != nil && state.DeviceName != deviceName {
+		log.Printf("[librespot] reconnect: playback is on %s now, not resuming", state.DeviceName)
 		return true
 	}
-	if err := client.TransferPlayback(ctx, devID, true); err != nil {
-		log.Printf("[librespot] reconnect: transfer playback failed: %v", err)
-	} else {
-		log.Printf("[librespot] reconnect: playback transferred to %s", deviceName)
+	if state != nil && state.Playing {
+		if check > 1 {
+			log.Printf("[librespot] reconnect: playback resumed on %s", deviceName)
+		}
+		return true
 	}
-	return true
+	log.Printf("[librespot] reconnect: %s is paused after the transfer, resuming (check %d/%d)", deviceName, check, resumeChecks)
+	if err := client.Resume(ctx, devID); err != nil {
+		log.Printf("[librespot] reconnect: resume failed: %v", err)
+	}
+	return false
 }

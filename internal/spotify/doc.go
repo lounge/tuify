@@ -13,7 +13,10 @@
 // Client is safe for concurrent use — the underlying zmb3 client and
 // http.Client are goroutine-safe, and the atomic DeviceOverridden flag
 // coordinates manual-switch awareness between the UI and the librespot
-// reconnect handler.
+// reconnect handler. The atomic play intent (SetPlayIntent, PlayIntent)
+// does the same for whether the user wants playback running: the UI
+// records play, pause and stop and playback seen running, and the
+// reconnect handler reads it to decide whether to resume.
 //
 // Errors: non-2xx responses surface as *APIError (carrying status and
 // truncated body) from every Client method, whether the call went

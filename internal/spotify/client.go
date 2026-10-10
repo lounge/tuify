@@ -36,6 +36,20 @@ const (
 // its log line.
 const userIDRetryInterval = time.Minute
 
+// PlayIntent is whether the user wants playback running, as far as the
+// UI knows. The librespot reconnect handler reads it to decide whether
+// the playback it moves back to tuify should play.
+type PlayIntent int32
+
+const (
+	// PlayIntentUnknown: nothing has been played or paused yet this run.
+	PlayIntentUnknown PlayIntent = iota
+	// PlayIntentPlaying: the user started playback or it was seen running.
+	PlayIntentPlaying
+	// PlayIntentPaused: the user paused or stopped playback.
+	PlayIntentPaused
+)
+
 // Client wraps the zmb3 Spotify SDK with the higher-level operations tuify
 // needs (playlists, search, player control, device selection). Safe for
 // concurrent use by multiple goroutines.
@@ -57,6 +71,10 @@ type Client struct {
 	// another device in Spotify. Checked by the librespot OnReconnect
 	// callback to avoid stealing playback back.
 	DeviceOverridden atomic.Bool
+
+	// playIntent is whether the user wants playback running: one of the
+	// PlayIntent values, stored as int32. See SetPlayIntent.
+	playIntent atomic.Int32
 }
 
 // New constructs a Client from the auth-wrapped httpClient.
@@ -75,6 +93,23 @@ func New(httpClient *http.Client, opts ...Option) *Client {
 		opt(c)
 	}
 	return c
+}
+
+// SetPlayIntent records whether the user wants playback running. The UI
+// sets it from the user's own play, pause and stop actions and from polls
+// that report playback running; not from a poll that reports it paused,
+// since a dropped librespot session looks exactly like that.
+func (c *Client) SetPlayIntent(playing bool) {
+	v := PlayIntentPaused
+	if playing {
+		v = PlayIntentPlaying
+	}
+	c.playIntent.Store(int32(v))
+}
+
+// PlayIntent reports the last intent SetPlayIntent recorded.
+func (c *Client) PlayIntent() PlayIntent {
+	return PlayIntent(c.playIntent.Load())
 }
 
 // Option configures a Client in New.

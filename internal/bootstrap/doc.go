@@ -19,7 +19,13 @@
 // appear in Spotify's list, so the handler waits a settle delay and looks
 // again a bounded number of times rather than transfer to whichever
 // device FindDevice fell back to; a manual device switch (DeviceOverridden)
-// stops it at any point.
+// stops it at any point. The transfer plays only when the user's play
+// intent (spotify.Client.PlayIntent) is not paused, so a pause survives a
+// reconnect. When the intent is to play, the handler then reads the player
+// state and resumes the device if Spotify left it paused, which happens
+// after a broken session. That check runs outside the one-transfer-at-a-
+// time guard, so a librespot restart during it still transfers, and a
+// newer reconnect ends it.
 //
 // Icons: useNerdFont resolves the nerd_font setting; when it is omitted,
 // the OS font directories are scanned for an installed Nerd Font. This

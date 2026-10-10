@@ -280,6 +280,12 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 		}
 	} else {
 		m.playing = msg.state.Playing
+		if m.playing {
+			// Playback seen running is the user's intent whoever started
+			// it. A paused report is not: a dropped librespot session
+			// reports exactly that, and the reconnect must still resume.
+			m.client.SetPlayIntent(true)
+		}
 		if !m.seekPending {
 			// Until the API catches up to a cached resume position, keep
 			// showing that position instead of the lower reported one.

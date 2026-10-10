@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -26,8 +27,11 @@ type fakeSpotify struct {
 	devices   []string // device-list bodies served in order; the last repeats. Empty: devicesWithTuify.
 	transfers []string // PUT /v1/me/player bodies
 	requests  int
-	lookups   int    // device-list requests
-	onLookup  func() // called while answering each device-list request
+	lookups   int      // device-list requests
+	onLookup  func()   // called while answering each device-list request
+	states    []string // player-state bodies served in order; the last repeats. Empty: 204.
+	stateGets int      // player-state requests
+	resumes   int      // PUT /v1/me/player/play requests
 }
 
 // nextDevices returns the device-list body for the next lookup. The
@@ -60,6 +64,17 @@ func (f *fakeSpotify) RoundTrip(req *http.Request) (*http.Response, error) {
 	case req.Method == http.MethodPut && req.URL.Path == "/v1/me/player":
 		b, _ := io.ReadAll(req.Body)
 		f.transfers = append(f.transfers, strings.TrimSpace(string(b)))
+	case req.Method == http.MethodGet && req.URL.Path == "/v1/me/player":
+		f.stateGets++
+		if len(f.states) > 0 {
+			status = http.StatusOK
+			body = f.states[0]
+			if len(f.states) > 1 {
+				f.states = f.states[1:]
+			}
+		}
+	case req.Method == http.MethodPut && req.URL.Path == "/v1/me/player/play":
+		f.resumes++
 	default:
 		status = http.StatusNotFound
 	}
@@ -231,6 +246,130 @@ func TestReconnectHandler_OverrideDuringLookupSkipsTransfer(t *testing.T) {
 		}
 		if _, transfers := fake.snapshot(); len(transfers) != 0 {
 			t.Errorf("transferred after a manual switch during the lookup: %q", transfers)
+		}
+	})
+}
+
+// playerState is a GET /v1/me/player body for a track on device.
+func playerState(device string, playing bool) string {
+	return fmt.Sprintf(`{"is_playing":%v,"device":{"name":%q},"item":{"name":"Song","uri":"spotify:track:1","duration_ms":290013,"artists":[{"name":"Band"}]}}`, playing, device)
+}
+
+func (f *fakeSpotify) resumeCounts() (stateGets, resumes int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.stateGets, f.resumes
+}
+
+// After a broken session Spotify can accept a transfer with play=true and
+// leave the restarted librespot paused. When the user wanted playback
+// running, the handler checks after the transfer and resumes; a pause the
+// user made is carried across instead, and an unknown intent (startup)
+// keeps the old transfer-and-play behaviour without the follow-up.
+func TestReconnectHandler_PlayIntent(t *testing.T) {
+	tests := []struct {
+		name          string
+		intent        *bool // nil: never set
+		states        []string
+		pauseDuring   bool // the user pauses during the check delay
+		wantPlay      bool
+		wantStateGets int
+		wantResumes   int
+	}{
+		{
+			name:   "paused after the transfer is resumed",
+			intent: new(true), states: []string{playerState("tuify", false), playerState("tuify", true)},
+			wantPlay: true, wantStateGets: 2, wantResumes: 1,
+		},
+		{
+			name:   "already playing is left alone",
+			intent: new(true), states: []string{playerState("tuify", true)},
+			wantPlay: true, wantStateGets: 1, wantResumes: 0,
+		},
+		{
+			name:   "nothing reported is resumed",
+			intent: new(true), states: nil,
+			wantPlay: true, wantStateGets: resumeChecks, wantResumes: resumeChecks,
+		},
+		{
+			name:   "playback on another device is not pulled back",
+			intent: new(true), states: []string{playerState("Phone", false)},
+			wantPlay: true, wantStateGets: 1, wantResumes: 0,
+		},
+		{
+			name:   "a pause during the check wins",
+			intent: new(true), states: []string{playerState("tuify", false)}, pauseDuring: true,
+			wantPlay: true, wantStateGets: 0, wantResumes: 0,
+		},
+		{
+			name:     "a user pause survives the reconnect",
+			intent:   new(false),
+			wantPlay: false, wantStateGets: 0, wantResumes: 0,
+		},
+		{
+			name:     "unknown intent transfers with play and does not follow up",
+			wantPlay: true, wantStateGets: 0, wantResumes: 0,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				fake := &fakeSpotify{states: tc.states}
+				client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
+				if tc.intent != nil {
+					client.SetPlayIntent(*tc.intent)
+				}
+
+				done := make(chan struct{})
+				go func() {
+					reconnectHandler(t.Context(), client, "tuify")()
+					close(done)
+				}()
+				if tc.pauseDuring {
+					synctest.Sleep(reconnectSettleDelay + time.Second)
+					client.SetPlayIntent(false)
+				}
+				<-done
+
+				_, transfers := fake.snapshot()
+				want := fmt.Sprintf(`{"device_ids":["tuify-id"],"play":%v}`, tc.wantPlay)
+				if len(transfers) != 1 || transfers[0] != want {
+					t.Fatalf("transfers = %q, want one %s", transfers, want)
+				}
+				gets, resumes := fake.resumeCounts()
+				if gets != tc.wantStateGets || resumes != tc.wantResumes {
+					t.Errorf("player-state reads = %d, resumes = %d; want %d and %d", gets, resumes, tc.wantStateGets, tc.wantResumes)
+				}
+			})
+		})
+	}
+}
+
+// The 17:39 incident: librespot was killed and restarted while the first
+// reconnect was still checking playback. The restart's reconnect must
+// still transfer, and the older check must stop rather than resume the
+// device the newer reconnect now owns.
+func TestReconnectHandler_RestartDuringCheckStillTransfers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fake := &fakeSpotify{states: []string{playerState("tuify", false)}}
+		client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
+		client.SetPlayIntent(true)
+		handler := reconnectHandler(t.Context(), client, "tuify")
+
+		var wg sync.WaitGroup
+		wg.Go(handler)
+		// First transfer lands at 2s; its first check would run at 5s.
+		synctest.Sleep(reconnectSettleDelay + time.Second)
+		wg.Go(handler)
+		wg.Wait()
+
+		if _, transfers := fake.snapshot(); len(transfers) != 2 {
+			t.Fatalf("transfers = %d, want 2: the restart's reconnect was dropped", len(transfers))
+		}
+		// Only the newer reconnect checks: every read and resume is its own.
+		gets, resumes := fake.resumeCounts()
+		if gets != resumeChecks || resumes != resumeChecks {
+			t.Errorf("player-state reads = %d, resumes = %d; want %d each from the newer reconnect only", gets, resumes, resumeChecks)
 		}
 	})
 }

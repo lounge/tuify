@@ -44,6 +44,9 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 			if msg.flip != 0 && m.nowPlaying.playPausePending == msg.flip {
 				m.nowPlaying.playPausePending = 0
 				m.nowPlaying.playing = !m.nowPlaying.playing
+				// The command never took effect, so neither did the
+				// intent it recorded.
+				m.client.SetPlayIntent(m.nowPlaying.playing)
 			}
 		case opShuffle:
 			if msg.flip != 0 && m.nowPlaying.shufflePending == msg.flip {
