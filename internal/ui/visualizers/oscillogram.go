@@ -17,6 +17,7 @@ const (
 type Oscillogram struct {
 	audioData *audio.FrequencyData
 	bands     [audio.NumBands]float32 // smoothed band values
+	cols      []oscCol                // per-column scratch, reused across frames
 	inited    bool
 }
 
@@ -67,7 +68,10 @@ func (o *Oscillogram) View(width, height int) string {
 	topH := (height + 1) / 2
 	botH := height / 2
 
-	cols := make([]oscCol, width)
+	if cap(o.cols) < width {
+		o.cols = make([]oscCol, width)
+	}
+	cols := o.cols[:width]
 	for col := range width {
 		bandIdx := col * audio.NumBands / width
 		if bandIdx >= audio.NumBands {

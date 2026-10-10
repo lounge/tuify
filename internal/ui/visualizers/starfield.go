@@ -59,11 +59,11 @@ func (sf *Starfield) SetAudioData(data *audio.FrequencyData) {
 	sf.audioData = data
 }
 
-// SetProgress feeds the beat detector the position in the track. It must
-// be playback progress, not FrequencyData.StreamMs: the detector drops its
-// tempo history when time jumps backwards or far forwards, which only
-// ever happens to the track position (seek, track change), never to the
-// stream time.
+// SetProgress feeds the beat detector the position in the track. The
+// detector times beat intervals with FrequencyData.StreamMs, which has
+// millisecond resolution, but it needs the position to notice a seek or
+// track change: only the position jumps backwards or far forward, and the
+// detector drops its tempo history when it does.
 func (sf *Starfield) SetProgress(progressMs int) {
 	sf.progressMs = progressMs
 }
@@ -83,7 +83,7 @@ func (sf *Starfield) Advance() {
 		sf.intensity = bass*0.5 + mid*0.3 + peak*0.2
 
 		// A track position fits int32 with room to spare (24 days).
-		sf.beat.Tick(&sf.audioData.Bands, int32(sf.progressMs))
+		sf.beat.Tick(&sf.audioData.Bands, sf.audioData.StreamMs, int32(sf.progressMs))
 
 		// Speed: continuous bass drive + beat pulse burst, scaled by tempo.
 		bassDrive := bass * 1.2

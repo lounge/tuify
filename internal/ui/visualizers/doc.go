@@ -11,7 +11,10 @@
 //   - AudioAware receives per-frame FrequencyData from the FFT pipeline.
 //   - ProgressAware receives playback progress in ms (for time-aligned
 //     visuals like lyrics scroll, and for beat tracking that must notice
-//     seeks; FrequencyData.StreamMs is stream time, not position).
+//     seeks; FrequencyData.StreamMs is stream time, not position). The
+//     progress arrives in whole-second steps, so anything that needs
+//     finer timing between frames, such as the beat tracker's interval
+//     measurement, takes that from StreamMs instead.
 //   - ImageAware receives the current track's album art (for AlbumArt).
 //   - LyricsAware receives the track's lyric lines as LyricLines, timed
 //     when the source had timestamps, or is told the track is

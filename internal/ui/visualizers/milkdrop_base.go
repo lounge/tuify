@@ -129,9 +129,12 @@ func (m *MilkdropPreset) resize(termW, termH int) {
 
 func (m *MilkdropPreset) updateAudio() {
 	if m.audioData != nil {
-		m.bass += mdEMA * (float64(m.audioData.Bass) - m.bass)
-		m.mid += mdEMA * (float64(m.audioData.Mid) - m.mid)
-		m.high += mdEMA * (float64(m.audioData.High) - m.high)
+		// finite01 keeps a NaN or infinite frame out of the EMA: once in,
+		// it would never decay out and sampleBilinear would convert it to
+		// an index.
+		m.bass += mdEMA * (float64(finite01(m.audioData.Bass)) - m.bass)
+		m.mid += mdEMA * (float64(finite01(m.audioData.Mid)) - m.mid)
+		m.high += mdEMA * (float64(finite01(m.audioData.High)) - m.high)
 	} else {
 		m.bass *= mdIdleDecay
 		m.mid *= mdIdleDecay

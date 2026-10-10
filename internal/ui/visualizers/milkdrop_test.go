@@ -1,6 +1,7 @@
 package visualizers
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -212,4 +213,41 @@ func TestMilkdropRipple_DecaysToBlack(t *testing.T) {
 	t.Parallel()
 
 	testMilkdropDecay(t, NewMilkdropRipple(), "Ripple")
+}
+
+// A NaN frame must not poison the smoothed audio state: once in the EMA it
+// would never decay out and sampleBilinear would turn it into an index.
+func TestMilkdrop_NaNFrameDoesNotPoisonState(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		v    *MilkdropPreset
+	}{
+		{"Spiral", NewMilkdropSpiral()},
+		{"Tunnel", NewMilkdropTunnel()},
+		{"Kaleidoscope", NewMilkdropKaleidoscope()},
+		{"Ripple", NewMilkdropRipple()},
+	} {
+		v := tc.v
+		v.Init("seed", 10000)
+		v.View(20, 5)
+		v.SetAudioData(nanFrame())
+		for range 3 {
+			v.Advance()
+		}
+		for _, f := range []float64{v.bass, v.mid, v.high, v.energy} {
+			if math.IsNaN(f) || math.IsInf(f, 0) {
+				t.Fatalf("%s: smoothed audio %v after a NaN frame, want finite", tc.name, f)
+			}
+		}
+		v.SetAudioData(benchFrame())
+		v.Advance()
+		if v.bass <= 0 {
+			t.Errorf("%s: bass = %v after a clean frame, want it to climb", tc.name, v.bass)
+		}
+		if got := len(strings.Split(v.View(20, 5), "\n")); got != 5 {
+			t.Errorf("%s: %d lines after the clean frame, want 5", tc.name, got)
+		}
+	}
 }

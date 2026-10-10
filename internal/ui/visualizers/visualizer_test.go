@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lounge/tuify/internal/audio"
+	"github.com/mattn/go-runewidth"
 )
 
 // --- Oscillogram tests ---
@@ -156,7 +157,8 @@ func TestStarfield_ResizeGrid(t *testing.T) {
 // The beat detector resets its tempo history when progress jumps
 // backwards, which is how it notices a seek or track change. That only
 // works if it is fed the track position, not FrequencyData.StreamMs, which
-// never runs backwards.
+// never runs backwards. Intervals, on the other hand, are timed with
+// StreamMs, so both clocks must reach it.
 func TestStarfield_SetProgressDrivesBeatDetector(t *testing.T) {
 	t.Parallel()
 
@@ -180,16 +182,19 @@ func TestStarfield_SetProgressDrivesBeatDetector(t *testing.T) {
 	if sf.beat.Pulse != 1 {
 		t.Fatalf("Pulse = %v after an onset, want 1", sf.beat.Pulse)
 	}
-	if sf.beat.lastBeatMs != 1050 {
-		t.Fatalf("beat stamped at %d, want the playback position 1050 (StreamMs was %d)", sf.beat.lastBeatMs, loud.StreamMs)
+	if sf.beat.lastBeatProgressMs != 1050 {
+		t.Fatalf("beat stamped at position %d, want the playback position 1050", sf.beat.lastBeatProgressMs)
+	}
+	if sf.beat.lastBeatStreamMs != loud.StreamMs {
+		t.Fatalf("beat stamped at stream time %d, want the frame's StreamMs %d", sf.beat.lastBeatStreamMs, loud.StreamMs)
 	}
 
 	// Seek backwards: the detector must start over.
 	sf.SetAudioData(silent)
 	sf.SetProgress(200)
 	sf.Advance()
-	if sf.beat.lastBeatMs != 0 {
-		t.Errorf("lastBeatMs = %d after a seek backwards, want 0 (reset)", sf.beat.lastBeatMs)
+	if sf.beat.hasBeat {
+		t.Errorf("beat history kept after a seek backwards, want reset")
 	}
 
 	// Init is a new track: position starts over too.
@@ -305,21 +310,62 @@ func TestAlbumArt_AdvanceRespectsFrames(t *testing.T) {
 
 	a := NewAlbumArt()
 	a.Init("seed", 10000)
-	a.SetImage(testImage(16, 16))
 
-	// Advance without a View first — totalFrames is 0, should not resolve
+	// No image yet: nothing to dissolve, so Advance does not count.
 	a.Advance()
-	if a.resolved {
-		t.Error("should not resolve before first View (totalFrames=0)")
+	if a.frame != 0 || a.resolved {
+		t.Errorf("frame=%d resolved=%v before any image, want 0 and false", a.frame, a.resolved)
 	}
 
-	// First View sets totalFrames via computeGrid
-	a.View(20, 10)
-
-	// Advance should now increment frame
+	// The dissolve is clocked from SetImage, with or without a View.
+	a.SetImage(testImage(16, 16))
 	a.Advance()
-	if a.resolved {
-		t.Error("should not resolve after 1 advance")
+	if a.frame != 1 || a.resolved {
+		t.Errorf("frame=%d resolved=%v after one Advance, want 1 and false", a.frame, a.resolved)
+	}
+	a.View(20, 10)
+	a.Advance()
+	if a.frame != 2 || a.resolved {
+		t.Errorf("frame=%d resolved=%v after View and another Advance, want 2 and false", a.frame, a.resolved)
+	}
+}
+
+// A resize mid-dissolve recomputes the grid for the new size but must not
+// restart the animation: View derives, Advance clocks.
+func TestAlbumArt_ResizeKeepsDissolveFrame(t *testing.T) {
+	t.Parallel()
+
+	a := NewAlbumArt()
+	a.Init("seed", 10000)
+	a.SetImage(testImage(64, 64))
+	a.View(40, 10)
+	for range 50 {
+		a.Advance()
+	}
+	if a.frame != 50 {
+		t.Fatalf("frame = %d after 50 advances, want 50", a.frame)
+	}
+
+	resized := a.View(80, 20)
+	if a.frame != 50 || a.resolved {
+		t.Fatalf("frame=%d resolved=%v after a resize, want 50 and false (dissolve restarted)", a.frame, a.resolved)
+	}
+	if got := len(strings.Split(resized, "\n")); got != 20 {
+		t.Errorf("expected 20 lines after resize, got %d", got)
+	}
+
+	// Rendering the same size twice is a pure read: same bytes, same frame.
+	if again := a.View(80, 20); again != resized || a.frame != 50 {
+		t.Error("View at an unchanged size must return identical output and leave the frame alone")
+	}
+
+	// And the frame at the new size is the mid-dissolve frame, not the
+	// first one: a fresh instance at frame 0 renders something else.
+	fresh := NewAlbumArt()
+	fresh.Init("seed", 10000)
+	fresh.SetImage(testImage(64, 64))
+	if fresh.View(80, 20) == resized {
+		t.Error("resized frame matches a frame-0 render, so the dissolve restarted")
 	}
 }
 
@@ -561,6 +607,86 @@ func TestSpectrogram_DecaysToFloor(t *testing.T) {
 			t.Fatalf("newest frame [%d]=%.4f should have decayed to ~0", b, v)
 		}
 	}
+}
+
+// A pane wider than the ring buffer's 512 columns gets the history
+// right-aligned and the rest padded, so every row is still exactly width
+// cells; before this the frame silently came back 512 wide.
+func TestSpectrogram_WiderThanRingIsPadded(t *testing.T) {
+	t.Parallel()
+
+	s := NewSpectrogram()
+	s.Init("seed", 10000)
+	loud := &audio.FrequencyData{}
+	for i := range loud.Bands {
+		loud.Bands[i] = 0.9
+	}
+	s.SetAudioData(loud)
+	for range 5 {
+		s.Advance()
+	}
+
+	const width, height = 600, 4
+	lines := strings.Split(s.View(width, height), "\n")
+	if len(lines) != height {
+		t.Fatalf("expected %d lines, got %d", height, len(lines))
+	}
+	pad := width - spectroMaxWidth/2
+	for i, line := range lines {
+		plain := stripANSI(line)
+		if w := runewidth.StringWidth(plain); w != width {
+			t.Errorf("line %d is %d cells wide, want %d", i, w, width)
+		}
+		if strings.TrimLeft(plain[:pad], " ") != "" {
+			t.Errorf("line %d: the %d columns beyond the history should be blank, got %q", i, pad, plain[:pad])
+		}
+		if strings.TrimSpace(plain[pad:]) == "" {
+			t.Errorf("line %d: the right-aligned history should carry the loud frames", i)
+		}
+	}
+}
+
+// A NaN frame from a future audio source must not enter the ring: the EMA
+// would carry it forward forever and infernoColor would index with it.
+func TestSpectrogram_NaNFrameIsDropped(t *testing.T) {
+	t.Parallel()
+
+	s := NewSpectrogram()
+	s.Init("seed", 10000)
+	s.SetAudioData(nanFrame())
+	s.Advance()
+	if out := s.View(20, 4); len(strings.Split(out, "\n")) != 4 {
+		t.Fatalf("View after a NaN frame: want 4 lines")
+	}
+	newest := (s.head - 1 + spectroMaxWidth) % spectroMaxWidth
+	for b, v := range s.frames[newest] {
+		if math.IsNaN(float64(v)) || math.IsInf(float64(v), 0) {
+			t.Fatalf("band %d = %v stored from a NaN frame, want finite", b, v)
+		}
+	}
+
+	s.SetAudioData(benchFrame())
+	s.Advance()
+	newest = (s.head - 1 + spectroMaxWidth) % spectroMaxWidth
+	for b, v := range s.frames[newest] {
+		if math.IsNaN(float64(v)) || v <= 0 {
+			t.Fatalf("band %d = %v after a clean frame, want a finite positive value", b, v)
+		}
+	}
+	if out := s.View(20, 4); len(strings.Split(out, "\n")) != 4 {
+		t.Fatalf("View after the clean frame: want 4 lines")
+	}
+}
+
+// nanFrame is a frame whose every value is NaN, the worst a broken audio
+// source could publish.
+func nanFrame() *audio.FrequencyData {
+	nan := float32(math.NaN())
+	fd := &audio.FrequencyData{Peak: nan, Bass: nan, Mid: nan, High: nan, LeftLevel: nan, RightLevel: nan}
+	for i := range fd.Bands {
+		fd.Bands[i] = nan
+	}
+	return fd
 }
 
 // TestInfernoColor_MatchesExactGamma pins the folded gamma table to the

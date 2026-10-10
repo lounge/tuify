@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lounge/tuify/internal/audio"
+	"github.com/mattn/go-runewidth"
 )
 
 var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -62,18 +63,39 @@ func TestVUMeter_ViewDimensions(t *testing.T) {
 	}
 }
 
+// Tiny panes take the bar fallback. Besides not panicking, every row must
+// be exactly the pane width: at width 4 and 5 the "LEFT " / "RIGHT "
+// prefix is longer than the pane and used to spill past it.
 func TestVUMeter_NoPanicAtTinySizes(t *testing.T) {
 	t.Parallel()
 
 	v := NewVUMeter()
 	v.Init("seed", 10000)
+	v.SetAudioData(&audio.FrequencyData{LeftLevel: 1.0, RightLevel: 1.0})
+	for range 200 {
+		v.Advance()
+	}
 	for _, sz := range []struct{ w, h int }{
 		{1, 1},
 		{2, 2},
+		{3, 2},
+		{4, 2},
+		{5, 2},
+		{5, 3},
+		{6, 2},
 		{8, 6},
 		{20, 4},
 	} {
-		_ = v.View(sz.w, sz.h) // must not panic
+		got := v.View(sz.w, sz.h)
+		lines := strings.Split(got, "\n")
+		if len(lines) != sz.h {
+			t.Errorf("size %dx%d: expected %d lines, got %d", sz.w, sz.h, sz.h, len(lines))
+		}
+		for i, line := range lines {
+			if w := runewidth.StringWidth(stripANSI(line)); w != sz.w {
+				t.Errorf("size %dx%d: line %d is %d cells wide, want %d: %q", sz.w, sz.h, i, w, sz.w, stripANSI(line))
+			}
+		}
 	}
 }
 

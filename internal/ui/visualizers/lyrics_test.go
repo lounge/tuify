@@ -3,6 +3,8 @@ package visualizers
 import (
 	"strings"
 	"testing"
+
+	"github.com/mattn/go-runewidth"
 )
 
 // untimed builds untimed lyric lines, as Genius or plain LRCLIB text gives.
@@ -430,10 +432,12 @@ func TestCenterPad(t *testing.T) {
 			t.Errorf("centerPad(%q, %d): result shorter than input", tt.s, tt.width)
 		}
 		if tt.width > len(tt.s) {
-			// Should be centered (left-padded with spaces)
-			trimmed := strings.TrimLeft(got, " ")
-			if trimmed != tt.s {
+			// Centered and padded on both sides to exactly width cells.
+			if trimmed := strings.TrimSpace(got); trimmed != tt.s {
 				t.Errorf("centerPad(%q, %d): trimmed result %q != original", tt.s, tt.width, trimmed)
+			}
+			if len(got) != tt.width {
+				t.Errorf("centerPad(%q, %d) is %d wide, want %d", tt.s, tt.width, len(got), tt.width)
 			}
 		}
 	}
@@ -443,8 +447,59 @@ func TestCenterPad_Empty(t *testing.T) {
 	t.Parallel()
 
 	got := centerPad("", 10)
-	// centerPad uses fmt.Sprintf("%*s%s", left, "", s) — left=5 for width=10, empty s
+	// An empty line becomes width spaces.
 	if !strings.HasPrefix(got, " ") {
 		t.Errorf("centerPad('', 10): expected leading spaces, got %q", got)
+	}
+}
+
+// Lines are measured by display width: a CJK line is two cells per rune,
+// so one that fits by rune count can still be twice the pane. Every row
+// must be exactly width cells and the frame exactly height rows, with the
+// highlighted line included (it used to wrap onto a second row).
+func TestLyrics_WideRunesFitThePane(t *testing.T) {
+	t.Parallel()
+
+	const width, height = 20, 6
+	l := NewLyrics()
+	l.Init("seed", 10000)
+	l.SetLyrics([]LyricLine{
+		{StartMs: 0, Text: "あいうえおかきくけこさしすせそ"}, // 15 runes, 30 cells
+		{StartMs: 1000, Text: "🎵🎶 la la la 🎵🎶 la la la"},
+		{StartMs: 2000, Text: "short"},
+		{StartMs: 3000, Text: "春の海ひねもすのたりのたりかな"},
+	})
+	for _, progress := range []int{0, 1000, 3000} {
+		l.SetProgress(progress)
+		lines := strings.Split(l.View(width, height), "\n")
+		if len(lines) != height {
+			t.Fatalf("progress %d: %d lines, want %d", progress, len(lines), height)
+		}
+		for i, line := range lines {
+			if w := runewidth.StringWidth(stripANSI(line)); w != width {
+				t.Errorf("progress %d: line %d is %d cells, want %d: %q", progress, i, w, width, stripANSI(line))
+			}
+		}
+	}
+}
+
+func TestCenterPad_WideRunes(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		s     string
+		width int
+	}{
+		{"あい", 10},
+		{"🎵x", 7},
+		{"abc", 8},
+	} {
+		got := centerPad(tt.s, tt.width)
+		if w := runewidth.StringWidth(got); w != tt.width {
+			t.Errorf("centerPad(%q, %d) is %d cells, want %d", tt.s, tt.width, w, tt.width)
+		}
+		if strings.TrimSpace(got) != tt.s {
+			t.Errorf("centerPad(%q, %d) = %q, want s surrounded by spaces", tt.s, tt.width, got)
+		}
 	}
 }

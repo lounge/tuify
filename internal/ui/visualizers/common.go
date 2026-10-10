@@ -75,6 +75,20 @@ func clampF64(v, lo, hi float64) float64 {
 	return v
 }
 
+// finite01 returns v clamped to [0, 1], or 0 when v is NaN or infinite.
+// Audio values are documented as normalized 0–1 and the FFT cannot emit
+// NaN today, but a visualizer that blends them into running state (an EMA,
+// a ring buffer) would keep a bad frame forever and feed it to an int
+// conversion, so the state-carrying visualizers pass every input through
+// this first.
+func finite01(v float32) float32 {
+	f := float64(v)
+	if math.IsNaN(f) || math.IsInf(f, 0) {
+		return 0
+	}
+	return float32(clampF64(f, 0, 1))
+}
+
 // wrapUnit wraps x into [0, period). Nearly every value is already in
 // range (a hue nudged by a fraction of a degree, a sample point near its
 // own pixel), so it skips math.Mod for those: that call was ~15% of a
@@ -180,15 +194,26 @@ func bandHue(bandIdx int) float64 {
 
 // beatDetector uses spectral flux with an adaptive threshold to detect beats
 // and estimate tempo. Embed in any visualizer that needs tempo-aware behavior.
+//
+// It runs on two clocks. Beat intervals are measured in stream time
+// (FrequencyData.StreamMs), which has millisecond resolution; the playback
+// position only advances in whole seconds, so intervals taken from it
+// would all be 1000 or 2000 ms and pin the tempo at 60 BPM or the floor.
+// The position is still what notices a seek or track change, since it is
+// the only clock that jumps backwards or far forward.
 type beatDetector struct {
-	prevBands  [audio.NumBands]float32 // previous frame's bands for flux calculation
-	fluxAvg    float64                 // running average of spectral flux
-	hasPrev    bool                    // whether prevBands is populated
-	lastBeatMs int32
-	cooldown   bool // true while flux is still above threshold after a beat
-	intervals  []int32
-	TempoMul   float64 // 0.4–1.6, maps BPM to speed multiplier
-	Pulse      float64 // 1.0 on beat, decays toward 0
+	prevBands [audio.NumBands]float32 // previous frame's bands for flux calculation
+	fluxAvg   float64                 // running average of spectral flux
+	hasPrev   bool                    // whether prevBands is populated
+
+	hasBeat            bool  // whether the two lastBeat* fields hold an onset
+	lastBeatStreamMs   int64 // stream time of the last onset, for intervals
+	lastBeatProgressMs int32 // playback position at the last onset, for seek detection
+
+	cooldown  bool // true while flux is still above threshold after a beat
+	intervals []int32
+	TempoMul  float64 // 0.4–1.6, maps BPM to speed multiplier
+	Pulse     float64 // 1.0 on beat, decays toward 0
 }
 
 const (
@@ -204,7 +229,9 @@ func (bd *beatDetector) Reset() {
 	bd.prevBands = [audio.NumBands]float32{}
 	bd.fluxAvg = 0
 	bd.hasPrev = false
-	bd.lastBeatMs = 0
+	bd.hasBeat = false
+	bd.lastBeatStreamMs = 0
+	bd.lastBeatProgressMs = 0
 	bd.cooldown = false
 	bd.intervals = bd.intervals[:0]
 	bd.TempoMul = 1.0
@@ -212,12 +239,13 @@ func (bd *beatDetector) Reset() {
 }
 
 // Tick decays the pulse and processes a new frame of frequency bands.
-// Call once per frame with the full band data and playback progress.
-func (bd *beatDetector) Tick(bands *[audio.NumBands]float32, progressMs int32) {
+// Call once per frame with the full band data, the frame's stream time
+// (FrequencyData.StreamMs) and the playback position.
+func (bd *beatDetector) Tick(bands *[audio.NumBands]float32, streamMs int64, progressMs int32) {
 	bd.Pulse *= beatPulseDecay
 
-	// Detect seek or track change.
-	if bd.lastBeatMs > 0 && (progressMs < bd.lastBeatMs || progressMs-bd.lastBeatMs > 5000) {
+	// Detect seek or track change from the playback position.
+	if bd.hasBeat && (progressMs < bd.lastBeatProgressMs || progressMs-bd.lastBeatProgressMs > 5000) {
 		bd.Reset()
 	}
 
@@ -250,17 +278,21 @@ func (bd *beatDetector) Tick(bands *[audio.NumBands]float32, progressMs int32) {
 	if above && !bd.cooldown {
 		bd.Pulse = 1.0
 		bd.cooldown = true
-		if bd.lastBeatMs > 0 {
-			interval := progressMs - bd.lastBeatMs
+		if bd.hasBeat {
+			// A negative interval means the stream restarted (librespot
+			// relaunched); it fails the cooldown bound and is skipped.
+			interval := streamMs - bd.lastBeatStreamMs
 			if interval >= beatCooldownMs && interval < 3000 {
-				bd.intervals = append(bd.intervals, interval)
+				bd.intervals = append(bd.intervals, int32(interval))
 				if len(bd.intervals) > beatMaxHistory {
 					bd.intervals = bd.intervals[1:]
 				}
 				bd.updateTempo()
 			}
 		}
-		bd.lastBeatMs = progressMs
+		bd.hasBeat = true
+		bd.lastBeatStreamMs = streamMs
+		bd.lastBeatProgressMs = progressMs
 	} else if !above {
 		bd.cooldown = false
 	}

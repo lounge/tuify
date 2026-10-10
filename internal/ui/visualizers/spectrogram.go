@@ -29,9 +29,11 @@ import (
 const (
 	// spectroMaxWidth sizes the ring buffer. Each terminal column consumes
 	// two ring slots (left/right time step per char), so a value of N
-	// supports terminals up to N/2 columns wide before the right side
-	// truncates. 1024 covers any realistic ultrawide terminal (up to 512
-	// cols). Memory cost: 1024 * 64 * 4 bytes = 256 KB per instance.
+	// supports terminals up to N/2 columns wide; a wider pane gets the
+	// plot right-aligned (newest frames stay at the right edge) with the
+	// columns beyond the history padded blank. 1024 covers any realistic
+	// ultrawide terminal (up to 512 cols). Memory cost: 1024 * 64 * 4
+	// bytes = 256 KB per instance.
 	spectroMaxWidth = 1024
 
 	// spectroDecay fades old frames when there's no audio so the image
@@ -97,7 +99,9 @@ func (s *Spectrogram) Advance() {
 	prev := (s.head - 1 + spectroMaxWidth) % spectroMaxWidth
 	if s.audioData != nil {
 		for i, v := range s.audioData.Bands {
-			frame[i] = s.frames[prev][i]*spectroSmooth + v*(1-spectroSmooth)
+			// finite01 keeps a NaN frame out of the ring: the EMA would
+			// carry it forward and infernoColor would index with it.
+			frame[i] = s.frames[prev][i]*spectroSmooth + finite01(v)*(1-spectroSmooth)
 		}
 	} else {
 		for i, v := range s.frames[prev] {
@@ -112,11 +116,14 @@ func (s *Spectrogram) View(width, height int) string {
 	if !s.inited || width < 1 || height < 1 {
 		return ""
 	}
-	// Each character encodes 2 time columns — clamp so the history we
-	// read from the ring buffer never wraps past itself.
-	if 2*width > spectroMaxWidth {
-		width = spectroMaxWidth / 2
+	// Each character encodes 2 time columns — clamp the drawn columns so
+	// the history we read from the ring buffer never wraps past itself,
+	// and pad the rest so every row is still exactly width cells.
+	drawW := width
+	if 2*drawW > spectroMaxWidth {
+		drawW = spectroMaxWidth / 2
 	}
+	pad := width - drawW
 
 	var buf strings.Builder
 	// ANSI fg+bg escape + quadrant glyph is ~30 bytes per cell.
@@ -131,9 +138,12 @@ func (s *Spectrogram) View(width, height int) string {
 		freqUp := 2*(height-1-row) + 1
 		freqLow := 2 * (height - 1 - row)
 
-		for col := range width {
+		for range pad {
+			buf.WriteByte(' ')
+		}
+		for col := range drawW {
 			// Right time step of the char is newer; left is older.
-			rightAge := (width - 1 - col) * 2
+			rightAge := (drawW - 1 - col) * 2
 			leftAge := rightAge + 1
 			rightIdx := (s.head - 1 - rightAge + spectroMaxWidth) % spectroMaxWidth
 			leftIdx := (s.head - 1 - leftAge + spectroMaxWidth) % spectroMaxWidth

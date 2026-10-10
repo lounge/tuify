@@ -1,11 +1,11 @@
 package visualizers
 
 import (
-	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/mattn/go-runewidth"
 )
 
 // Lyrics styles — fixed styles are pre-allocated, dynamic styles use ANSI escapes.
@@ -125,16 +125,13 @@ func (l *Lyrics) View(width, height int) string {
 	}
 
 	if l.loading {
-		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
-			lyricsDimStyle.Render("Loading lyrics..."))
+		return placeMessage(width, height, "Loading lyrics...")
 	}
 	if l.instrumental {
-		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
-			lyricsDimStyle.Render("Instrumental"))
+		return placeMessage(width, height, "Instrumental")
 	}
 	if l.noLyrics {
-		return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
-			lyricsDimStyle.Render("No lyrics found"))
+		return placeMessage(width, height, "No lyrics found")
 	}
 
 	currentLine := l.currentLine()
@@ -158,7 +155,6 @@ func (l *Lyrics) View(width, height int) string {
 	}
 
 	isDark := lipgloss.HasDarkBackground()
-	emptyRow := strings.Repeat(" ", width)
 
 	var buf strings.Builder
 	buf.Grow(width * height * 20)
@@ -170,18 +166,13 @@ func (l *Lyrics) View(width, height int) string {
 
 		lineIdx := row - topPad + startLine
 		if lineIdx < 0 || lineIdx < startLine || lineIdx >= endLine {
-			buf.WriteString(emptyRow)
+			writeSpaces(&buf, width)
 			continue
 		}
 
-		line := l.lines[lineIdx].Text
-
-		// Truncate to width.
-		runes := []rune(line)
-		if len(runes) > width {
-			runes = runes[:width]
-			line = string(runes)
-		}
+		// Cut to the pane by display width, not rune count: a CJK line is
+		// two cells per rune and would otherwise spill past the pane.
+		line := runewidth.Truncate(l.lines[lineIdx].Text, width, "")
 
 		dist := lineIdx - currentLine
 		if dist < 0 {
@@ -189,23 +180,33 @@ func (l *Lyrics) View(width, height int) string {
 		}
 
 		isSection := isSectionMarker(line)
-		padded := centerPad(line, width)
 
 		if lineIdx == currentLine {
 			style := lyricsHighlightDark
 			if !isDark {
 				style = lyricsHighlightLight
 			}
-			buf.WriteString(style.Width(width).Render(padded))
+			// The line already spans exactly width cells, so the style
+			// carries no Width: a Width would wrap, and a wrapped line
+			// would push the frame to height+1 rows.
+			buf.WriteString(style.Render(centerPad(line, width)))
 		} else {
 			g := lyricGray(isDark, isSection, dist)
 			writeAnsiFg(&buf, g, g, g)
-			buf.WriteString(padded)
+			writeCentered(&buf, line, width)
 			buf.WriteString(ansiReset)
 		}
 	}
 
 	return buf.String()
+}
+
+// placeMessage centers a status message in the pane. The message is cut
+// to the pane width first, since lipgloss.Place leaves a line that is
+// already too wide as it is.
+func placeMessage(width, height int, msg string) string {
+	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center,
+		lyricsDimStyle.Render(runewidth.Truncate(msg, width, "")))
 }
 
 // isSectionMarker reports whether a lyric line is a header such as
@@ -229,12 +230,32 @@ func lyricGray(isDark, isSection bool, dist int) int {
 	return clamp(80+dist*25, 0, 200)
 }
 
+// centerPad returns s centered in width display cells, padded with spaces
+// on both sides so the result is exactly width cells wide. A string that
+// already fills or exceeds the width is returned as is.
 func centerPad(s string, width int) string {
-	runes := []rune(s)
-	n := len(runes)
+	var b strings.Builder
+	b.Grow(len(s) + width)
+	writeCentered(&b, s, width)
+	return b.String()
+}
+
+// writeCentered is centerPad written straight into a builder, so the
+// non-highlighted lines of a frame cost no allocation.
+func writeCentered(buf *strings.Builder, s string, width int) {
+	n := runewidth.StringWidth(s)
 	if n >= width {
-		return s
+		buf.WriteString(s)
+		return
 	}
 	left := (width - n) / 2
-	return fmt.Sprintf("%*s%s", left, "", s)
+	writeSpaces(buf, left)
+	buf.WriteString(s)
+	writeSpaces(buf, width-n-left)
+}
+
+func writeSpaces(buf *strings.Builder, n int) {
+	for range n {
+		buf.WriteByte(' ')
+	}
 }

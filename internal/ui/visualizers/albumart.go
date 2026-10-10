@@ -48,11 +48,14 @@ func (a *AlbumArt) Init(seed string, durationMs int) {
 	a.inited = true
 }
 
+// SetImage installs a new cover and starts its dissolve. The animation is
+// clocked by Advance from here on; View only derives the grid for the
+// size it is asked for.
 func (a *AlbumArt) SetImage(img image.Image) {
 	a.img = img
 	a.hasImage = true
 	a.frame = 0
-	a.totalFrames = 0
+	a.totalFrames = dissolveFrames
 	a.resolved = false
 	a.numBlocks = 0
 }
@@ -82,6 +85,10 @@ func (a *AlbumArt) View(width, height int) string {
 		return ""
 	}
 
+	// The grid is a pure function of the image, the seed and the size, so
+	// recomputing it here keeps View deterministic; the dissolve's frame
+	// counter is left alone, so a resize mid-dissolve carries on rather
+	// than starting over.
 	if numBlocks != a.numBlocks {
 		a.computeGrid(numBlocks)
 	}
@@ -147,12 +154,13 @@ func (a *AlbumArt) colorAt(px, py, offsetX, offsetY int, bgColor int32) int32 {
 	return bgColor
 }
 
+// computeGrid samples the image into numBlocks×numBlocks cells and draws
+// the resolve order for the dissolve. It touches no animation state: the
+// order is drawn from the Init seed with a local copy of the generator, so
+// the same size always yields the same grid.
 func (a *AlbumArt) computeGrid(numBlocks int) {
 	a.numBlocks = numBlocks
-	a.frame = 0
-	a.resolved = false
 	total := numBlocks * numBlocks
-	a.totalFrames = dissolveFrames
 
 	a.pixels = make([]int32, total)
 	if a.hasImage && a.img != nil {
@@ -190,7 +198,7 @@ func (a *AlbumArt) computeGrid(numBlocks int) {
 
 	a.resolveAt = make([]int, total)
 	for k, blockIdx := range order {
-		a.resolveAt[blockIdx] = k * a.totalFrames / total
+		a.resolveAt[blockIdx] = k * dissolveFrames / total
 	}
 }
 

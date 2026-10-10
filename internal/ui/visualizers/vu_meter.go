@@ -255,7 +255,7 @@ func renderTEACDial(width, height int, db float64, channel string) string {
 		r = 4
 	}
 
-	ticks := teacTicks()
+	ticks := teacTicks
 
 	stampArc(grid, subW, subH, pivotVX, pivotVY, r, sweep)
 
@@ -396,19 +396,18 @@ type tickDef struct {
 }
 
 // teacTicks is the fixed tick set the dial always renders. Stalks
-// appear at every dB position; only the extremes are labeled.
-func teacTicks() []tickDef {
-	return []tickDef{
-		{db: -20, label: "-20"},
-		{db: -10},
-		{db: -7},
-		{db: -5},
-		{db: -3},
-		{db: 0},
-		{db: 1},
-		{db: 2},
-		{db: 3, label: "+3"},
-	}
+// appear at every dB position; only the extremes are labeled. It is
+// read-only: both dials walk it every frame.
+var teacTicks = []tickDef{
+	{db: -20, label: "-20"},
+	{db: -10},
+	{db: -7},
+	{db: -5},
+	{db: -3},
+	{db: 0},
+	{db: 1},
+	{db: 2},
+	{db: 3, label: "+3"},
 }
 
 // centerTextGradient writes `text` centered within `width`, coloring
@@ -609,7 +608,12 @@ func renderBarRow(width int, db float64, label string) string {
 		}
 		return b.String()
 	}
+	// The label is cut to the pane when it does not fit (width 4 or 5
+	// with "RIGHT "), so the row is never wider than width.
 	prefix := label + " "
+	if len(prefix) > width {
+		prefix = prefix[:width]
+	}
 	barW := width - len(prefix)
 	t := (db - vuDbMin) / (vuDbMax - vuDbMin)
 	if t < 0 {
