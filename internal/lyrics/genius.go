@@ -2,7 +2,7 @@ package lyrics
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"log"
@@ -90,7 +90,7 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 			} `json:"hits"`
 		} `json:"response"`
 	}
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&result); err != nil {
+	if err := json.UnmarshalRead(io.LimitReader(resp.Body, maxBodyBytes), &result); err != nil {
 		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
 	if result.Meta.Status != 200 {

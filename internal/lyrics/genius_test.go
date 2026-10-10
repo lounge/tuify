@@ -2,7 +2,7 @@ package lyrics
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -187,7 +187,7 @@ func TestSearchSong_MatchesCorrectHit(t *testing.T) {
 	})
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(resp)
+		json.MarshalWrite(w, resp)
 	})
 	defer cleanup()
 
@@ -209,7 +209,7 @@ func TestSearchSong_SkipsGeniusAnnotations(t *testing.T) {
 	})
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(resp)
+		json.MarshalWrite(w, resp)
 	})
 	defer cleanup()
 
@@ -234,7 +234,7 @@ func TestSearchSong_SkipsNonSongTypes(t *testing.T) {
 	})
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(resp)
+		json.MarshalWrite(w, resp)
 	})
 	defer cleanup()
 
@@ -255,7 +255,7 @@ func TestSearchSong_Instrumental(t *testing.T) {
 	})
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(resp)
+		json.MarshalWrite(w, resp)
 	})
 	defer cleanup()
 
@@ -276,7 +276,7 @@ func TestSearchSong_NoMatch(t *testing.T) {
 	})
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(resp)
+		json.MarshalWrite(w, resp)
 	})
 	defer cleanup()
 
@@ -349,7 +349,7 @@ func TestSearchGenius_RejectsForeignSongURL(t *testing.T) {
 			var fetches atomic.Int32
 			client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 				if strings.HasPrefix(r.URL.Path, "/api/search") {
-					json.NewEncoder(w).Encode(geniusSearchResponse([]map[string]any{
+					json.MarshalWrite(w, geniusSearchResponse([]map[string]any{
 						songHit("My Song", "The Artist", foreign, false),
 					}))
 					return
@@ -454,7 +454,7 @@ func TestSearchGenius_EndToEnd(t *testing.T) {
 			resp := geniusSearchResponse([]map[string]any{
 				songHit("My Song", "The Artist", "https://genius.com/the-artist-my-song-lyrics", false),
 			})
-			json.NewEncoder(w).Encode(resp)
+			json.MarshalWrite(w, resp)
 			return
 		}
 		// Lyrics page
@@ -480,7 +480,7 @@ func TestSearchGenius_Instrumental(t *testing.T) {
 		resp := geniusSearchResponse([]map[string]any{
 			songHit("Instrumental Track", "Artist", "https://genius.com/inst", true),
 		})
-		json.NewEncoder(w).Encode(resp)
+		json.MarshalWrite(w, resp)
 	})
 	defer cleanup()
 
@@ -495,7 +495,7 @@ func TestSearchGenius_NoResults(t *testing.T) {
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		resp := geniusSearchResponse(nil)
-		json.NewEncoder(w).Encode(resp)
+		json.MarshalWrite(w, resp)
 	})
 	defer cleanup()
 
@@ -516,7 +516,7 @@ func TestSearchGenius_CaseInsensitiveMatch(t *testing.T) {
 			resp := geniusSearchResponse([]map[string]any{
 				songHit("MY SONG", "THE ARTIST", "https://genius.com/lyrics", false),
 			})
-			json.NewEncoder(w).Encode(resp)
+			json.MarshalWrite(w, resp)
 			return
 		}
 		w.Write([]byte(`<html><body>

@@ -2,7 +2,7 @@ package lyrics
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"fmt"
 	"io"
 	"net/http"
@@ -60,7 +60,7 @@ func lrclibGet(ctx context.Context, client *http.Client, track, artist string, d
 		return Result{}, fmt.Errorf("lrclib get: status %d", resp.StatusCode)
 	}
 	var rec lrclibRecord
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&rec); err != nil {
+	if err := json.UnmarshalRead(io.LimitReader(resp.Body, maxBodyBytes), &rec); err != nil {
 		return Result{}, fmt.Errorf("lrclib get: %w", err)
 	}
 	return recordResult(rec)
@@ -84,7 +84,7 @@ func lrclibSearch(ctx context.Context, client *http.Client, track, artist string
 		return Result{}, fmt.Errorf("lrclib search: status %d", resp.StatusCode)
 	}
 	var recs []lrclibRecord
-	if err := json.NewDecoder(io.LimitReader(resp.Body, maxBodyBytes)).Decode(&recs); err != nil {
+	if err := json.UnmarshalRead(io.LimitReader(resp.Body, maxBodyBytes), &recs); err != nil {
 		return Result{}, fmt.Errorf("lrclib search: %w", err)
 	}
 	best := pickLRCLIBHit(recs, artist, durationMs)

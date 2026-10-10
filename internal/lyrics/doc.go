@@ -16,7 +16,8 @@
 //     page. Genius's documented API needs a key for any useful endpoint,
 //     so scraping is the pragmatic choice for a user-local TUI.
 //
-// An LRCLIB failure (network, 5xx, bad JSON) is logged and treated as a
+// An LRCLIB failure (network, 5xx, bad JSON, which under encoding/json/v2
+// includes invalid UTF-8 or a duplicated key) is logged and treated as a
 // miss so Genius still runs; only Genius's error is returned. Every
 // fall-through to Genius is logged, so whether Genius is still worth
 // keeping can be judged from use.

@@ -2,7 +2,7 @@ package lyrics
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"slices"
@@ -48,7 +48,7 @@ func (s *lyricsStub) client() (*http.Client, func()) {
 
 func lrclibRecordHandler(rec map[string]any) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(rec)
+		json.MarshalWrite(w, rec)
 	}
 }
 
@@ -57,13 +57,13 @@ func lrclibSearchHandler(recs ...map[string]any) http.HandlerFunc {
 		if recs == nil {
 			recs = []map[string]any{}
 		}
-		json.NewEncoder(w).Encode(recs)
+		json.MarshalWrite(w, recs)
 	}
 }
 
 func geniusStub(title, artist string) (search, page http.HandlerFunc) {
 	search = func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(geniusSearchResponse([]map[string]any{
+		json.MarshalWrite(w, geniusSearchResponse([]map[string]any{
 			songHit(title, artist, "https://genius.com/song-lyrics", false),
 		}))
 	}
@@ -246,7 +246,7 @@ func TestSearch_NothingFound(t *testing.T) {
 		lrclibGet:    statusHandler(http.StatusNotFound),
 		lrclibSearch: lrclibSearchHandler(),
 		geniusSearch: func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(geniusSearchResponse(nil))
+			json.MarshalWrite(w, geniusSearchResponse(nil))
 		},
 	}
 	client, cleanup := stub.client()

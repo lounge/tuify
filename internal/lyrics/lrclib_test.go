@@ -2,7 +2,7 @@ package lyrics
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"strings"
@@ -41,7 +41,7 @@ func TestLRCLIBGet_SyncedLyrics(t *testing.T) {
 	var gotQuery map[string][]string
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotUA, gotQuery = r.URL.Path, r.Header.Get("User-Agent"), r.URL.Query()
-		json.NewEncoder(w).Encode(lrclibJSON("Queen", 355, "[00:00.15] Is this the real life?\n[00:07.13] Caught in a landslide", "x", false))
+		json.MarshalWrite(w, lrclibJSON("Queen", 355, "[00:00.15] Is this the real life?\n[00:07.13] Caught in a landslide", "x", false))
 	})
 	defer cleanup()
 
@@ -72,7 +72,7 @@ func TestLRCLIBGet_PlainLyricsOnly(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(lrclibJSON("Artist", 200, "", "  First\n\n\n\nSecond  \n", false))
+		json.MarshalWrite(w, lrclibJSON("Artist", 200, "", "  First\n\n\n\nSecond  \n", false))
 	})
 	defer cleanup()
 
@@ -91,7 +91,7 @@ func TestLRCLIBGet_UnparsableSyncedFallsBackToPlain(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(lrclibJSON("Artist", 200, "[ar:Artist]\n[ti:Song]", "Plain text", false))
+		json.MarshalWrite(w, lrclibJSON("Artist", 200, "[ar:Artist]\n[ti:Song]", "Plain text", false))
 	})
 	defer cleanup()
 
@@ -139,7 +139,7 @@ func TestLRCLIBGet_Instrumental(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(lrclibJSON("Metallica", 507, "", "", true))
+		json.MarshalWrite(w, lrclibJSON("Metallica", 507, "", "", true))
 	})
 	defer cleanup()
 
@@ -175,7 +175,7 @@ func TestLRCLIBGet_StripsTerminalEscapes(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(lrclibJSON("Artist", 200, "[00:01.00] a\x1b]52;c;SGVsbG8=\x07b", "", false))
+		json.MarshalWrite(w, lrclibJSON("Artist", 200, "[00:01.00] a\x1b]52;c;SGVsbG8=\x07b", "", false))
 	})
 	defer cleanup()
 
@@ -216,7 +216,7 @@ func TestLRCLIBSearch_CleansTitleAndPicksByDuration(t *testing.T) {
 	var gotQuery map[string][]string
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
 		gotPath, gotQuery = r.URL.Path, r.URL.Query()
-		json.NewEncoder(w).Encode([]map[string]any{
+		json.MarshalWrite(w, []map[string]any{
 			lrclibJSON("Queen", 317, "[00:01.00] soundtrack cut", "", false),
 			lrclibJSON("Queen", 355, "[00:01.00] album cut", "", false),
 			lrclibJSON("Queen", 263, "[00:01.00] radio edit", "", false),
@@ -246,7 +246,7 @@ func TestLRCLIBSearch_NoHitInToleranceIsAMiss(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]any{
+		json.MarshalWrite(w, []map[string]any{
 			lrclibJSON("Artist", 180, "[00:01.00] x", "", false),
 		})
 	})
@@ -265,7 +265,7 @@ func TestLRCLIBSearch_Instrumental(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode([]map[string]any{lrclibJSON("Artist", 200, "", "", true)})
+		json.MarshalWrite(w, []map[string]any{lrclibJSON("Artist", 200, "", "", true)})
 	})
 	defer cleanup()
 
