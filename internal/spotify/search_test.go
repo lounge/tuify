@@ -2,7 +2,7 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"reflect"
 	"strings"
@@ -31,7 +31,7 @@ func TestSearchTracks(t *testing.T) {
 		if !strings.Contains(r.URL.RawQuery, "type=track") {
 			t.Errorf("expected type=track in query, got %s", r.URL.RawQuery)
 		}
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	tracks, more, err := c.SearchTracks(context.Background(), "test query", 0, 20)
@@ -63,7 +63,7 @@ func TestSearchEpisodes(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	eps, _, err := c.SearchEpisodes(context.Background(), "podcast", 0, 20)
@@ -91,7 +91,7 @@ func TestSearchAlbums(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	albums, _, err := c.SearchAlbums(context.Background(), "album query", 0, 20)
@@ -120,7 +120,7 @@ func TestSearchArtists(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	artists, _, err := c.SearchArtists(context.Background(), "artist query", 0, 20)
@@ -149,7 +149,7 @@ func TestSearchShows(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	shows, _, err := c.SearchShows(context.Background(), "show query", 0, 20)
@@ -175,7 +175,7 @@ func TestSearchTracks_Pagination(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	_, more, err := c.SearchTracks(context.Background(), "query", 0, 1)
@@ -251,7 +251,7 @@ func TestSearch_CleansText(t *testing.T) {
 
 			response := map[string]any{tc.key: map[string]any{"offset": 0, "total": 1, "items": []map[string]any{tc.item}}}
 			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-				json.NewEncoder(w).Encode(response)
+				json.MarshalWrite(w, response)
 			})
 			got, err := tc.search(c)
 			if err != nil {

@@ -1,7 +1,7 @@
 package spotify
 
 import (
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"reflect"
 	"strings"
@@ -30,7 +30,7 @@ func newDevicesClient(t *testing.T, preferred string, devices ...apiDevice) *Cli
 		if devices == nil {
 			devices = []apiDevice{}
 		}
-		json.NewEncoder(w).Encode(map[string]any{"devices": devices})
+		json.MarshalWrite(w, map[string]any{"devices": devices})
 	})
 	c.preferredDevice = preferred
 	return c

@@ -2,7 +2,7 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -23,7 +23,7 @@ func TestGetPlaylists_OwnerFiltering(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	c.userID = "me"
@@ -67,7 +67,7 @@ func TestGetPlaylists_HasMoreWithFiltering(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	c.userID = "me"
@@ -106,7 +106,7 @@ func TestGetPlaylists_NoUserID(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	// No userID and /me fails: degrade to returning all playlists.
@@ -134,10 +134,10 @@ func TestGetPlaylists_FetchesUserIDOnDemand(t *testing.T) {
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/me" {
 			meCalls.Add(1)
-			json.NewEncoder(w).Encode(map[string]string{"id": "me"})
+			json.MarshalWrite(w, map[string]string{"id": "me"})
 			return
 		}
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	// The startup FetchUserID was skipped or failed; the first
@@ -181,7 +181,7 @@ func TestGetPlaylistTracks(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	tracks, more, err := c.GetPlaylistTracks(context.Background(), "playlist1", 0, 50)
@@ -219,7 +219,7 @@ func TestGetSavedShows(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	shows, more, err := c.GetSavedShows(context.Background(), 0, 50)
@@ -249,7 +249,7 @@ func TestGetShowEpisodes(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	eps, more, err := c.GetShowEpisodes(context.Background(), "show1", 0, 50)
@@ -286,7 +286,7 @@ func TestGetArtistAlbums(t *testing.T) {
 		if !strings.Contains(r.URL.Path, "/artists/") {
 			t.Errorf("expected /artists/ in path, got %s", r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	albums, more, err := c.GetArtistAlbums(context.Background(), "artist1", 0, 50)
@@ -320,7 +320,7 @@ func TestGetAlbumTracks(t *testing.T) {
 		if !strings.Contains(r.URL.Path, "/albums/") {
 			t.Errorf("expected /albums/ in path, got %s", r.URL.Path)
 		}
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	tracks, more, err := c.GetAlbumTracks(context.Background(), "album1", 0, 50)

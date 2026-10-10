@@ -2,7 +2,7 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -42,7 +42,7 @@ func TestFetchUserID(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		json.NewEncoder(w).Encode(map[string]string{"id": "testuser123"})
+		json.MarshalWrite(w, map[string]string{"id": "testuser123"})
 	})
 
 	if err := c.FetchUserID(context.Background()); err != nil {

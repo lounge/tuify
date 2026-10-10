@@ -2,7 +2,7 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 	"testing"
 )
@@ -34,7 +34,7 @@ func TestGetPlayerState_NilItem(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())
@@ -63,7 +63,7 @@ func TestGetPlayerState_Playing(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())
@@ -112,7 +112,7 @@ func TestGetPlayerState_NoDevice(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())
@@ -143,7 +143,7 @@ func TestGetPlayerState_EpisodeWithShow(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())
@@ -178,7 +178,7 @@ func TestGetPlayerState_WithAlbumImage(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())
@@ -211,7 +211,7 @@ func TestGetPlayerState_EpisodeImages(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())
@@ -242,7 +242,7 @@ func TestGetPlayerState_WithContext(t *testing.T) {
 	}
 
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())
@@ -290,7 +290,7 @@ func TestGetPlayerState_StripsTerminalEscapes(t *testing.T) {
 		"device": map[string]any{"name": evil},
 	}
 	c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(response)
+		json.MarshalWrite(w, response)
 	})
 
 	state, err := c.GetPlayerState(context.Background())

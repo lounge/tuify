@@ -2,7 +2,7 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"net/http"
 
 	"github.com/lounge/tuify/internal/termsafe"

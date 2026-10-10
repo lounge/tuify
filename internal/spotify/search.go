@@ -2,7 +2,8 @@ package spotify
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
+	"encoding/json/v2"
 	"fmt"
 	neturl "net/url"
 )
@@ -38,7 +39,7 @@ func (c *Client) SearchShows(ctx context.Context, query string, offset, limit in
 func search[Raw, T any](ctx context.Context, c *Client, query, searchType, key string, offset, limit int, convert func([]Raw) []T) ([]T, bool, error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/search?q=%s&type=%s&limit=%d&offset=%d",
 		neturl.QueryEscape(query), searchType, limit, offset)
-	var wrapper map[string]json.RawMessage
+	var wrapper map[string]jsontext.Value
 	if err := c.apiGet(ctx, endpoint, &wrapper); err != nil {
 		return nil, false, err
 	}
