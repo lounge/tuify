@@ -77,6 +77,7 @@ When a request is ambiguous about scope, ask before building.
 - **`doc.go` is the package contract.** When you change exported API, behavior, or examples in a package, update its `doc.go` in the same change.
 - **File organization** follows the Go convention: package doc, imports, constants, then each type grouped with its constructor and methods, then helpers. Keep gofmt + golangci-lint clean.
 - **Tests stub HTTP**, not the SDK. Use `testutil.RewriteTransport` to redirect outbound requests to an `httptest.Server`.
+- **JSON goes through `encoding/json/v2`** (`jsontext` for raw values and indentation). v2 redefines `omitempty` so `false` and `0` are written out; use `omitzero` on bool, number and pointer fields. The only `encoding/json` (v1) import is `OmitEmptyWithLegacySemantics` in `auth`, which keeps the upstream `oauth2.Token` tags from adding `expires_in: 0` to token.json.
 
 ## Issue and PR Guidelines
 
