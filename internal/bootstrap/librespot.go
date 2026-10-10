@@ -159,8 +159,10 @@ func reconnectHandler(parent context.Context, client *spotify.Client, deviceName
 
 // transferToPreferred looks the preferred device up and transfers
 // playback to it. It reports whether the reconnect is settled: true once
-// a transfer was attempted, false when the device is not listed yet or
-// the lookup failed, so the caller can try again.
+// a transfer was attempted or a manual device switch made it moot, false
+// when the device is not listed yet or the lookup failed, so the caller
+// can try again. The override is checked again after the lookup, so a
+// switch the user makes while the device list is in flight still wins.
 func transferToPreferred(parent context.Context, client *spotify.Client, deviceName string, attempt int) bool {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
@@ -172,6 +174,10 @@ func transferToPreferred(parent context.Context, client *spotify.Client, deviceN
 	if !preferred {
 		log.Printf("[librespot] reconnect: %s not listed yet (attempt %d/%d)", deviceName, attempt, reconnectAttempts)
 		return false
+	}
+	if client.DeviceOverridden.Load() {
+		log.Printf("[librespot] reconnect: device was manually switched during lookup, skipping transfer")
+		return true
 	}
 	if err := client.TransferPlayback(ctx, devID, true); err != nil {
 		log.Printf("[librespot] reconnect: transfer playback failed: %v", err)

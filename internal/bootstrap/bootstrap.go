@@ -43,11 +43,10 @@ func Run() error {
 	if err != nil {
 		return err
 	}
-	if err := cfg.Validate(); err != nil {
-		if path, perr := config.Path(); perr == nil {
-			return fmt.Errorf("invalid config %s: %w", path, err)
-		}
-		return fmt.Errorf("invalid config: %w", err)
+	// A loaded config was validated before anything wrote to it; this
+	// also covers the one first-time setup just created.
+	if err := validateConfig(cfg); err != nil {
+		return err
 	}
 
 	// Force or autodetect terminal background mode before any rendering.

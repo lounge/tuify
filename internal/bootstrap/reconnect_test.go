@@ -26,7 +26,8 @@ type fakeSpotify struct {
 	devices   []string // device-list bodies served in order; the last repeats. Empty: devicesWithTuify.
 	transfers []string // PUT /v1/me/player bodies
 	requests  int
-	lookups   int // device-list requests
+	lookups   int    // device-list requests
+	onLookup  func() // called while answering each device-list request
 }
 
 // nextDevices returns the device-list body for the next lookup. The
@@ -53,6 +54,9 @@ func (f *fakeSpotify) RoundTrip(req *http.Request) (*http.Response, error) {
 	case req.Method == http.MethodGet && req.URL.Path == "/v1/me/player/devices":
 		status = http.StatusOK
 		body = f.nextDevices()
+		if f.onLookup != nil {
+			f.onLookup()
+		}
 	case req.Method == http.MethodPut && req.URL.Path == "/v1/me/player":
 		b, _ := io.ReadAll(req.Body)
 		f.transfers = append(f.transfers, strings.TrimSpace(string(b)))
@@ -206,6 +210,27 @@ func TestReconnectHandler_OverlappingTriggersTransferOnce(t *testing.T) {
 		handler()
 		if _, transfers := fake.snapshot(); len(transfers) != 2 {
 			t.Errorf("transfers = %d after a later reconnect, want 2", len(transfers))
+		}
+	})
+}
+
+// A manual device switch that lands while the device list is in flight
+// must still stop the transfer: the doc promises the override stops the
+// handler at any point, and transferring with play=true here would pull
+// playback back from the device the user just picked.
+func TestReconnectHandler_OverrideDuringLookupSkipsTransfer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		fake := &fakeSpotify{}
+		client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
+		fake.onLookup = func() { client.DeviceOverridden.Store(true) }
+
+		reconnectHandler(t.Context(), client, "tuify")()
+
+		if got := fake.lookupCount(); got != 1 {
+			t.Errorf("device lookups = %d, want 1 (the switch settles the reconnect)", got)
+		}
+		if _, transfers := fake.snapshot(); len(transfers) != 0 {
+			t.Errorf("transferred after a manual switch during the lookup: %q", transfers)
 		}
 	})
 }

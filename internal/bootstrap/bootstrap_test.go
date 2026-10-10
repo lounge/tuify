@@ -348,3 +348,36 @@ func TestBackfillThemeDefaults_LeavesPartialThemeAlone(t *testing.T) {
 		t.Errorf("partial theme over-filled: Secondary = %+v", got.Theme.Secondary)
 	}
 }
+
+// An invalid config must be reported without being rewritten: the theme
+// backfill used to save it (with the defaults added) before Validate ran,
+// so the user's file changed under them on a launch that then failed.
+func TestLoadOrSetupConfig_InvalidConfigIsNotRewritten(t *testing.T) {
+	tmp := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", tmp)
+	dir := filepath.Join(tmp, "tuify")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	// No theme block, so a backfill would want to write.
+	original := []byte(`{"client_id":"abc","bitrate":128}`)
+	path := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(path, original, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadOrSetupConfig(nil, nil)
+	if err == nil {
+		t.Fatal("loadOrSetupConfig accepted bitrate 128")
+	}
+	if !strings.Contains(err.Error(), "128") || !strings.Contains(err.Error(), path) {
+		t.Errorf("error should name the bad value and %s, got: %v", path, err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != string(original) {
+		t.Errorf("invalid config was rewritten:\n got: %s\nwant: %s", got, original)
+	}
+}

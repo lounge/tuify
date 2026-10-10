@@ -58,13 +58,18 @@ func setupLog() func() {
 
 // loadOrSetupConfig loads the config file. If no config exists, it runs
 // first-time setup by prompting the user via the provided reader and writer.
-// Pass nil for r/w to use os.Stdin/os.Stdout.
+// Pass nil for r/w to use os.Stdin/os.Stdout. A loaded config is validated
+// before backfillThemeDefaults may rewrite it, so a config with a mistake
+// in it is reported and left on disk exactly as the user wrote it.
 func loadOrSetupConfig(r io.Reader, w io.Writer) (*config.Config, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
 	if cfg != nil {
+		if err := validateConfig(cfg); err != nil {
+			return nil, err
+		}
 		backfillThemeDefaults(cfg)
 		return cfg, nil
 	}
@@ -76,6 +81,18 @@ func loadOrSetupConfig(r io.Reader, w io.Writer) (*config.Config, error) {
 		w = os.Stdout
 	}
 	return runSetup(r, w)
+}
+
+// validateConfig runs cfg.Validate and names config.json in the error so
+// the user knows which file to fix.
+func validateConfig(cfg *config.Config) error {
+	if err := cfg.Validate(); err != nil {
+		if path, perr := config.Path(); perr == nil {
+			return fmt.Errorf("invalid config %s: %w", path, err)
+		}
+		return fmt.Errorf("invalid config: %w", err)
+	}
+	return nil
 }
 
 // backfillThemeDefaults writes theme.Default() into cfg and persists it
