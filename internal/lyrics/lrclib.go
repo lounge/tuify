@@ -94,28 +94,43 @@ func lrclibSearch(ctx context.Context, client *http.Client, track, artist string
 	return recordResult(*best)
 }
 
-// lrclibDo issues a GET with the LRCLIB User-Agent.
+// lrclibDo issues a GET with the LRCLIB User-Agent. A redirect is followed
+// only when it stays on lrclib.net over https (see hostClient).
 func lrclibDo(ctx context.Context, client *http.Client, endpoint string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("User-Agent", userAgent)
-	return client.Do(req)
+	return hostClient(client, checkLRCLIBURL).Do(req)
+}
+
+// checkLRCLIBURL rejects a URL that does not point at lrclib.net over
+// https; it is the redirect rule for LRCLIB requests.
+func checkLRCLIBURL(u *url.URL) error {
+	host := strings.ToLower(u.Hostname())
+	switch {
+	case u.Scheme != "https":
+		return fmt.Errorf("lrclib: url scheme %q is not https", u.Scheme)
+	case host != "lrclib.net":
+		return fmt.Errorf("lrclib: url host %q is not lrclib.net", host)
+	case u.Port() != "" || u.User != nil:
+		return fmt.Errorf("lrclib: url carries a port or userinfo")
+	}
+	return nil
 }
 
 // pickLRCLIBHit returns the best search hit for the track, or nil. A hit
-// must name the artist (its artist field contains ours, case-insensitively,
-// as the Genius matcher requires) and, when durationMs is known, be within
-// lrclibDurationToleranceMs of it. Among those, synced lyrics beat plain,
-// plain beats an instrumental marker, and the first hit wins a tie.
+// must name the artist (artistMatches, as the Genius matcher requires)
+// and, when durationMs is known, be within lrclibDurationToleranceMs of
+// it. Among those, synced lyrics beat plain, plain beats an instrumental
+// marker, and the first hit wins a tie.
 func pickLRCLIBHit(recs []lrclibRecord, artist string, durationMs int) *lrclibRecord {
-	want := strings.ToLower(normalizeQuotes(artist))
 	var best *lrclibRecord
 	bestScore := 0
 	for i := range recs {
 		r := &recs[i]
-		if !strings.Contains(strings.ToLower(normalizeQuotes(r.ArtistName)), want) {
+		if !artistMatches(r.ArtistName, artist) {
 			continue
 		}
 		if durationMs > 0 {

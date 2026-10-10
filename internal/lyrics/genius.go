@@ -63,7 +63,7 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 	if err != nil {
 		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
-	resp, err := client.Do(req)
+	resp, err := hostClient(client, checkGeniusURL).Do(req)
 	if err != nil {
 		return songResult{}, fmt.Errorf("genius search: %w", err)
 	}
@@ -100,19 +100,16 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 		}
 		return songResult{}, fmt.Errorf("genius search: %s", msg)
 	}
-	artistLower := strings.ToLower(normalizeQuotes(artist))
 	trackClean := strings.ToLower(normalizeQuotes(improveQuery(track)))
 	for _, hit := range result.Response.Hits {
 		if hit.Type != "song" {
 			continue
 		}
-		if strings.Contains(hit.Result.ArtistNames, "Genius") {
+		if isGeniusCommunityArtist(hit.Result.PrimaryArtistNames, hit.Result.ArtistNames) {
 			continue
 		}
-		hitArtist := strings.ToLower(normalizeQuotes(hit.Result.ArtistNames))
-		hitPrimaryArtist := strings.ToLower(normalizeQuotes(hit.Result.PrimaryArtistNames))
-		if !strings.Contains(hitArtist, artistLower) &&
-			!strings.Contains(hitPrimaryArtist, artistLower) {
+		if !artistMatches(hit.Result.ArtistNames, artist) &&
+			!artistMatches(hit.Result.PrimaryArtistNames, artist) {
 			continue
 		}
 		titleClean := strings.ToLower(normalizeQuotes(improveQuery(hit.Result.Title)))
@@ -124,6 +121,24 @@ func searchSong(ctx context.Context, client *http.Client, query, track, artist s
 	return songResult{}, nil
 }
 
+// isGeniusCommunityArtist reports whether a hit's artist is one of
+// Genius's own community accounts ("Genius English Translations",
+// "Genius Romanizations", ...), whose "songs" are translations and
+// transliterations of the real lyrics rather than the lyrics themselves.
+// They are all named "Genius " plus a language or a task, and that prefix
+// with its trailing space is what is matched: an artist named "Genius" or
+// "Genius/GZA" is not one. The primary artist is checked because the full
+// artist string of a real song can start with the artist's name and then
+// list features ("Genius (Ft. ...)"); it falls back to the full string
+// when the response has no primary artist.
+func isGeniusCommunityArtist(primary, all string) bool {
+	name := primary
+	if name == "" {
+		name = all
+	}
+	return strings.HasPrefix(name, "Genius ")
+}
+
 // checkSongURL rejects a song URL that does not point at genius.com (or a
 // subdomain) over https. The URL comes from Genius's search response, and
 // following it anywhere else would turn the scraper into a request proxy
@@ -133,6 +148,13 @@ func checkSongURL(raw string) error {
 	if err != nil {
 		return fmt.Errorf("genius fetch: song url: %w", err)
 	}
+	return checkGeniusURL(u)
+}
+
+// checkGeniusURL is the host rule behind checkSongURL, applied to the
+// song URL before it is fetched and to every redirect target of a Genius
+// request after it (see hostClient).
+func checkGeniusURL(u *url.URL) error {
 	host := strings.ToLower(u.Hostname())
 	switch {
 	case u.Scheme != "https":
@@ -153,7 +175,7 @@ func scrapeLyrics(ctx context.Context, client *http.Client, songURL string) (str
 	if err != nil {
 		return "", fmt.Errorf("genius fetch: %w", err)
 	}
-	resp, err := client.Do(req)
+	resp, err := hostClient(client, checkGeniusURL).Do(req)
 	if err != nil {
 		return "", fmt.Errorf("genius fetch: %w", err)
 	}

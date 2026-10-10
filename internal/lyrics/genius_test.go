@@ -551,3 +551,155 @@ func TestExtractLyrics_StripsTerminalEscapes(t *testing.T) {
 		t.Errorf("got %q, want %q", got, want)
 	}
 }
+
+// A redirect is held to the same host rule as the song URL itself: a song
+// page that sends the client off genius.com, to plain http, or to another
+// port is refused instead of followed, and nothing is fetched from the
+// target. net/http would otherwise follow it anywhere.
+func TestScrapeLyrics_RefusesRedirectOffHost(t *testing.T) {
+	t.Parallel()
+
+	for _, target := range []string{"https://evil.com/x", "http://genius.com/x", "https://genius.com:8443/x"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+
+			var fetched atomic.Int32
+			client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/song" {
+					http.Redirect(w, r, target, http.StatusFound)
+					return
+				}
+				fetched.Add(1)
+				w.Write([]byte(`<div data-lyrics-container="true">should never be read</div>`))
+			})
+			defer cleanup()
+
+			text, err := scrapeLyrics(context.Background(), client, "https://genius.com/song")
+			if err == nil {
+				t.Fatalf("scrapeLyrics followed the redirect to %q and returned %q", target, text)
+			}
+			if !strings.Contains(err.Error(), "redirect refused") {
+				t.Errorf("err = %v, want one naming the refused redirect", err)
+			}
+			if n := fetched.Load(); n != 0 {
+				t.Errorf("%d request(s) were made to the redirect target", n)
+			}
+		})
+	}
+}
+
+func TestScrapeLyrics_FollowsRedirectWithinGenius(t *testing.T) {
+	t.Parallel()
+
+	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/song":
+			http.Redirect(w, r, "https://genius.com/song-moved", http.StatusMovedPermanently)
+		case "/song-moved":
+			w.Write([]byte(`<div data-lyrics-container="true">Moved lyrics</div>`))
+		default:
+			http.NotFound(w, r)
+		}
+	})
+	defer cleanup()
+
+	text, err := scrapeLyrics(context.Background(), client, "https://genius.com/song")
+	if err != nil {
+		t.Fatalf("scrapeLyrics: %v", err)
+	}
+	if text != "Moved lyrics" {
+		t.Errorf("text = %q, want the lyrics from the redirect target", text)
+	}
+}
+
+// The search endpoint is under the same rule as the song page.
+func TestSearchSong_RefusesRedirectOffHost(t *testing.T) {
+	t.Parallel()
+
+	var fetched atomic.Int32
+	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/api/search" {
+			http.Redirect(w, r, "https://evil.com/moved", http.StatusFound)
+			return
+		}
+		fetched.Add(1)
+		json.MarshalWrite(w, geniusSearchResponse(nil))
+	})
+	defer cleanup()
+
+	_, err := searchSong(context.Background(), client, "q", "Song", "Artist")
+	if err == nil || !strings.Contains(err.Error(), "redirect refused") {
+		t.Fatalf("err = %v, want a refused redirect", err)
+	}
+	if n := fetched.Load(); n != 0 {
+		t.Errorf("%d request(s) were made to the redirect target", n)
+	}
+}
+
+// Only Genius's own community accounts are skipped, by the "Genius "
+// prefix they all share; an artist actually named Genius must match.
+func TestSearchSong_ArtistNamedGeniusMatches(t *testing.T) {
+	t.Parallel()
+
+	resp := geniusSearchResponse([]map[string]any{
+		songHit("Song", "Genius Romanizations", "https://genius.com/romanized", false),
+		songHit("Song", "Genius", "https://genius.com/genius-song", false),
+	})
+	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		json.MarshalWrite(w, resp)
+	})
+	defer cleanup()
+
+	result, err := searchSong(context.Background(), client, "genius song", "Song", "Genius")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.url != "https://genius.com/genius-song" {
+		t.Errorf("got url %q, want https://genius.com/genius-song", result.url)
+	}
+}
+
+func TestIsGeniusCommunityArtist(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		primary, all string
+		want         bool
+	}{
+		{"Genius English Translations", "Genius English Translations", true},
+		{"Genius Romanizations", "Genius Romanizations", true},
+		{"", "Genius Traducciones al Español", true},
+		{"Genius", "Genius", false},
+		{"Genius", "Genius (Ft. GZA)", false},
+		{"Genius/GZA", "Genius/GZA", false},
+		{"Real Artist", "Real Artist (Ft. Genius English Translations)", false},
+		{"", "", false},
+	}
+	for _, tt := range tests {
+		if got := isGeniusCommunityArtist(tt.primary, tt.all); got != tt.want {
+			t.Errorf("isGeniusCommunityArtist(%q, %q) = %v, want %v", tt.primary, tt.all, got, tt.want)
+		}
+	}
+}
+
+// An empty artist must not match every hit: strings.Contains is true for
+// the empty string, and a title-only match is more likely wrong lyrics.
+func TestSearchSong_EmptyArtistMatchesNothing(t *testing.T) {
+	t.Parallel()
+
+	resp := geniusSearchResponse([]map[string]any{
+		songHit("Song", "Some Artist", "https://genius.com/some", false),
+	})
+	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		json.MarshalWrite(w, resp)
+	})
+	defer cleanup()
+
+	result, err := searchSong(context.Background(), client, "song", "Song", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result.url != "" {
+		t.Errorf("got url %q, want no match for an empty artist", result.url)
+	}
+}

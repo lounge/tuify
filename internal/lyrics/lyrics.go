@@ -3,19 +3,27 @@ package lyrics
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
 // ErrInstrumental is returned when the source marks a song as instrumental.
 var ErrInstrumental = errors.New("instrumental")
 
-// maxBodyBytes caps how much of any lyrics response is read. An LRCLIB
-// record or a Genius search result is a few KB and a Genius song page a
-// few hundred KB; anything past the cap is cut off instead of being
-// buffered into memory.
-const maxBodyBytes = 4 << 20
+const (
+	// maxBodyBytes caps how much of any lyrics response is read. An LRCLIB
+	// record or a Genius search result is a few KB and a Genius song page a
+	// few hundred KB; anything past the cap is cut off instead of being
+	// buffered into memory.
+	maxBodyBytes = 4 << 20
+
+	// maxRedirects is how many redirects one request may follow, the same
+	// bound net/http applies when no CheckRedirect is set.
+	maxRedirects = 10
+)
 
 // Line is one lyric line. StartMs is the playback position at which the
 // line starts, or -1 when the source carried no timestamps.
@@ -69,6 +77,41 @@ func Search(ctx context.Context, client *http.Client, track, artist string, dura
 		return Result{}, err
 	}
 	return Result{Lines: plainLines(text)}, nil
+}
+
+// hostClient returns a copy of client that follows a redirect only when
+// check accepts the target URL, and at most maxRedirects of them. Without
+// it net/http follows up to ten redirects to any host and scheme, which
+// would let a response from either service send the request, and the
+// parsing of its body, anywhere; the host checks on the first request
+// would then only cover the first hop. The client belongs to the caller
+// and is shared with other fetches, so it is copied per call rather than
+// changed in place.
+func hostClient(client *http.Client, check func(*url.URL) error) *http.Client {
+	c := *client
+	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
+		}
+		if err := check(req.URL); err != nil {
+			return fmt.Errorf("redirect refused: %w", err)
+		}
+		return nil
+	}
+	return &c
+}
+
+// artistMatches reports whether a hit's artist field names artist: a
+// case-insensitive substring match after quote normalization, so "Queen,
+// David Bowie" matches "Queen" and "Guns N’ Roses" matches "Guns N'
+// Roses". An empty artist matches nothing rather than everything
+// (strings.Contains is true for the empty string): a hit chosen by title
+// alone is more likely someone else's song than the right lyrics.
+func artistMatches(hitArtist, artist string) bool {
+	if artist == "" {
+		return false
+	}
+	return strings.Contains(strings.ToLower(normalizeQuotes(hitArtist)), strings.ToLower(normalizeQuotes(artist)))
 }
 
 // plainLines turns untimed lyric text, one line per newline, into Lines

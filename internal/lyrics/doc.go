@@ -14,7 +14,14 @@
 //  3. Genius: the keyless search endpoint (genius.com/api/search) for the
 //     best matching song, then the lyric text extracted from that song's
 //     page. Genius's documented API needs a key for any useful endpoint,
-//     so scraping is the pragmatic choice for a user-local TUI.
+//     so scraping is the pragmatic choice for a user-local TUI. Hits by
+//     Genius's own community accounts ("Genius English Translations" and
+//     the like, any artist named "Genius " plus a word) are skipped, since
+//     their pages hold translations rather than the lyrics.
+//
+// A hit names the artist when its artist field contains ours, ignoring
+// case and typographic quotes. An empty artist names no hit at all, so a
+// track without an artist gets no lyrics rather than a title-only guess.
 //
 // An LRCLIB failure (network, 5xx, bad JSON, which under encoding/json/v2
 // includes invalid UTF-8 or a duplicated key) is logged and treated as a
@@ -39,7 +46,10 @@
 // LRCLIB requests carry a User-Agent naming tuify, as its docs ask. The
 // Genius song URL in a search hit is followed only when it points at
 // genius.com or a subdomain over https; any other scheme or host is an
-// error, since the URL comes from the response itself. Every response is
+// error, since the URL comes from the response itself. Redirects are held
+// to the same rule: a Genius response may only redirect within genius.com
+// and an LRCLIB response within lrclib.net, both over https, and a
+// redirect elsewhere is an error rather than followed. Every response is
 // read up to 4 MiB and cut off beyond that.
 //
 // Returned text has been passed through termsafe.Clean line by line: both

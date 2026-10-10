@@ -323,6 +323,7 @@ func TestPickLRCLIBHit(t *testing.T) {
 		{"artist match is case-insensitive and partial", []lrclibRecord{synced("queen, david bowie", 200)}, "Queen", 200000, 0},
 		{"typographic apostrophes match ascii", []lrclibRecord{synced("Guns N’ Roses", 200)}, "Guns N' Roses", 200000, 0},
 		{"unknown duration accepts any length", []lrclibRecord{synced("Artist", 999)}, "Artist", 0, 0},
+		{"empty artist matches nothing", []lrclibRecord{synced("Artist", 200)}, "", 200000, -1},
 		{"no records", nil, "Artist", 200000, -1},
 	}
 	for _, tt := range tests {
@@ -348,5 +349,58 @@ func TestRoundSeconds(t *testing.T) {
 		if got := roundSeconds(tt.ms); got != tt.want {
 			t.Errorf("roundSeconds(%d) = %d, want %d", tt.ms, got, tt.want)
 		}
+	}
+}
+
+// A redirect off lrclib.net, or to plain http, is refused instead of
+// followed, and nothing is fetched from the target.
+func TestLRCLIBGet_RefusesRedirectOffHost(t *testing.T) {
+	t.Parallel()
+
+	for _, target := range []string{"https://evil.com/api/get", "http://lrclib.net/api/get"} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+
+			var fetched atomic.Int32
+			client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Query().Has("moved") {
+					fetched.Add(1)
+					json.MarshalWrite(w, lrclibJSON("Artist", 200, "", "never", false))
+					return
+				}
+				http.Redirect(w, r, target+"?moved=1", http.StatusFound)
+			})
+			defer cleanup()
+
+			_, err := lrclibGet(context.Background(), client, "Song", "Artist", 200000)
+			if err == nil || !strings.Contains(err.Error(), "redirect refused") {
+				t.Fatalf("err = %v, want a refused redirect", err)
+			}
+			if n := fetched.Load(); n != 0 {
+				t.Errorf("%d request(s) were made to the redirect target", n)
+			}
+		})
+	}
+}
+
+// A redirect that stays on lrclib.net over https is followed as before.
+func TestLRCLIBGet_FollowsRedirectWithinLRCLIB(t *testing.T) {
+	t.Parallel()
+
+	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
+		if !r.URL.Query().Has("moved") {
+			http.Redirect(w, r, "https://lrclib.net/api/get?moved=1", http.StatusMovedPermanently)
+			return
+		}
+		json.MarshalWrite(w, lrclibJSON("Artist", 200, "", "Moved lyrics", false))
+	})
+	defer cleanup()
+
+	res, err := lrclibGet(context.Background(), client, "Song", "Artist", 200000)
+	if err != nil {
+		t.Fatalf("lrclibGet: %v", err)
+	}
+	if len(res.Lines) != 1 || res.Lines[0].Text != "Moved lyrics" {
+		t.Errorf("lines = %v, want the lyrics from the redirect target", res.Lines)
 	}
 }

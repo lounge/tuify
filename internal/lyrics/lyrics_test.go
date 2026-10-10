@@ -295,3 +295,25 @@ func TestPlainLines(t *testing.T) {
 		t.Errorf("plainLines = %v, want %v", got, want)
 	}
 }
+
+func TestArtistMatches(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		hit, artist string
+		want        bool
+	}{
+		{"Queen", "Queen", true},
+		{"queen, david bowie", "Queen", true},
+		{"Guns N’ Roses", "Guns N' Roses", true},
+		{"Art", "Artist", false},
+		{"Cover Band", "Artist", false},
+		{"Some Artist", "", false},
+		{"", "", false},
+	}
+	for _, tt := range tests {
+		if got := artistMatches(tt.hit, tt.artist); got != tt.want {
+			t.Errorf("artistMatches(%q, %q) = %v, want %v", tt.hit, tt.artist, got, tt.want)
+		}
+	}
+}
