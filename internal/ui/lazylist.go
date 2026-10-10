@@ -46,6 +46,10 @@ type lazyList struct {
 	id   uint64
 	ctx  context.Context
 	load pageLoader
+	// cancel ends ctx, a child of the root context, when the screen is
+	// popped (close), so a page still loading for it is abandoned instead
+	// of running to listFetchTimeout.
+	cancel context.CancelFunc
 }
 
 // pageLoadedMsg carries one fetched page back to the lazyList that asked
@@ -69,6 +73,7 @@ func newLazyList(ctx context.Context, load pageLoader, width, height int, vimMod
 	l := newList(id, width, height, vimMode)
 	initial := []list.Item{loadingStatusItem}
 	l.SetItems(initial)
+	ctx, cancel := context.WithCancel(ctx)
 	return lazyList{
 		list:    l,
 		items:   initial,
@@ -77,7 +82,14 @@ func newLazyList(ctx context.Context, load pageLoader, width, height int, vimMod
 		id:      id,
 		ctx:     ctx,
 		load:    load,
+		cancel:  cancel,
 	}
+}
+
+// close abandons any page still loading. Satisfies closer; the shell
+// calls it when it pops the screen.
+func (l *lazyList) close() {
+	l.cancel()
 }
 
 // Init starts loading the first page. The shell calls it when it pushes the
@@ -218,11 +230,16 @@ func (l *lazyList) prepareRetry() {
 func (l *lazyList) updateList(msg tea.Msg) tea.Cmd {
 	var cmd tea.Cmd
 	l.list, cmd = l.list.Update(msg)
-	cmds := []tea.Cmd{cmd}
+	return tea.Batch(cmd, l.loadNearEnd())
+}
+
+// loadNearEnd starts the next page when the cursor is near the end of the
+// loaded items (triggerLoad). Satisfies nearEndLoader.
+func (l *lazyList) loadNearEnd() tea.Cmd {
 	if l.triggerLoad() {
-		cmds = append(cmds, l.fetchMore())
+		return l.fetchMore()
 	}
-	return tea.Batch(cmds...)
+	return nil
 }
 
 // View renders the inner list.

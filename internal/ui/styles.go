@@ -54,6 +54,15 @@ var (
 	searchHintBoxStyle lipgloss.Style
 	helpOverlayStyle   lipgloss.Style
 	deviceOverlayStyle lipgloss.Style
+	statusTextStyle    lipgloss.Style
+
+	// Device selector rows
+	deviceTitleStyle      lipgloss.Style
+	deviceNameStyle       lipgloss.Style
+	deviceNameActiveStyle lipgloss.Style
+	deviceNameCursorStyle lipgloss.Style
+	deviceTypeStyle       lipgloss.Style
+	deviceActiveIconStyle lipgloss.Style
 )
 
 // RebuildStyles (re)constructs every package-level style from the current
@@ -131,6 +140,14 @@ func RebuildStyles() {
 	searchHintBoxStyle = overlayBoxStyle.Padding(1, 2)
 	helpOverlayStyle = overlayBoxStyle.Padding(1, 3)
 	deviceOverlayStyle = overlayBoxStyle.Padding(1, 3)
+	statusTextStyle = lipgloss.NewStyle().Foreground(theme.Text)
+
+	deviceTitleStyle = lipgloss.NewStyle().Foreground(theme.Text).Bold(true)
+	deviceNameStyle = lipgloss.NewStyle().Foreground(theme.Text)
+	deviceNameActiveStyle = lipgloss.NewStyle().Foreground(theme.Muted)
+	deviceNameCursorStyle = lipgloss.NewStyle().Foreground(theme.Primary).Bold(true)
+	deviceTypeStyle = lipgloss.NewStyle().Foreground(theme.Muted)
+	deviceActiveIconStyle = lipgloss.NewStyle().Foreground(theme.Secondary)
 
 	rebuildSpinnerStyle()
 }

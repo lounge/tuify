@@ -109,19 +109,19 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 			setup: func(np *nowPlayingModel) {
 				// Playing X, then the user pressed space: optimistic pause.
 				np.trackURI, np.hasTrack, np.progressMs = trackX, true, 4000
-				np.playing, np.playPausePending = false, true
+				np.playing, np.playPausePending = false, 1
 			},
 			steps: []npStep{
 				{msg: playerStateMsg{state: pstate(trackX, true, 5000)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					wantPlayback(t, np, false, 4000)
-					if !np.playPausePending {
+					if np.playPausePending == 0 {
 						t.Error("stale playing=true cleared playPausePending")
 					}
 					wantNoResume(t, r)
 				}},
 				{msg: playerStateMsg{state: pstate(trackX, false, 5100)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					wantPlayback(t, np, false, 5100)
-					if np.playPausePending {
+					if np.playPausePending != 0 {
 						t.Error("confirming state did not clear playPausePending")
 					}
 				}},
@@ -135,12 +135,12 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 			name: "pending pause is dropped when the track changes",
 			setup: func(np *nowPlayingModel) {
 				np.trackURI, np.hasTrack, np.progressMs = trackX, true, 4000
-				np.playing, np.playPausePending = false, true
+				np.playing, np.playPausePending = false, 1
 			},
 			steps: []npStep{
 				{msg: playerStateMsg{state: pstate(trackY, true, 700)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					wantPlayback(t, np, true, 700)
-					if np.playPausePending {
+					if np.playPausePending != 0 {
 						t.Error("track change must drop the stale pending play/pause")
 					}
 				}},
@@ -150,16 +150,16 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 			name: "pending shuffle reconciles on confirmation",
 			setup: func(np *nowPlayingModel) {
 				np.trackURI, np.hasTrack, np.playing = trackX, true, true
-				np.shuffling, np.shufflePending = true, true // user pressed r
+				np.shuffling, np.shufflePending = true, 1 // user pressed r
 			},
 			steps: []npStep{
 				{msg: playerStateMsg{state: withShuffle(pstate(trackX, true, 1000), false)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
-					if !np.shuffling || !np.shufflePending {
+					if !np.shuffling || np.shufflePending == 0 {
 						t.Errorf("stale shuffle=false applied: shuffling=%v pending=%v", np.shuffling, np.shufflePending)
 					}
 				}},
 				{msg: playerStateMsg{state: withShuffle(pstate(trackX, true, 2000), true)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
-					if !np.shuffling || np.shufflePending {
+					if !np.shuffling || np.shufflePending != 0 {
 						t.Errorf("confirmation not reconciled: shuffling=%v pending=%v", np.shuffling, np.shufflePending)
 					}
 				}},

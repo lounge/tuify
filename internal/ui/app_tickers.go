@@ -58,12 +58,17 @@ func (m Model) handleLabelScroll() (tea.Model, tea.Cmd) {
 // loading spinner: the now-playing status banner, the device overlay
 // while it loads, or a spinning status row in the current list. Spinning
 // rows are only ever the sole row or the trailing "Loading more…" row.
+// The list's rows count only while the list is on screen: help, the
+// visualizer, mini mode and the device overlay hide it.
 func (m Model) needsSpinner() bool {
 	if m.nowPlaying.statusMsg != "" && m.nowPlaying.statusSpinning {
 		return true
 	}
 	if m.showDeviceSelector && m.deviceSelector.loading {
 		return true
+	}
+	if m.listHidden() {
+		return false
 	}
 	if l := m.currentList(); l != nil {
 		if items := l.Items(); len(items) > 0 {

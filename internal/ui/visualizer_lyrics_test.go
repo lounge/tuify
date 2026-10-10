@@ -64,7 +64,8 @@ func TestLoadLyrics_CachesSyncedLinesAndSendsDuration(t *testing.T) {
 			})
 		}))
 
-		m.initTrack(trackInfo{id: "t1", durationMs: 200400, track: "Song", artist: "Band"})
+		m.active = true
+		m.setTrack(trackInfo{id: "t1", durationMs: 200400, track: "Song", artist: "Band"})
 		synctest.Wait()
 		m.drainLyrics()
 
@@ -98,7 +99,8 @@ func TestLoadLyrics_FetchErrorIsNotCached(t *testing.T) {
 			w.WriteHeader(http.StatusServiceUnavailable)
 		}))
 
-		m.initTrack(trackInfo{id: "t1", durationMs: 200000, track: "Song", artist: "Band"})
+		m.active = true
+		m.setTrack(trackInfo{id: "t1", durationMs: 200000, track: "Song", artist: "Band"})
 		synctest.Wait()
 		m.drainLyrics()
 
@@ -126,7 +128,8 @@ func TestLoadLyrics_NotFoundIsCached(t *testing.T) {
 			}
 		}))
 
-		m.initTrack(trackInfo{id: "t1", durationMs: 200000, track: "Song", artist: "Band"})
+		m.active = true
+		m.setTrack(trackInfo{id: "t1", durationMs: 200000, track: "Song", artist: "Band"})
 		synctest.Wait()
 		m.drainLyrics()
 

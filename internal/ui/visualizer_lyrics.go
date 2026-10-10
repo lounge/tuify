@@ -24,9 +24,13 @@ type cachedLyrics struct {
 // loadLyrics fetches the track's lyrics, serving them from the cache when
 // it can. durationMs is the track length, which LRCLIB uses to pick the
 // right edit of a song; 0 means unknown.
+// A fetch already in flight for the same track is left to finish.
 func (m *visualizerModel) loadLyrics(trackID, track, artist string, durationMs int) {
-	m.lyrics.cancelPending()
 	m.drainLyrics()
+	if m.lyrics.inFlight(trackID) {
+		return
+	}
+	m.lyrics.cancelPending()
 
 	if cached, ok := m.lyricsCache.get(trackID); ok {
 		if cached.instrumental {
@@ -37,7 +41,7 @@ func (m *visualizerModel) loadLyrics(trackID, track, artist string, durationMs i
 		return
 	}
 
-	ctx, cancel, ch := m.lyrics.begin(m.ctx, 15*time.Second)
+	ctx, cancel, ch := m.lyrics.beginFor(m.ctx, 15*time.Second, trackID)
 	client := m.httpClient
 	go func() {
 		defer cancel()

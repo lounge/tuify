@@ -31,6 +31,13 @@ func fetchCmd[T any](
 // Spotify for.
 const searchPageSize = 10
 
+// searchFetchAhead is how many loaded rows may remain below the cursor
+// before the next page is requested. It is strictly less than
+// searchPageSize: at the page size a fresh page with the cursor on its
+// first row would already qualify, and every search would cost a second
+// request before the user moved.
+const searchFetchAhead = 5
+
 func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 	const limit = searchPageSize
 	client := v.client
@@ -125,8 +132,11 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 	}
 }
 
+// fetchMore requests the next page. Nothing is fetched while a page is in
+// flight, past the last page, or after a failed page: that one is retried
+// from its error row (retry), not on the next cursor move.
 func (v *searchView) fetchMore() tea.Cmd {
-	if v.hasMore && v.pending == 0 {
+	if v.hasMore && v.pending == 0 && v.searchErr == nil {
 		v.pending++
 		term := v.query
 		if v.depth > 0 {
@@ -145,11 +155,13 @@ func (v *searchView) goBackFetchCmd() tea.Cmd {
 	return nil
 }
 
-// retry re-triggers the last search or detail fetch after an error.
+// retry re-triggers the failed search, detail or page fetch. Results
+// loaded before the failure stay on screen; only the error row gives way
+// to a loading row until the page arrives.
 func (v *searchView) retry() tea.Cmd {
 	v.searchErr = nil
 	v.pending = 1
-	v.list.SetItems([]list.Item{loadingStatusItem})
+	v.rebuildList()
 	term := v.query
 	if v.depth > 0 {
 		term = ""
@@ -158,25 +170,34 @@ func (v *searchView) retry() tea.Cmd {
 }
 
 // rebuildList refreshes v.list from v.items, swapping in loading/error/empty
-// placeholder rows when there are no real items yet.
+// placeholder rows when there are no real items yet. When there are, a
+// failed or retried later page shows as an error or loading row after
+// them, as lazyList does, so the failure is visible and Enter can retry
+// it.
 func (v *searchView) rebuildList() {
 	prev := v.list.Index()
 	items := v.items
-	if len(items) == 0 {
+	errRow := statusItem{
+		text:    "Search failed: " + userMessage(v.searchErr),
+		desc:    "press Enter to retry",
+		isError: true,
+	}
+	switch {
+	case len(items) == 0:
 		switch {
 		case v.pending > 0:
 			items = []list.Item{loadingStatusItem}
 		case v.searchErr != nil:
-			items = []list.Item{statusItem{
-				text:    "Search failed: " + userMessage(v.searchErr),
-				desc:    "press Enter to retry",
-				isError: true,
-			}}
+			items = []list.Item{errRow}
 		case v.query == "" && v.depth == 0:
 			items = nil
 		default:
 			items = []list.Item{statusItem{text: "No results"}}
 		}
+	case v.pending > 0:
+		items = appendRow(items, statusItem{text: "Loading more…", spinning: true})
+	case v.searchErr != nil:
+		items = appendRow(items, errRow)
 	}
 
 	// Keep the cursor row across the rebuild, clamped to the new length:
@@ -198,4 +219,12 @@ func (v *searchView) rebuildList() {
 			}
 		}
 	}
+}
+
+// appendRow returns items plus row in a fresh slice, so the status row is
+// never written into the backing array of v.items.
+func appendRow(items []list.Item, row list.Item) []list.Item {
+	out := make([]list.Item, 0, len(items)+1)
+	out = append(out, items...)
+	return append(out, row)
 }

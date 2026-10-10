@@ -11,7 +11,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/lounge/tuify/internal/spotify"
-	"github.com/lounge/tuify/internal/theme"
 )
 
 // externalDeviceID is the sentinel ID used for the synthetic row added
@@ -181,28 +180,27 @@ func (d *deviceSelectorModel) view(width, height int) string {
 		}
 		var lines []string
 		for i, dev := range d.devices {
-			nameStyle := lipgloss.NewStyle().Foreground(theme.Text)
-			typeStyle := lipgloss.NewStyle().Foreground(theme.Muted)
+			nameStyle := deviceNameStyle
 			if dev.ID == d.activeDeviceID {
-				nameStyle = nameStyle.Foreground(theme.Muted)
+				nameStyle = deviceNameActiveStyle
 			} else if i == d.cursor {
-				nameStyle = nameStyle.Foreground(theme.Primary).Bold(true)
+				nameStyle = deviceNameCursorStyle
 			}
 			var icon string
 			if dev.ID == d.activeDeviceID {
-				icon = lipgloss.NewStyle().Foreground(theme.Secondary).Render("◉") + " "
+				icon = deviceActiveIconStyle.Render("◉") + " "
 			} else {
 				icon = "  "
 			}
 			name := nameStyle.Render(dev.Name)
 			pad := strings.Repeat(" ", maxLabel-lipgloss.Width(dev.Name)+2)
-			typ := typeStyle.Render(strings.ToLower(dev.Type))
+			typ := deviceTypeStyle.Render(strings.ToLower(dev.Type))
 			lines = append(lines, icon+name+pad+typ)
 		}
 		body = strings.Join(lines, "\n")
 	}
 
-	title := lipgloss.NewStyle().Foreground(theme.Text).Bold(true).Render("Select Device")
+	title := deviceTitleStyle.Render("Select Device")
 	content := title + "\n\n" + body
 	box := deviceOverlayStyle.Render(content)
 	return lipgloss.Place(width, height, lipgloss.Center, lipgloss.Center, box)

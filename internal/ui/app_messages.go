@@ -30,10 +30,13 @@ const (
 	opShuffle                     // reverts shuffling on failure
 )
 
-// playbackResultMsg is used for all device-bound commands.
+// playbackResultMsg is used for all device-bound commands. flip is the
+// number of the optimistic flip the command made (nowPlayingModel.beginFlip),
+// 0 for commands that flipped nothing.
 type playbackResultMsg struct {
-	err error
-	op  playbackOp
+	err  error
+	op   playbackOp
+	flip uint64
 }
 
 // librespotInactiveMsg is sent (via p.Send) when librespot reports that the

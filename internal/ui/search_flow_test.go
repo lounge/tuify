@@ -288,13 +288,110 @@ func TestSearchView_CursorNearEndFetchesMore(t *testing.T) {
 	v.offset, v.hasMore = 20, true
 	v.rebuildList()
 
-	v.list.Select(8) // 20-9 = 11 rows left after moving down one: no fetch
+	v.list.Select(13) // 20-14 = 6 rows left after moving down one: no fetch
 	v.Update(tea.KeyMsg{Type: tea.KeyDown})
 	if v.pending != 0 {
-		t.Fatalf("fetch started with 11 rows left (cursor %d)", v.list.Index())
+		t.Fatalf("fetch started with 6 rows left (cursor %d)", v.list.Index())
 	}
-	v.Update(tea.KeyMsg{Type: tea.KeyDown}) // cursor 10: 10 rows left
+	v.Update(tea.KeyMsg{Type: tea.KeyDown}) // cursor 15: searchFetchAhead rows left
 	if v.pending != 1 {
-		t.Errorf("no fetch with 10 rows left (cursor %d)", v.list.Index())
+		t.Errorf("no fetch with %d rows left (cursor %d)", searchFetchAhead, v.list.Index())
+	}
+}
+
+// failingPageStub serves a track search of total rows and fails the
+// request for one offset until healed.
+type failingPageStub struct {
+	searchStub
+	failOffset int
+	healed     atomic.Bool
+}
+
+func (s *failingPageStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if off, _ := strconv.Atoi(r.URL.Query().Get("offset")); off == s.failOffset && !s.healed.Load() {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	s.searchStub.ServeHTTP(w, r)
+}
+
+// A later page that fails shows an error row under the loaded results, and
+// Enter on it retries that page while the earlier results stay.
+func TestSearchView_LaterPageFailureShowsRetryRow(t *testing.T) {
+	stub := &failingPageStub{failOffset: 10}
+	stub.total = 25
+	srv := httptest.NewServer(stub)
+	t.Cleanup(srv.Close)
+	client := spotify.New(&http.Client{Transport: &testutil.RewriteTransport{Base: srv.Client().Transport, Target: srv.URL}})
+	v := newSearchView(t.Context(), client, 80, 20, false)
+	typeQuery(t, v, "song")
+	commitSearch(t, v)
+
+	v.Update(v.fetchMore()())
+	rows := v.list.Items()
+	if len(rows) != 11 {
+		t.Fatalf("%d rows after a failed page 2, want the 10 results and an error row", len(rows))
+	}
+	if si, ok := rows[10].(statusItem); !ok || !si.isError {
+		t.Fatalf("last row = %#v, want the error row", rows[10])
+	}
+	if !v.hasMore {
+		t.Error("hasMore cleared by a failed page; retry would have nothing to resume")
+	}
+	if cmd := v.fetchMore(); cmd != nil {
+		t.Error("fetchMore must hold off after a failure; the error row is the retry")
+	}
+
+	stub.healed.Store(true)
+	v.list.Select(10)
+	cmd := v.onEnter()
+	if cmd == nil {
+		t.Fatal("Enter on the error row did not retry")
+	}
+	if rows := v.list.Items(); len(rows) != 11 || len(uris(rows)) != 10 {
+		t.Errorf("while retrying: %d rows, %d results, want the 10 results kept plus a loading row", len(rows), len(uris(rows)))
+	}
+	applySearchResult(t, v, cmd)
+	if got := uris(v.items); len(got) != 20 || got[10] != "spotify:track:track10" {
+		t.Errorf("after the retry: %d results starting page 2 with %v, want 20 from track10", len(got), got[min(10, len(got)-1)])
+	}
+}
+
+// Enter drills into an album while the last edit's debounce is pending.
+// The tick must not replace the album's tracks with a fresh search.
+func TestSearchView_DebounceAfterEnterIsIgnored(t *testing.T) {
+	v, _ := newStubSearchView(t, 4)
+	typeQuery(t, v, "l:quee")
+	commitSearch(t, v)
+	typeQuery(t, v, "n") // schedules a debounce for "l:queen"
+	pendingSeq, pendingQuery := v.debounceSeq, v.searchQuery
+
+	sc, _ := v.activeSearchInput()
+	cmd, _ := handleSearchKey(sc, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil || v.depth != 1 {
+		t.Fatalf("Enter on an album: depth=%d cmd=%v, want a drill-down", v.depth, cmd != nil)
+	}
+	album := v.selectedAlbum
+
+	if got := v.Update(searchDebounceMsg{seq: pendingSeq, query: pendingQuery}); got != nil {
+		t.Error("the debounce scheduled before Enter started a fetch")
+	}
+	if v.depth != 1 || v.selectedAlbum != album {
+		t.Errorf("drill-down lost: depth=%d album=%+v, want 1/%+v", v.depth, v.selectedAlbum, album)
+	}
+}
+
+// A fresh page with the cursor on its first row must not request the next
+// page on the next unrelated message.
+func TestSearchView_FreshPageDoesNotPrefetch(t *testing.T) {
+	v, stub := newStubSearchView(t, 25)
+	typeQuery(t, v, "song")
+	commitSearch(t, v)
+
+	if cmd := v.Update(progressTickMsg{}); v.pending != 0 {
+		t.Errorf("a progress tick started a page fetch (cmd=%v)", cmd != nil)
+	}
+	if n := stub.requests.Load(); n != 1 {
+		t.Errorf("server saw %d requests, want 1", n)
 	}
 }

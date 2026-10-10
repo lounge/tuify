@@ -98,6 +98,7 @@ func newTestModelWithClient(preferred string) Model {
 	np := newNowPlaying(context.Background(), client)
 	return Model{
 		nowPlaying: np,
+		visualizer: newVisualizerModel(context.Background(), nil),
 		client:     client,
 		viewStack:  []view{newHomeView(0, 0, false)},
 	}

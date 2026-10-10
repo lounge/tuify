@@ -20,6 +20,7 @@ const maxQueueURIs = 50
 type searchView struct {
 	list        list.Model
 	ctx         context.Context
+	cancel      context.CancelFunc // ends ctx when the screen is popped (close)
 	client      *spotify.Client
 	searching   bool
 	searchQuery string // raw user input (e.g. "a:queen")
@@ -51,9 +52,11 @@ func newSearchView(ctx context.Context, client *spotify.Client, width, height in
 	id := newFetchID()
 	l := newList(id, width, height, vimMode)
 	l.SetItems(nil)
+	ctx, cancel := context.WithCancel(ctx)
 	return &searchView{
 		list:      l,
 		ctx:       ctx,
+		cancel:    cancel,
 		client:    client,
 		searching: true,
 		id:        id,
@@ -65,9 +68,13 @@ func newSearchView(ctx context.Context, client *spotify.Client, width, height in
 
 // Lifecycle helpers
 
+// closeSearch ends the input session. A debounce tick scheduled by the
+// last edit must not run after Enter or Esc: it would replace what Enter
+// opened (a drill-down, the queue it started) with a fresh search.
 func (v *searchView) closeSearch() {
 	v.searching = false
 	v.searchQuery = ""
+	v.debounceSeq++
 }
 
 func (v *searchView) openSearch() {
@@ -110,30 +117,24 @@ func (v *searchView) activeSearchInput() (searchCtx, bool) {
 }
 
 func (v *searchView) resetToDepth0() {
-	// A fetch or debounce still in flight belongs to the session being
-	// discarded. Rotate the epoch so a late result is dropped instead of
-	// filling the emptied list and driving pending negative, and bump
-	// debounceSeq so a tick scheduled before the reset does not run its
-	// stale query.
-	v.epoch = newFetchID()
-	v.debounceSeq++
+	v.resetPagination()
 	v.depth = 0
-	v.items = nil
-	v.offset = 0
-	v.hasMore = false
-	v.pending = 0
 	v.query = ""
-	v.searchErr = nil
-	v.syncURI = ""
 	v.selectedArtist = selectedRef{}
 	v.selectedAlbum = selectedRef{}
 	v.selectedShow = selectedRef{}
 	v.list.SetItems(nil)
 }
 
-// resetPagination clears pagination state for a new depth level.
+// resetPagination clears pagination state for a new depth level. A fetch
+// or debounce still in flight belongs to the session being discarded:
+// the epoch rotates so a late result is dropped instead of filling the
+// emptied list and driving pending negative, and debounceSeq is bumped so
+// a tick scheduled before the reset does not run its stale query over
+// the new level.
 func (v *searchView) resetPagination() {
 	v.epoch = newFetchID()
+	v.debounceSeq++
 	v.items = nil
 	v.offset = 0
 	v.hasMore = false
@@ -187,9 +188,11 @@ func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 		}
 		v.pending--
 		if msg.err != nil {
+			// hasMore is kept: the failed page is still there to fetch, and
+			// retry resumes at the same offset. fetchMore holds off while
+			// searchErr is set, so the error row is the only way on.
 			log.Printf("[search] fetch failed: %v", msg.err)
 			v.searchErr = msg.err
-			v.hasMore = false
 		} else {
 			v.items = append(v.items, msg.items...)
 			v.offset += len(msg.items)
@@ -205,16 +208,18 @@ func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 
 	var cmd tea.Cmd
 	v.list, cmd = v.list.Update(msg)
-	cmds := []tea.Cmd{cmd}
+	return tea.Batch(cmd, v.loadNearEnd())
+}
 
-	// Pagination: fetch more when near bottom
-	if v.pending == 0 && len(v.items) > 0 && len(v.items)-v.list.Index() <= 10 {
-		if cmd := v.fetchMore(); cmd != nil {
-			cmds = append(cmds, cmd)
-		}
+// loadNearEnd fetches the next page once the cursor is within
+// searchFetchAhead rows of the end of the loaded results. Satisfies
+// nearEndLoader; Update calls it after every key the list handled, and the
+// shell after moving the cursor itself (wheel, half page).
+func (v *searchView) loadNearEnd() tea.Cmd {
+	if len(v.items) > 0 && len(v.items)-v.list.Index() <= searchFetchAhead {
+		return v.fetchMore()
 	}
-
-	return tea.Batch(cmds...)
+	return nil
 }
 
 // View-interface methods
@@ -249,6 +254,9 @@ func (v *searchView) back() (tea.Cmd, bool) {
 }
 
 func (v *searchView) searchState() (bool, string) { return v.searching, v.searchQuery }
+
+// close abandons any fetch still in flight. Satisfies closer.
+func (v *searchView) close() { v.cancel() }
 
 // syncTo implements syncableView. Only a drilled-into album or show has a
 // context of its own to page through; track and episode results at depth

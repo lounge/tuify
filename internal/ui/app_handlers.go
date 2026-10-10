@@ -34,21 +34,28 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 	}
 	if msg.err != nil {
 		log.Printf("[playback] command failed: %v", msg.err)
-		// Revert only the optimistic flip made for this command. A flip
-		// pending for another command (a pause that succeeded while this
-		// Next failed) stays until its own reply or the next poll settles it.
+		// Revert only the optimistic flip made for this command: the one
+		// whose number the reply carries. A flip pending for another
+		// command (a pause that succeeded while this Next failed) or a
+		// later press of the same key (its own reply is still out) stays
+		// until its reply or the next poll settles it.
 		switch msg.op {
 		case opPlayPause:
-			if m.nowPlaying.playPausePending {
-				m.nowPlaying.playPausePending = false
+			if msg.flip != 0 && m.nowPlaying.playPausePending == msg.flip {
+				m.nowPlaying.playPausePending = 0
 				m.nowPlaying.playing = !m.nowPlaying.playing
 			}
 		case opShuffle:
-			if m.nowPlaying.shufflePending {
-				m.nowPlaying.shufflePending = false
+			if msg.flip != 0 && m.nowPlaying.shufflePending == msg.flip {
+				m.nowPlaying.shufflePending = 0
 				m.nowPlaying.shuffling = !m.nowPlaying.shuffling
 			}
-		case opPlayback, opSeek:
+		case opSeek:
+			// A failed seek leaves the player where it was. If it was the
+			// resume seek for a cached episode position, the position the
+			// guard waits for will never arrive; let the next poll through.
+			m.nowPlaying.resumeUntilMs = 0
+		case opPlayback:
 		}
 		// Don't show transient network errors in the UI — they recover on their own.
 		if errors.Is(msg.err, context.DeadlineExceeded) {
@@ -144,12 +151,21 @@ func (m Model) handleMouse(msg tea.MouseMsg) (handled bool, model tea.Model, cmd
 		if s, ok := m.currentView().(scrollable); ok {
 			s.scrollDown()
 			m.lastWheelTime = time.Now()
-			return true, m, nil
+			return true, m, m.loadNearEnd()
 		}
 	case tea.MouseButtonLeft:
 		return m.handleMouseClick(msg)
 	}
 	return false, m, nil
+}
+
+// loadNearEnd asks the current view for its next page after the shell
+// moved the cursor itself; see nearEndLoader.
+func (m Model) loadNearEnd() tea.Cmd {
+	if l, ok := m.currentView().(nearEndLoader); ok {
+		return l.loadNearEnd()
+	}
+	return nil
 }
 
 // listHidden reports whether an overlay or mode has replaced the current

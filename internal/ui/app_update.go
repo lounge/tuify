@@ -201,6 +201,7 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Update now-playing
 	prevURI := m.nowPlaying.trackURI
+	prevHasTrack := m.nowPlaying.hasTrack
 	prevVolume := m.nowPlaying.volumePercent
 	cmd := m.nowPlaying.Update(msg)
 	if cmd != nil {
@@ -224,13 +225,21 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Re-init visualizer on track change and reload album art + lyrics
-	if m.nowPlaying.trackURI != prevURI && isPlayableURI(m.nowPlaying.trackURI) {
-		m.visualizer.initTrack(m.nowPlaying.trackInfo())
-		m.visualizer.loadImage(m.nowPlaying.imageURL)
-		cmds = append(cmds, tea.SetWindowTitle(fmt.Sprintf("tuify — %s — %s", m.nowPlaying.track, m.nowPlaying.artist)))
-	} else if m.nowPlaying.imageURL != m.visualizer.imageURL {
-		m.visualizer.loadImage(m.nowPlaying.imageURL)
+	// Re-init the visualizer on a track change. Album art and lyrics are
+	// fetched only while the pane is open (see visualizerModel.setTrack);
+	// an item that is not a track or episode (an ad, a local file) puts
+	// the pane in its "No track" state rather than leaving the previous
+	// track's art and lyrics up.
+	switch {
+	case m.nowPlaying.trackURI != prevURI && isPlayableURI(m.nowPlaying.trackURI):
+		m.visualizer.setTrack(m.nowPlaying.trackInfo())
+	case m.nowPlaying.trackURI != prevURI:
+		m.visualizer.clearTrack()
+	case m.nowPlaying.imageURL != m.visualizer.imageURL && isPlayableURI(m.nowPlaying.trackURI):
+		m.visualizer.setImageURL(m.nowPlaying.imageURL)
+	}
+	if cmd := m.windowTitle(prevURI, prevHasTrack); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 
 	// Sync list selection when the playing item changes. The view pages
@@ -251,6 +260,24 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// windowTitle returns the terminal title change this update calls for, if
+// any. The title names the playing track while one is reported and goes
+// back to the plain app name once playback stops (the poll reports
+// nothing playing) or a non-track item such as an ad plays. It is emitted
+// on those transitions only, not on every poll.
+func (m Model) windowTitle(prevURI string, prevHasTrack bool) tea.Cmd {
+	np := m.nowPlaying
+	shown := np.hasTrack && isPlayableURI(np.trackURI)
+	wasShown := prevHasTrack && isPlayableURI(prevURI)
+	switch {
+	case shown && (np.trackURI != prevURI || !wasShown):
+		return tea.SetWindowTitle(fmt.Sprintf("tuify — %s — %s", np.track, np.artist))
+	case !shown && wasShown:
+		return tea.SetWindowTitle(defaultWindowTitle)
+	}
+	return nil
+}
+
 // Navigation actions
 
 func (m Model) handleBack() (tea.Model, tea.Cmd) {
@@ -261,6 +288,11 @@ func (m Model) handleBack() (tea.Model, tea.Cmd) {
 	if b, ok := m.currentView().(backable); ok {
 		if cmd, handled := b.back(); handled {
 			return m, cmd
+		}
+	}
+	if len(m.viewStack) > 1 {
+		if c, ok := m.currentView().(closer); ok {
+			c.close()
 		}
 	}
 	m.popView()
@@ -281,13 +313,18 @@ func (m Model) handleEnter() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m Model) halfPage(dir int) Model {
+// halfPage moves the cursor half a page and, moving down, asks for the
+// next page when that lands near the end of the loaded items.
+func (m Model) halfPage(dir int) (Model, tea.Cmd) {
 	l := m.currentList()
-	if l == nil {
-		return m
+	if l == nil || len(l.Items()) == 0 {
+		return m, nil
 	}
 	half := max(m.listHeight()/4, 1) // list items are ~2 lines tall
 	idx := min(max(l.Index()+dir*half, 0), len(l.Items())-1)
 	l.Select(idx)
-	return m
+	if dir > 0 {
+		return m, m.loadNearEnd()
+	}
+	return m, nil
 }

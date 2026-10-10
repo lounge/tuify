@@ -133,9 +133,11 @@ func (m Model) handleVimKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		cmd := m.seekRelative(5000)
 		return m, cmd, true
 	case "ctrl+d":
-		return m.halfPage(1), nil, true
+		m, cmd := m.halfPage(1)
+		return m, cmd, true
 	case "ctrl+u":
-		return m.halfPage(-1), nil, true
+		m, cmd := m.halfPage(-1)
+		return m, cmd, true
 	}
 	return m, nil, false
 }
@@ -146,8 +148,9 @@ func (m Model) handlePlaybackKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m.nowPlaying.recordUserAction()
 		wasPlaying := m.nowPlaying.playing
 		m.nowPlaying.playing = !wasPlaying
-		m.nowPlaying.playPausePending = true
-		return m, m.togglePlayPause(wasPlaying), true
+		flip := m.nowPlaying.beginFlip()
+		m.nowPlaying.playPausePending = flip
+		return m, m.togglePlayPause(wasPlaying, flip), true
 	case "n":
 		m.nowPlaying.recordUserAction()
 		return m, m.nextTrack(), true
@@ -158,8 +161,9 @@ func (m Model) handlePlaybackKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m.nowPlaying.recordUserAction()
 		newShuffle := !m.nowPlaying.shuffling
 		m.nowPlaying.shuffling = newShuffle
-		m.nowPlaying.shufflePending = true
-		return m, m.toggleShuffle(newShuffle), true
+		flip := m.nowPlaying.beginFlip()
+		m.nowPlaying.shufflePending = flip
+		return m, m.toggleShuffle(newShuffle, flip), true
 	case "s":
 		m.nowPlaying.recordUserAction()
 		return m, m.stopPlayback(), true

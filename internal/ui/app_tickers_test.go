@@ -20,6 +20,7 @@ func newTickerTestModel(t *testing.T) Model {
 	np.width = 80
 	return Model{
 		nowPlaying: np,
+		visualizer: newVisualizerModel(t.Context(), nil),
 		client:     &spotify.Client{},
 		viewStack:  []view{newHomeView(80, 20, false)},
 		width:      80,

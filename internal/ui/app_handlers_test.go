@@ -61,7 +61,7 @@ func TestHandleSeekFire_TrackChangedIsDropped(t *testing.T) {
 func TestSeekRelative_StampsCurrentTrack(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		m := &Model{
-			nowPlaying: &nowPlayingModel{trackURI: "spotify:track:a", progressMs: 10000, durationMs: 100000},
+			nowPlaying: &nowPlayingModel{trackURI: "spotify:track:a", hasTrack: true, progressMs: 10000, durationMs: 100000},
 			client:     &spotify.Client{},
 		}
 		fire, ok := m.seekRelative(5000)().(seekFireMsg)
@@ -96,16 +96,24 @@ func TestHandlePlaybackResult_FailureRevertsOnlyItsOwnFlip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestModelWithClient("")
 			// The user paused and turned shuffle on; neither reply is in yet.
-			m.nowPlaying.playing, m.nowPlaying.playPausePending = false, true
-			m.nowPlaying.shuffling, m.nowPlaying.shufflePending = true, true
+			m.nowPlaying.playing, m.nowPlaying.playPausePending = false, m.nowPlaying.beginFlip()
+			m.nowPlaying.shuffling, m.nowPlaying.shufflePending = true, m.nowPlaying.beginFlip()
+			var flip uint64
+			switch tt.op {
+			case opPlayPause:
+				flip = m.nowPlaying.playPausePending
+			case opShuffle:
+				flip = m.nowPlaying.shufflePending
+			case opPlayback, opSeek:
+			}
 
-			updated, _ := m.handlePlaybackResult(playbackResultMsg{op: tt.op, err: errTest})
+			updated, _ := m.handlePlaybackResult(playbackResultMsg{op: tt.op, err: errTest, flip: flip})
 			np := updated.(Model).nowPlaying
-			if np.playing != tt.wantPlaying || np.playPausePending != tt.wantPlayPending {
+			if np.playing != tt.wantPlaying || (np.playPausePending != 0) != tt.wantPlayPending {
 				t.Errorf("playing=%v playPausePending=%v, want %v/%v",
 					np.playing, np.playPausePending, tt.wantPlaying, tt.wantPlayPending)
 			}
-			if np.shuffling != tt.wantShuffling || np.shufflePending != tt.wantShufflePending {
+			if np.shuffling != tt.wantShuffling || (np.shufflePending != 0) != tt.wantShufflePending {
 				t.Errorf("shuffling=%v shufflePending=%v, want %v/%v",
 					np.shuffling, np.shufflePending, tt.wantShuffling, tt.wantShufflePending)
 			}

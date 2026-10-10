@@ -80,10 +80,16 @@ type nowPlayingModel struct {
 	deviceName    string
 	volumePercent int // active device volume 0–100; 100 when no data
 
-	// Pending optimistic updates awaiting API confirmation
+	// Pending optimistic updates awaiting API confirmation. Play/pause and
+	// shuffle flip ahead of the reply; each flip takes a number from
+	// flipSeq, the reply carries it back (playbackResultMsg.flip) and a
+	// failure reverts the flip only while that number is still the pending
+	// one. So two quick presses, the first of which fails, leave the second
+	// flip in place. 0 means no flip is pending.
 	seekPending      bool
-	playPausePending bool
-	shufflePending   bool
+	playPausePending uint64
+	shufflePending   uint64
+	flipSeq          uint64
 
 	// Polling
 	lastUserAction time.Time // zero value means no action yet; pollInterval treats this as idle
@@ -147,6 +153,12 @@ func (m *nowPlayingModel) setDeviceOverride(overridden bool, reason string) {
 	}
 }
 
+// beginFlip numbers an optimistic flip; see playPausePending.
+func (m *nowPlayingModel) beginFlip() uint64 {
+	m.flipSeq++
+	return m.flipSeq
+}
+
 // newNowPlaying creates a fresh nowPlayingModel. ctx bounds its polls.
 func newNowPlaying(ctx context.Context, client *spotify.Client) *nowPlayingModel {
 	return &nowPlayingModel{
@@ -208,7 +220,19 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 		return nil
 	}
 	if msg.state == nil {
+		// Nothing is playing anywhere (HTTP 204). Playback state is
+		// authoritative empty: the flags must not keep the last reported
+		// values, or space would send Pause for a stopped player and a
+		// later resume would not count as an external change. There is no
+		// device to override with either, so the override clears and the
+		// next command targets the preferred device; a later poll naming
+		// another device re-arms it (deviceName is empty).
 		m.hasTrack = false
+		m.playing = false
+		m.deviceName = ""
+		m.playPausePending = 0
+		m.shufflePending = 0
+		m.setDeviceOverride(false, "nothing playing anywhere")
 		return nil
 	}
 
@@ -246,12 +270,12 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	m.hasTrack = true
 
 	// Track changed — pending play/pause is stale, accept fresh state.
-	if m.playPausePending && msg.state.TrackURI != prevURI {
-		m.playPausePending = false
+	if m.playPausePending != 0 && msg.state.TrackURI != prevURI {
+		m.playPausePending = 0
 	}
-	if m.playPausePending {
+	if m.playPausePending != 0 {
 		if msg.state.Playing == m.playing {
-			m.playPausePending = false
+			m.playPausePending = 0
 			m.progressMs = msg.state.ProgressMs
 		}
 	} else {
@@ -265,9 +289,9 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 			}
 		}
 	}
-	if m.shufflePending {
+	if m.shufflePending != 0 {
 		if msg.state.Shuffling == m.shuffling {
-			m.shufflePending = false
+			m.shufflePending = 0
 		}
 	} else {
 		m.shuffling = msg.state.Shuffling
@@ -288,9 +312,9 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 
 	// Detect external state changes (from Spotify client, not tuify)
 	// and boost polling so follow-up changes are caught quickly.
-	externalChange := (!m.playPausePending && m.playing != prevPlaying) ||
+	externalChange := (m.playPausePending == 0 && m.playing != prevPlaying) ||
 		(prevURI != "" && m.trackURI != prevURI) ||
-		(!m.shufflePending && m.shuffling != prevShuffling)
+		(m.shufflePending == 0 && m.shuffling != prevShuffling)
 	if externalChange {
 		log.Printf("[poll] external change detected, boosting poll rate")
 		m.recordUserAction()

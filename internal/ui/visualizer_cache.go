@@ -30,9 +30,15 @@ const maxAlbumArtSide = 4096
 // predecessor can still finish and send after it was cancelled; with a
 // per-operation channel that late result lands in an orphaned channel nobody
 // reads, instead of occupying the slot the current operation's result needs.
+//
+// key names what the in-flight operation fetches (an image URL, a track
+// ID), so a caller asking for the same thing again can leave it running
+// instead of cancelling and restarting it (inFlight). It is cleared when
+// the result is drained or the operation is cancelled.
 type asyncLoader[R any] struct {
 	ch     chan R
 	cancel context.CancelFunc
+	key    string
 }
 
 func newAsyncLoader[R any]() asyncLoader[R] {
@@ -44,6 +50,9 @@ func (l *asyncLoader[R]) drain(fn func(R)) {
 	for {
 		select {
 		case r := <-l.ch:
+			// The operation sent its one result and has finished.
+			l.cancel = nil
+			l.key = ""
 			fn(r)
 		default:
 			return
@@ -66,12 +75,26 @@ func (l *asyncLoader[R]) begin(parent context.Context, timeout time.Duration) (c
 	return ctx, cancel, l.ch
 }
 
+// beginFor is begin for an operation fetching key; see inFlight.
+func (l *asyncLoader[R]) beginFor(parent context.Context, timeout time.Duration, key string) (context.Context, context.CancelFunc, chan<- R) {
+	ctx, cancel, ch := l.begin(parent, timeout)
+	l.key = key
+	return ctx, cancel, ch
+}
+
+// inFlight reports whether an operation for key was started and its
+// result has not been drained yet.
+func (l *asyncLoader[R]) inFlight(key string) bool {
+	return l.cancel != nil && l.key == key
+}
+
 // cancelPending cancels any in-flight operation. It does not drain results.
 func (l *asyncLoader[R]) cancelPending() {
 	if l.cancel != nil {
 		l.cancel()
 		l.cancel = nil
 	}
+	l.key = ""
 }
 
 // boundedCache is a map that evicts all entries except the current key when full.

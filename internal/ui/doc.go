@@ -20,7 +20,8 @@
 // # On-demand tick chains
 //
 // The loading spinner and the now-playing label marquee tick only while
-// something on screen uses them. Each tick handler stops rescheduling once
+// something on screen uses them (a list's loading row does not count
+// while help, the visualizer, mini mode or the device overlay hides it). Each tick handler stops rescheduling once
 // idle, and Model.Update calls resumeTickers after every message to
 // restart a chain the new state needs, so loading and resize paths never
 // have to start a tick themselves. A new spinning UI element must be
@@ -52,6 +53,10 @@
 //     context is its own
 //   - enterable — for Enter-key activation
 //   - scrollable, clickable — for mouse wheel / click dispatch
+//   - nearEndLoader — for paged views: after the shell moves the cursor
+//     itself (wheel, half page) it asks for the next page right away
+//   - closer — for views with fetches in flight; the shell calls close
+//     when it pops the view, cancelling them
 //   - backable — for views that consume "go back" internally
 //   - searchAware — for views hosting a search-input mode
 //   - inputSearcher — for views that own their search input session
@@ -78,6 +83,27 @@
 // scan; handleMouse drops pointer events while they are up so the previous
 // list frame's zones can't be hit, and the Enter and "/" keys are ignored
 // for the same reason.
+//
+// # Visualizer fetches
+//
+// Album art and lyrics come from third parties (Spotify's image CDN,
+// lrclib.net, genius.com), so visualizerModel fetches them only while the
+// pane is open. A track change with the pane closed resets the
+// visualizers and records the track; opening the pane fetches what is
+// not cached, and a fetch already in flight for the same image or track
+// is left to finish rather than restarted. An item that is not a track
+// or episode (an ad, a local file) puts the pane in its "No track" state.
+//
+// The image and lyrics loaders (asyncLoader in visualizer_cache.go) run
+// each fetch on a goroutine that sends exactly one result on that
+// operation's own 1-slot channel. advance drains the channel on the next
+// visualizer tick, inside Update, so Update stays the only mutator: the
+// goroutine captures only values (client, URL, track ID, channel), never
+// the model. A tea.Cmd is not used because a fetch must be cancellable
+// when the track changes (the loader holds its context's cancel func)
+// and a late result from a cancelled fetch must land nowhere: it goes to
+// an orphaned channel nobody reads, and results are also matched against
+// the current URL or track ID before they are applied.
 //
 // # Lifetime
 //

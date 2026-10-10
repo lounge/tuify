@@ -18,6 +18,9 @@ const doubleClickWindow = 500 * time.Millisecond
 // 2–3 events per physical wheel tick in burst.
 const wheelDebounceWindow = 40 * time.Millisecond
 
+// defaultWindowTitle is the terminal title while nothing playable plays.
+const defaultWindowTitle = "tuify"
+
 // This file holds the core Model plus Init and the view-stack helpers. Message
 // types are in app_messages.go, optional constructors in app_options.go,
 // Update and navigation in app_update.go. Key handling, message handlers,

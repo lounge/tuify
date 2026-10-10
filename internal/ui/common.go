@@ -89,6 +89,25 @@ type scrollable interface {
 	scrollDown()
 }
 
+// nearEndLoader is implemented by views that page their items in. After
+// the shell moves the cursor itself (wheel, half page) it calls
+// loadNearEnd, which returns the fetch for the next page when the cursor
+// has come near the end of the loaded items and nil otherwise; a key
+// move goes through the view's Update, which does the same. Without it a
+// wheel to the bottom of a page would wait for the next unrelated
+// message to notice.
+type nearEndLoader interface {
+	loadNearEnd() tea.Cmd
+}
+
+// closer is implemented by views with work in flight that should stop
+// when the shell pops them. A page fetch for a screen nobody will see
+// again only holds the rate-limit gate; its reply would be dropped
+// anyway (routePage).
+type closer interface {
+	close()
+}
+
 // clickable is implemented by views that resolve a mouse click to a
 // zone-marked item. clickAt performs any required internal selection
 // (e.g. list.Select) and returns a stable id for double-click bookkeeping;
@@ -145,7 +164,7 @@ func (i statusItem) Title() string {
 // both render the same line; without this helper the two call sites
 // drift out of sync as styling tweaks land.
 func renderStatusLine(msg string, spinning, isError bool) string {
-	style := lipgloss.NewStyle().Foreground(theme.Text)
+	style := statusTextStyle
 	if isError {
 		style = errorStyle
 	}
@@ -172,9 +191,14 @@ func newList(id uint64, width, height int, vimMode bool) list.Model {
 	l.SetShowStatusBar(false)
 	l.SetShowHelp(false)
 	l.SetFilteringEnabled(false)
+	// bubbles binds h/l and d to paging too; here h is help, l is select
+	// (vim) and d seeks, and they are consumed before the list sees them.
+	// u duplicates b. The bindings are trimmed to the keys helpView lists
+	// so the help overlay is the truth.
+	l.KeyMap.PrevPage.SetKeys("left", "pgup", "b")
+	l.KeyMap.NextPage.SetKeys("right", "pgdown", "f")
 	if vimMode {
 		l.KeyMap.PrevPage.SetKeys("left", "pgup", "b", "u")
-		l.KeyMap.NextPage.SetKeys("right", "pgdown", "f")
 	}
 	return l
 }
@@ -226,8 +250,10 @@ var (
 		listProvider
 		searchableListProvider
 		scrollable
+		nearEndLoader
 		clickable
 		searchAware
+		closer
 	} = (*playlistView)(nil)
 	_ interface {
 		view
@@ -235,8 +261,10 @@ var (
 		listProvider
 		searchableListProvider
 		scrollable
+		nearEndLoader
 		clickable
 		searchAware
+		closer
 	} = (*podcastView)(nil)
 	_ interface {
 		view
@@ -245,8 +273,10 @@ var (
 		searchableListProvider
 		syncableView
 		scrollable
+		nearEndLoader
 		clickable
 		searchAware
+		closer
 	} = (*trackView)(nil)
 	_ interface {
 		view
@@ -255,8 +285,10 @@ var (
 		searchableListProvider
 		syncableView
 		scrollable
+		nearEndLoader
 		clickable
 		searchAware
+		closer
 	} = (*episodeView)(nil)
 	_ interface {
 		view
@@ -265,8 +297,10 @@ var (
 		inputSearcher
 		syncableView
 		scrollable
+		nearEndLoader
 		clickable
 		backable
 		searchAware
+		closer
 	} = (*searchView)(nil)
 )

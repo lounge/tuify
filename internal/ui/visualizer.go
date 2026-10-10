@@ -19,6 +19,7 @@ type visualizerModel struct {
 	active      bool
 	trackID     string
 	isEpisode   bool
+	track       trackInfo // the item the visualizers were last initialized for
 	vizList     []visualizers.Visualizer
 	vizIdx      int
 	imageURL    string
@@ -89,6 +90,9 @@ type trackInfo struct {
 	isEpisode  bool
 }
 
+// toggle opens or closes the pane. Opening it fetches the current
+// track's album art and lyrics unless they are cached or already on the
+// way; see setTrack.
 func (m *visualizerModel) toggle(t trackInfo) tea.Cmd {
 	if m.active {
 		m.active = false
@@ -101,11 +105,60 @@ func (m *visualizerModel) toggle(t trackInfo) tea.Cmd {
 	if t.id != m.trackID {
 		m.initTrack(t)
 	}
+	m.imageURL = t.imageURL
 	if m.shouldSkip(m.vizIdx) {
 		m.cycle(1)
 	}
-	m.loadImage(t.imageURL)
+	m.fetchAssets()
 	return m.tick()
+}
+
+// setTrack switches the visualizers to a new playing item. Album art and
+// lyrics come from third parties (the image CDN, lrclib.net, genius.com),
+// so they are fetched only while the pane is open: with it closed the
+// track is recorded and the fetches wait for toggle. Any fetch still
+// running for the previous track is cancelled either way.
+func (m *visualizerModel) setTrack(t trackInfo) {
+	m.initTrack(t)
+	m.imageURL = t.imageURL
+	if m.active {
+		m.fetchAssets()
+		return
+	}
+	m.images.cancelPending()
+	m.lyrics.cancelPending()
+}
+
+// setImageURL records new art for the current track (Spotify can report
+// it a poll after the track) and loads it while the pane is open.
+func (m *visualizerModel) setImageURL(url string) {
+	m.imageURL = url
+	if m.active {
+		m.loadImage(url)
+	}
+}
+
+// clearTrack puts the pane in its "No track" state, for an item that is
+// not a track or episode (an ad, a local file): the previous track's art
+// and lyrics must not stay up, and its pending fetches are abandoned.
+func (m *visualizerModel) clearTrack() {
+	m.images.cancelPending()
+	m.lyrics.cancelPending()
+	m.trackID = ""
+	m.track = trackInfo{}
+	m.imageURL = ""
+}
+
+// fetchAssets loads the current track's album art and lyrics, from the
+// caches when it can. Only called while the pane is open.
+func (m *visualizerModel) fetchAssets() {
+	if m.trackID == "" {
+		return
+	}
+	m.loadImage(m.imageURL)
+	if !m.isEpisode {
+		m.loadLyrics(m.track.id, m.track.track, m.track.artist, m.track.durationMs)
+	}
 }
 
 func (m *visualizerModel) tick() tea.Cmd {
@@ -192,16 +245,14 @@ func (m *visualizerModel) refreshAudioSeen() *audio.FrequencyData {
 	return data
 }
 
-// initTrack resets every visualizer for a new track and starts its
-// lyrics fetch.
+// initTrack resets every visualizer for a new track. It fetches nothing;
+// see setTrack and fetchAssets.
 func (m *visualizerModel) initTrack(t trackInfo) {
 	m.trackID = t.id
 	m.isEpisode = t.isEpisode
+	m.track = t
 	for _, v := range m.vizList {
 		v.Init(t.id, t.durationMs)
-	}
-	if !t.isEpisode {
-		m.loadLyrics(t.id, t.track, t.artist, t.durationMs)
 	}
 	if m.shouldSkip(m.vizIdx) {
 		m.cycle(1)

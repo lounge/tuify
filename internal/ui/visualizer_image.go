@@ -21,9 +21,16 @@ type fetchResult struct {
 	err error
 }
 
+// loadImage shows imageURL's art, from the cache or by fetching it. A
+// fetch already in flight for the same URL is left to finish rather than
+// cancelled and restarted.
 func (m *visualizerModel) loadImage(imageURL string) {
-	m.images.cancelPending()
 	m.drainImages()
+	if imageURL != "" && m.images.inFlight(imageURL) {
+		m.imageURL = imageURL
+		return
+	}
+	m.images.cancelPending()
 
 	if imageURL == "" {
 		m.imageURL = ""
@@ -36,7 +43,7 @@ func (m *visualizerModel) loadImage(imageURL string) {
 		return
 	}
 
-	ctx, cancel, ch := m.images.begin(m.ctx, 10*time.Second)
+	ctx, cancel, ch := m.images.beginFor(m.ctx, 10*time.Second, imageURL)
 	url := imageURL
 	client := m.httpClient
 	go func() {
