@@ -339,7 +339,7 @@ func TestCheckSongURL(t *testing.T) {
 // The song URL comes from Genius's own search response. Pointed anywhere
 // but genius.com it must be refused before any request is made, or the
 // scraper fetches whatever host the response names.
-func TestSearch_RejectsForeignSongURL(t *testing.T) {
+func TestSearchGenius_RejectsForeignSongURL(t *testing.T) {
 	t.Parallel()
 
 	for _, foreign := range []string{"http://192.168.1.1/x", "https://evil.com/x"} {
@@ -359,9 +359,9 @@ func TestSearch_RejectsForeignSongURL(t *testing.T) {
 			})
 			defer cleanup()
 
-			text, err := Search(context.Background(), client, "My Song", "The Artist")
+			text, err := searchGenius(context.Background(), client, "My Song", "The Artist")
 			if err == nil {
-				t.Fatalf("Search followed %q and returned %q", foreign, text)
+				t.Fatalf("searchGenius followed %q and returned %q", foreign, text)
 			}
 			if !strings.Contains(err.Error(), "genius fetch") {
 				t.Errorf("err = %v, want one naming the refused fetch", err)
@@ -444,9 +444,9 @@ func TestSearchSong_OversizeBodyIsCutOff(t *testing.T) {
 	}
 }
 
-// --- Search (end-to-end) ---
+// --- searchGenius (end-to-end) ---
 
-func TestSearch_EndToEnd(t *testing.T) {
+func TestSearchGenius_EndToEnd(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
@@ -464,7 +464,7 @@ func TestSearch_EndToEnd(t *testing.T) {
 	})
 	defer cleanup()
 
-	text, err := Search(context.Background(), client, "My Song", "The Artist")
+	text, err := searchGenius(context.Background(), client, "My Song", "The Artist")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -473,7 +473,7 @@ func TestSearch_EndToEnd(t *testing.T) {
 	}
 }
 
-func TestSearch_Instrumental(t *testing.T) {
+func TestSearchGenius_Instrumental(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
@@ -484,13 +484,13 @@ func TestSearch_Instrumental(t *testing.T) {
 	})
 	defer cleanup()
 
-	_, err := Search(context.Background(), client, "Instrumental Track", "Artist")
+	_, err := searchGenius(context.Background(), client, "Instrumental Track", "Artist")
 	if !errors.Is(err, ErrInstrumental) {
 		t.Errorf("expected ErrInstrumental, got %v", err)
 	}
 }
 
-func TestSearch_NoResults(t *testing.T) {
+func TestSearchGenius_NoResults(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
@@ -499,7 +499,7 @@ func TestSearch_NoResults(t *testing.T) {
 	})
 	defer cleanup()
 
-	text, err := Search(context.Background(), client, "Unknown Song", "Nobody")
+	text, err := searchGenius(context.Background(), client, "Unknown Song", "Nobody")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -508,7 +508,7 @@ func TestSearch_NoResults(t *testing.T) {
 	}
 }
 
-func TestSearch_CaseInsensitiveMatch(t *testing.T) {
+func TestSearchGenius_CaseInsensitiveMatch(t *testing.T) {
 	t.Parallel()
 
 	client, cleanup := newTestClient(func(w http.ResponseWriter, r *http.Request) {
@@ -525,7 +525,7 @@ func TestSearch_CaseInsensitiveMatch(t *testing.T) {
 	})
 	defer cleanup()
 
-	text, err := Search(context.Background(), client, "my song", "the artist")
+	text, err := searchGenius(context.Background(), client, "my song", "the artist")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

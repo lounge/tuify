@@ -28,9 +28,18 @@ type AudioAware interface {
 	SetAudioData(data *audio.FrequencyData)
 }
 
-// LyricsAware is implemented by visualizers that display lyrics.
+// LyricLine is one lyric line. StartMs is the playback position at which
+// it starts, or -1 when the lyrics carry no timestamps.
+type LyricLine struct {
+	StartMs int
+	Text    string
+}
+
+// LyricsAware is implemented by visualizers that display lyrics. SetLyrics
+// receives lines that are either all timed or all untimed; nil means no
+// lyrics were found.
 type LyricsAware interface {
-	SetLyrics(lines []string)
+	SetLyrics(lines []LyricLine)
 	SetInstrumental()
 }
 

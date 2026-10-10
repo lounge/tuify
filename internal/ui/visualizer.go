@@ -201,7 +201,7 @@ func (m *visualizerModel) initTrack(t trackInfo) {
 		v.Init(t.id, t.durationMs)
 	}
 	if !t.isEpisode {
-		m.loadLyrics(t.id, t.track, t.artist)
+		m.loadLyrics(t.id, t.track, t.artist, t.durationMs)
 	}
 	if m.shouldSkip(m.vizIdx) {
 		m.cycle(1)

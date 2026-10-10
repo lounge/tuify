@@ -27,12 +27,12 @@ func TestContract_SearchAndScrape(t *testing.T) {
 	defer cancel()
 
 	// Bohemian Rhapsody is a stable, well-known song unlikely to be removed.
-	text, err := Search(ctx, contractClient, "Bohemian Rhapsody", "Queen")
+	text, err := searchGenius(ctx, contractClient, "Bohemian Rhapsody", "Queen")
 	if err != nil {
-		t.Fatalf("Search failed: %v", err)
+		t.Fatalf("searchGenius failed: %v", err)
 	}
 	if text == "" {
-		t.Fatal("Search returned empty lyrics — Genius HTML structure may have changed (data-lyrics-container attribute)")
+		t.Fatal("searchGenius returned empty lyrics — Genius HTML structure may have changed (data-lyrics-container attribute)")
 	}
 
 	// Verify some well-known lyrics are present.
@@ -108,13 +108,13 @@ func TestContract_Instrumental(t *testing.T) {
 	defer cancel()
 
 	// "Orion" by Metallica is a well-known instrumental.
-	_, err := Search(ctx, contractClient, "Orion", "Metallica")
+	_, err := searchGenius(ctx, contractClient, "Orion", "Metallica")
 	if errors.Is(err, ErrInstrumental) {
 		// Expected — Genius correctly marks it as instrumental.
 		return
 	}
 	if err != nil {
-		t.Fatalf("Search failed: %v", err)
+		t.Fatalf("searchGenius failed: %v", err)
 	}
 	// If we get here, Genius didn't mark it as instrumental. That's not
 	// necessarily a contract failure (their metadata could change), so

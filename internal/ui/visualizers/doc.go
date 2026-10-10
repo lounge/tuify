@@ -13,8 +13,10 @@
 //     visuals like lyrics scroll, and for beat tracking that must notice
 //     seeks; FrequencyData.StreamMs is stream time, not position).
 //   - ImageAware receives the current track's album art (for AlbumArt).
-//   - LyricsAware receives the track's lyric lines, or is told the track
-//     is instrumental (for Lyrics).
+//   - LyricsAware receives the track's lyric lines as LyricLines, timed
+//     when the source had timestamps, or is told the track is
+//     instrumental (for Lyrics, which highlights the line being sung
+//     from the timestamps and falls back to a proportional scroll).
 //
 // A visualizer opts in by implementing the matching capability interface;
 // the ui package's visualizerModel pushes data to everything that opts in.

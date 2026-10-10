@@ -3,7 +3,6 @@ package ui
 import (
 	"errors"
 	"log"
-	"strings"
 	"time"
 
 	"github.com/lounge/tuify/internal/lyrics"
@@ -12,17 +11,20 @@ import (
 
 type lyricsFetchResult struct {
 	trackID      string
-	lines        []string
+	lines        []visualizers.LyricLine
 	instrumental bool
 	err          error
 }
 
 type cachedLyrics struct {
-	lines        []string
+	lines        []visualizers.LyricLine
 	instrumental bool
 }
 
-func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
+// loadLyrics fetches the track's lyrics, serving them from the cache when
+// it can. durationMs is the track length, which LRCLIB uses to pick the
+// right edit of a song; 0 means unknown.
+func (m *visualizerModel) loadLyrics(trackID, track, artist string, durationMs int) {
 	m.lyrics.cancelPending()
 	m.drainLyrics()
 
@@ -39,15 +41,16 @@ func (m *visualizerModel) loadLyrics(trackID, track, artist string) {
 	client := m.httpClient
 	go func() {
 		defer cancel()
-		text, err := lyrics.Search(ctx, client, track, artist)
-		res := lyricsFetchResult{trackID: trackID, err: err}
-		if errors.Is(err, lyrics.ErrInstrumental) {
-			res.instrumental = true
-			res.err = nil
-		} else if err == nil && text != "" {
-			res.lines = strings.Split(text, "\n")
+		res, err := lyrics.Search(ctx, client, track, artist, durationMs)
+		out := lyricsFetchResult{trackID: trackID, err: err}
+		switch {
+		case errors.Is(err, lyrics.ErrInstrumental):
+			out.instrumental = true
+			out.err = nil
+		case err == nil:
+			out.lines = toLyricLines(res.Lines)
 		}
-		ch <- res // never blocks: this operation's own 1-slot channel
+		ch <- out // never blocks: this operation's own 1-slot channel
 	}()
 }
 
@@ -74,7 +77,7 @@ func (m *visualizerModel) drainLyrics() {
 	})
 }
 
-func (m *visualizerModel) setLyricsOnAware(lines []string) {
+func (m *visualizerModel) setLyricsOnAware(lines []visualizers.LyricLine) {
 	for _, v := range m.vizList {
 		if la, ok := v.(visualizers.LyricsAware); ok {
 			la.SetLyrics(lines)
@@ -88,4 +91,18 @@ func (m *visualizerModel) setInstrumentalOnAware() {
 			la.SetInstrumental()
 		}
 	}
+}
+
+// toLyricLines converts fetched lines to the visualizers' type, so the
+// visualizers package stays free of the lyrics package. An empty input
+// gives nil, which the Lyrics visualizer reads as "no lyrics found".
+func toLyricLines(lines []lyrics.Line) []visualizers.LyricLine {
+	if len(lines) == 0 {
+		return nil
+	}
+	out := make([]visualizers.LyricLine, len(lines))
+	for i, l := range lines {
+		out[i] = visualizers.LyricLine{StartMs: l.StartMs, Text: l.Text}
+	}
+	return out
 }

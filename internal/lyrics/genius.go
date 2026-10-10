@@ -3,7 +3,6 @@ package lyrics
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -16,24 +15,16 @@ import (
 	"golang.org/x/net/html"
 )
 
-// ErrInstrumental is returned when Genius marks a song as instrumental.
-var ErrInstrumental = errors.New("instrumental")
-
-// maxBodyBytes caps how much of a Genius response is read. A search
-// result is a few KB and a song page a few hundred KB; anything past the
-// cap is cut off instead of being buffered into memory.
-const maxBodyBytes = 4 << 20
-
 var (
 	reRemix  = regexp.MustCompile(`(?i)\s*[-–—]\s*(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)\b.*$`)
 	reParens = regexp.MustCompile(`(?i)\s*\([^)]*?(feat\.?|ft\.?|remix|remaster(ed)?|deluxe|bonus|live|acoustic|version|edit|mix|radio)[^)]*?\)`)
 )
 
-// Search finds lyrics for a track on Genius.
-// Returns the lyrics text or an error. Returns empty string if no lyrics found.
-// Returns ErrInstrumental if Genius marks the song as instrumental.
-// The context can be used to cancel or set a deadline on the search.
-func Search(ctx context.Context, client *http.Client, track, artist string) (string, error) {
+// searchGenius finds lyrics for a track on Genius: it queries the keyless
+// search endpoint for the best matching song, then scrapes that song's
+// page. It returns the lyrics text, the empty string when no song
+// matched, or ErrInstrumental when Genius marks the song as instrumental.
+func searchGenius(ctx context.Context, client *http.Client, track, artist string) (string, error) {
 	query := improveQuery(artist + " " + track)
 	result, err := searchSong(ctx, client, query, track, artist)
 	if err != nil {

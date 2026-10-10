@@ -81,7 +81,11 @@ func newFedVisualizer(newViz func() Visualizer) Visualizer {
 		a.SetImage(benchImage())
 	}
 	if a, ok := v.(LyricsAware); ok {
-		a.SetLyrics(strings.Split(strings.Repeat("a line of lyrics to scroll past\n", 40), "\n"))
+		lines := make([]LyricLine, 40)
+		for i := range lines {
+			lines[i] = LyricLine{StartMs: i * 4000, Text: "a line of lyrics to scroll past"}
+		}
+		a.SetLyrics(lines)
 	}
 	if a, ok := v.(ProgressAware); ok {
 		a.SetProgress(60000)

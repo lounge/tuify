@@ -7,7 +7,7 @@ import (
 )
 
 // newFetchClient returns the HTTP client for album art and lyrics, which
-// talk to CDNs and genius.com rather than the Spotify API.
+// talk to CDNs, lrclib.net and genius.com rather than the Spotify API.
 func newFetchClient() *http.Client {
 	return &http.Client{Timeout: 10 * time.Second}
 }
