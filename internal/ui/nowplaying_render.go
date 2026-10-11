@@ -35,20 +35,35 @@ func (m nowPlayingModel) View(searchActive bool, searchQuery string) string {
 		lines = []string{"", status, "", progress, ""}
 	}
 	if searchActive {
-		lines[len(lines)-1] = renderSearchPrompt(searchQuery)
+		lines[len(lines)-1] = renderSearchPrompt(searchQuery, m.width-nowPlayingPadding)
 	}
 	return m.renderGradient(lines)
 }
 
 // renderSearchPrompt renders the "/query" line with a cursor, highlighting
-// a type prefix such as "a:" when the query has one.
-func renderSearchPrompt(query string) string {
-	if idx := strings.Index(query, ":"); idx > 0 {
-		pre := query[:idx+1]
-		rest := query[idx+1:]
-		return searchPrefixStyle.Render("/"+pre) + searchInputStyle.Render(rest+"█")
+// a type prefix such as "a:" when the query has one. The line fits width
+// display cells: a longer query shows its end, where the cursor is, with
+// "…" in place of the start of the term, since a wrapped prompt makes the
+// bar a line taller (see View). The query itself is never cut.
+func renderSearchPrompt(query string, width int) string {
+	if width < 1 {
+		return ""
 	}
-	return searchInputStyle.Render("/" + query + "█")
+	head, term, prefixed := "/", query, false
+	if idx := strings.Index(query, ":"); idx > 0 {
+		head, term, prefixed = "/"+query[:idx+1], query[idx+1:], true
+	}
+	// Room for at least "…█" after the head; failing that, the head
+	// scrolls away with the rest of the line.
+	room := width - runewidth.StringWidth(head)
+	if room < 2 {
+		head, term, room, prefixed = "", "/"+query, width, false
+	}
+	tail := runewidth.TruncatePrefix(term+"█", room, "…")
+	if !prefixed {
+		return searchInputStyle.Render(head + tail)
+	}
+	return searchPrefixStyle.Render(head) + searchInputStyle.Render(tail)
 }
 
 // renderTrackLine builds the one-line "icon track — artist   device" status,

@@ -36,6 +36,40 @@ func TestWriteWithBackground_MatchesRegexp(t *testing.T) {
 	}
 }
 
+// The search prompt keeps to its width, or it wraps and the bar grows a
+// line. A query too long to show keeps its end, where the cursor is, and
+// a type prefix stays put while the term scrolls behind it.
+func TestRenderSearchPrompt_FitsWidth(t *testing.T) {
+	sgr := regexp.MustCompile(`\x1b\[[0-9;]*m`)
+	long := strings.Repeat("abcdefghij", 10)
+	tests := []struct {
+		name       string
+		query      string
+		width      int
+		wantPrefix string
+		wantSuffix string
+	}{
+		{name: "fits", query: "abc", width: 30, wantPrefix: "/abc█", wantSuffix: "/abc█"},
+		{name: "long", query: long, width: 30, wantPrefix: "/…", wantSuffix: "hij█"},
+		{name: "wide runes", query: strings.Repeat("検索", 30), width: 30, wantPrefix: "/…", wantSuffix: "索█"},
+		{name: "prefix stays", query: "a:" + long, width: 30, wantPrefix: "/a:…", wantSuffix: "hij█"},
+		{name: "prefix wider than width", query: strings.Repeat("x", 40) + ":y", width: 30, wantPrefix: "…", wantSuffix: ":y█"},
+		{name: "one cell", query: "abc", width: 1, wantPrefix: "…", wantSuffix: "…"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := renderSearchPrompt(tt.query, tt.width)
+			if w := lipgloss.Width(got); w > tt.width || strings.Contains(got, "\n") {
+				t.Errorf("prompt %q is %d cells, want at most %d on one line", got, w, tt.width)
+			}
+			plain := sgr.ReplaceAllString(got, "")
+			if !strings.HasPrefix(plain, tt.wantPrefix) || !strings.HasSuffix(plain, tt.wantSuffix) {
+				t.Errorf("prompt = %q, want it to start with %q and end with %q", plain, tt.wantPrefix, tt.wantSuffix)
+			}
+		})
+	}
+}
+
 // renderTrackLine uses display-cell widths so wide runes (CJK, emoji)
 // that count as 1 Unicode point but 2 cells don't slip past the budget
 // and wrap the now-playing bar. A wrap would shift zone coordinates in

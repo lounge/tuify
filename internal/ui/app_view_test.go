@@ -39,6 +39,13 @@ func TestView_SearchPromptKeepsFrameAtTerminalHeight(t *testing.T) {
 	if got := frameLines(); got != height {
 		t.Errorf("frame is %d lines with a status banner and the prompt, want %d", got, height)
 	}
+
+	// A query wider than the bar used to wrap the prompt onto extra
+	// lines; pasted wide runes count two cells each.
+	m, _ = pressKeys(t, m, runeKey(strings.Repeat("a long query ", 8)+strings.Repeat("検索", 30)))
+	if got := frameLines(); got != height {
+		t.Errorf("frame is %d lines with a query wider than the bar, want %d", got, height)
+	}
 }
 
 func newTestModel(width int, np *nowPlayingModel) Model {
