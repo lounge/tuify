@@ -148,8 +148,14 @@ func (m *Model) popView() {
 	}
 }
 
+// contentHeight is the height above the now-playing bar: the screen, the
+// visualizer pane or the help overlay.
+func (m Model) contentHeight() int {
+	return m.height - nowPlayingHeight
+}
+
 func (m Model) listHeight() int {
-	return m.height - nowPlayingHeight - breadcrumbHeight
+	return m.contentHeight() - breadcrumbHeight
 }
 
 func (m Model) currentList() *list.Model {

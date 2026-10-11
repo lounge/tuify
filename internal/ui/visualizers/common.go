@@ -48,6 +48,16 @@ type ProgressAware interface {
 	SetProgress(progressMs int)
 }
 
+// SizeAware is implemented by visualizers whose state is laid out by the
+// pane size, such as a simulation with one cell per pixel. SetSize is
+// called from Update with the pane size when the visualizer is shown and
+// whenever the size changes while it is, and Init keeps it, so View can
+// render without resizing anything: View must not change what Advance or
+// a later frame sees. One not on screen keeps its last size until shown.
+type SizeAware interface {
+	SetSize(width, height int)
+}
+
 func xorshift(s uint64) uint64 {
 	s ^= s << 13
 	s ^= s >> 7

@@ -26,7 +26,7 @@ func (m Model) View() string {
 	}
 
 	var b strings.Builder
-	contentHeight := m.height - nowPlayingHeight
+	contentHeight := m.contentHeight()
 	listShown := false
 
 	switch {

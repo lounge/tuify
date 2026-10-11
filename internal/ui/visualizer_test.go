@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/audio"
 	"github.com/lounge/tuify/internal/ui/visualizers"
 )
@@ -154,5 +155,60 @@ func TestVisualizer_CycleNeverInfiniteLoops(t *testing.T) {
 	m.cycle(1)
 	if m.vizIdx != 0 {
 		t.Errorf("cycle from AlbumArt with only AlbumArt reachable should stay at 0; got %d", m.vizIdx)
+	}
+}
+
+// sizeRecorder is a SizeAware visualizer that records the size it was
+// given and the size it was drawn at.
+type sizeRecorder struct {
+	setW, setH   int
+	viewW, viewH int
+}
+
+func (r *sizeRecorder) Init(string, int)          {}
+func (r *sizeRecorder) Advance()                  {}
+func (r *sizeRecorder) SetSize(width, height int) { r.setW, r.setH = width, height }
+func (r *sizeRecorder) View(width, height int) string {
+	r.viewW, r.viewH = width, height
+	return ""
+}
+
+// A SizeAware visualizer is sized from Update, at the size the pane is
+// then drawn at, so its View never has to resize anything. Only the one on
+// screen is sized: sizing every Milkdrop preset on each resize, pane open
+// or not, held megabytes of buffers nobody was watching.
+func TestVisualizer_SizesOnlyTheShownVisualizer(t *testing.T) {
+	m := newIntentTestModel()
+	shown, other := &sizeRecorder{}, &sizeRecorder{}
+	m.visualizer.vizList = []visualizers.Visualizer{shown, other}
+
+	updated, _ := m.Update(tea.WindowSizeMsg{Width: 90, Height: 30})
+	m = updated.(Model)
+	if shown.setW != 0 || other.setW != 0 {
+		t.Fatalf("pane closed: sized %dx%d and %dx%d, want neither", shown.setW, shown.setH, other.setW, other.setH)
+	}
+
+	m.visualizer.toggle(trackInfo{}) // open; no track, so nothing is fetched
+	if shown.setW != 90 || shown.setH != 30-nowPlayingHeight {
+		t.Errorf("opening the pane: SetSize(%d, %d), want (90, %d)", shown.setW, shown.setH, 30-nowPlayingHeight)
+	}
+
+	updated, _ = m.Update(tea.WindowSizeMsg{Width: 70, Height: 20})
+	m = updated.(Model)
+	if shown.setW != 70 || shown.setH != 20-nowPlayingHeight {
+		t.Errorf("resize with the pane open: SetSize(%d, %d), want (70, %d)", shown.setW, shown.setH, 20-nowPlayingHeight)
+	}
+	if other.setW != 0 {
+		t.Errorf("a visualizer not on screen was sized %dx%d", other.setW, other.setH)
+	}
+
+	m.visualizer.cycle(1)
+	if other.setW != 70 || other.setH != 20-nowPlayingHeight {
+		t.Errorf("switching to it: SetSize(%d, %d), want (70, %d)", other.setW, other.setH, 20-nowPlayingHeight)
+	}
+	m.visualizer.trackID = "a" // draw the visualizer, not "No track"
+	m.View()
+	if other.viewW != other.setW || other.viewH != other.setH {
+		t.Errorf("drawn at %dx%d, sized for %dx%d", other.viewW, other.viewH, other.setW, other.setH)
 	}
 }

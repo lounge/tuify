@@ -143,6 +143,7 @@ func TestHandleResize_SubtractsBreadcrumbOnlyWhenPresent(t *testing.T) {
 	noCrumb := &heightCaptureView{crumb: ""}
 	m := Model{
 		nowPlaying: &nowPlayingModel{},
+		visualizer: newVisualizerModel(context.Background(), nil),
 		viewStack:  []view{noCrumb, withCrumb},
 	}
 

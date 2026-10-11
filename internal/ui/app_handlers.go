@@ -17,8 +17,9 @@ func (m Model) handleResize(msg tea.WindowSizeMsg) (tea.Model, tea.Cmd) {
 	m.width = msg.Width
 	m.height = msg.Height
 	m.nowPlaying.width = msg.Width
+	m.visualizer.setSize(msg.Width, m.contentHeight()) // the pane View draws
 	for _, v := range m.viewStack {
-		h := m.height - nowPlayingHeight
+		h := m.contentHeight()
 		if v.breadcrumb() != "" {
 			h -= breadcrumbHeight
 		}

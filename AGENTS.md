@@ -38,7 +38,7 @@ Linux build/test needs `libasound2-dev` (oto audio backend). Go 1.27+.
 
 ### Audio pipeline (`internal/audio` + `internal/librespot`)
 
-When `audio_backend == "pipe"`, `librespot.Process` pipes raw little-endian s16le stereo to `audio.PipeReader`. The FFT layer emits `FrequencyData` (log-spaced bands + bass/mid/high averages + a `StreamMs` derived from sample count — stream time since the pipe opened, not playback position; a visualizer that needs the position in the track implements `ProgressAware` and gets it from the Spotify poll). Visualizers in `internal/ui/visualizers` opt into data by implementing `AudioAware`/`ProgressAware`/`ImageAware`/`LyricsAware`; the `visualizerModel` pushes to whoever implements each.
+When `audio_backend == "pipe"`, `librespot.Process` pipes raw little-endian s16le stereo to `audio.PipeReader`. The FFT layer emits `FrequencyData` (log-spaced bands + bass/mid/high averages + a `StreamMs` derived from sample count — stream time since the pipe opened, not playback position; a visualizer that needs the position in the track implements `ProgressAware` and gets it from the Spotify poll). Visualizers in `internal/ui/visualizers` opt into data by implementing `AudioAware`/`ProgressAware`/`ImageAware`/`LyricsAware`/`SizeAware`; the `visualizerModel` pushes to whoever implements each (the pane size to the one on screen, when it is shown and on each resize, so a visualizer's `View` never resizes its own state).
 
 `librespot.Process.OnReconnect` is how playback gets transferred back after a drop. `spotify.Client.DeviceOverridden` (atomic) coordinates with the UI so a manual device switch is respected and not clobbered by reconnect.
 

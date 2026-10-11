@@ -2,6 +2,7 @@ package visualizers
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -35,6 +36,7 @@ func testMilkdropViewDimensions(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	v.Init("seed", 10000)
 	for _, height := range []int{1, 2, 5, 10} {
+		v.SetSize(40, height)
 		got := v.View(40, height)
 		lines := strings.Split(got, "\n")
 		if len(lines) != height {
@@ -46,7 +48,9 @@ func testMilkdropViewDimensions(t *testing.T, v *MilkdropPreset, name string) {
 func testMilkdropResize(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	v.Init("seed", 10000)
+	v.SetSize(40, 10)
 	v.View(40, 10)
+	v.SetSize(80, 20)
 	got := v.View(80, 20)
 	lines := strings.Split(got, "\n")
 	if len(lines) != 20 {
@@ -54,10 +58,48 @@ func testMilkdropResize(t *testing.T, v *MilkdropPreset, name string) {
 	}
 }
 
+// View must not change the simulation: it used to resize the
+// framebuffers to whatever it was asked to draw, wiping the feedback
+// history and changing the size the next Advance ran at. A frame at
+// another size draws black instead, and a new track keeps the size.
+func testMilkdropViewKeepsState(t *testing.T, v *MilkdropPreset, name string) {
+	t.Helper()
+	v.Init("seed", 10000)
+	v.SetSize(20, 10)
+	v.SetAudioData(&audio.FrequencyData{Bass: 0.9, Mid: 0.6, High: 0.3, Peak: 0.9})
+	for range 10 {
+		v.Advance()
+	}
+	before := v.View(20, 10)
+	state := append([]pixel(nil), v.framebuffer()...)
+
+	other := v.View(40, 5)
+	if got := strings.Count(other, "\n") + 1; got != 5 {
+		t.Errorf("%s: frame at another size has %d lines, want 5", name, got)
+	}
+	if !slices.Equal(v.framebuffer(), state) || v.fbW != 20 || v.fbH != 20 {
+		t.Errorf("%s: View at another size changed the framebuffer (now %dx%d)", name, v.fbW, v.fbH)
+	}
+	if after := v.View(20, 10); after != before {
+		t.Errorf("%s: frame at the simulated size changed after a View at another size", name)
+	}
+
+	v.Init("next-track", 10000)
+	if v.fbW != 20 || v.fbH != 20 || len(v.framebuffer()) != 20*20 {
+		t.Errorf("%s: Init dropped the size: %dx%d", name, v.fbW, v.fbH)
+	}
+	for i, p := range v.framebuffer() {
+		if p != (pixel{}) {
+			t.Errorf("%s: pixel %d = %+v after Init, want black", name, i, p)
+			break
+		}
+	}
+}
+
 func testMilkdropDecay(t *testing.T, v *MilkdropPreset, name string) {
 	t.Helper()
 	v.Init("seed", 10000)
-	v.View(20, 10) // trigger initial resize
+	v.SetSize(20, 10)
 
 	v.SetAudioData(&audio.FrequencyData{
 		Bands: [audio.NumBands]float32{0.8, 0.7, 0.6, 0.5},
@@ -110,6 +152,11 @@ func TestMilkdropSpiral_Resize(t *testing.T) {
 
 	testMilkdropResize(t, NewMilkdropSpiral(), "Spiral")
 }
+func TestMilkdropSpiral_ViewKeepsState(t *testing.T) {
+	t.Parallel()
+
+	testMilkdropViewKeepsState(t, NewMilkdropSpiral(), "Spiral")
+}
 func TestMilkdropSpiral_DecaysToBlack(t *testing.T) {
 	t.Parallel()
 
@@ -142,6 +189,11 @@ func TestMilkdropTunnel_Resize(t *testing.T) {
 	t.Parallel()
 
 	testMilkdropResize(t, NewMilkdropTunnel(), "Tunnel")
+}
+func TestMilkdropTunnel_ViewKeepsState(t *testing.T) {
+	t.Parallel()
+
+	testMilkdropViewKeepsState(t, NewMilkdropTunnel(), "Tunnel")
 }
 func TestMilkdropTunnel_DecaysToBlack(t *testing.T) {
 	t.Parallel()
@@ -176,6 +228,11 @@ func TestMilkdropKaleidoscope_Resize(t *testing.T) {
 
 	testMilkdropResize(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
 }
+func TestMilkdropKaleidoscope_ViewKeepsState(t *testing.T) {
+	t.Parallel()
+
+	testMilkdropViewKeepsState(t, NewMilkdropKaleidoscope(), "Kaleidoscope")
+}
 func TestMilkdropKaleidoscope_DecaysToBlack(t *testing.T) {
 	t.Parallel()
 
@@ -209,6 +266,11 @@ func TestMilkdropRipple_Resize(t *testing.T) {
 
 	testMilkdropResize(t, NewMilkdropRipple(), "Ripple")
 }
+func TestMilkdropRipple_ViewKeepsState(t *testing.T) {
+	t.Parallel()
+
+	testMilkdropViewKeepsState(t, NewMilkdropRipple(), "Ripple")
+}
 func TestMilkdropRipple_DecaysToBlack(t *testing.T) {
 	t.Parallel()
 
@@ -231,7 +293,7 @@ func TestMilkdrop_NaNFrameDoesNotPoisonState(t *testing.T) {
 	} {
 		v := tc.v
 		v.Init("seed", 10000)
-		v.View(20, 5)
+		v.SetSize(20, 5)
 		v.SetAudioData(nanFrame())
 		for range 3 {
 			v.Advance()

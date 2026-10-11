@@ -59,17 +59,29 @@ type MilkdropPreset struct {
 	inited    bool
 }
 
+// Init starts a new track from a black picture, at the size SetSize last
+// gave.
 func (m *MilkdropPreset) Init(seed string, durationMs int) {
 	m.tick = 0
 	m.bass = 0
 	m.mid = 0
 	m.high = 0
 	m.energy = 0
-	m.fbW = 0
-	m.fbH = 0
-	m.fb = nil
-	m.fbBack = nil
+	clear(m.fb)
+	clear(m.fbBack)
 	m.inited = true
+}
+
+// SetSize sizes the framebuffers for a width×height cell pane, two pixel
+// rows per cell. A new size starts the picture over from black.
+func (m *MilkdropPreset) SetSize(width, height int) {
+	pixW, pixH := max(width, 0), max(height, 0)*2
+	if m.fbW == pixW && m.fbH == pixH {
+		return
+	}
+	m.fbW, m.fbH = pixW, pixH
+	m.fb = make([]pixel, pixW*pixH)
+	m.fbBack = make([]pixel, pixW*pixH)
 }
 
 func (m *MilkdropPreset) SetAudioData(data *audio.FrequencyData) {
@@ -111,20 +123,7 @@ func (m *MilkdropPreset) View(w, h int) string {
 	if !m.inited || w < 1 || h < 1 {
 		return ""
 	}
-	m.resize(w, h)
 	return m.render(w, h)
-}
-
-func (m *MilkdropPreset) resize(termW, termH int) {
-	pixH := termH * 2
-	if m.fbW == termW && m.fbH == pixH {
-		return
-	}
-	m.fbW = termW
-	m.fbH = pixH
-	size := termW * pixH
-	m.fb = make([]pixel, size)
-	m.fbBack = make([]pixel, size)
 }
 
 func (m *MilkdropPreset) updateAudio() {
@@ -207,7 +206,15 @@ func (m *MilkdropPreset) stampEnergy() {
 	}
 }
 
+// render draws the framebuffer at termW×termH cells. A framebuffer not
+// sized for that pane draws black: SetSize runs in Update, and resizing
+// here would wipe the feedback history from View.
 func (m *MilkdropPreset) render(termW, termH int) string {
+	fb, fbW := m.fb, m.fbW
+	if m.fbW != termW || m.fbH != termH*2 {
+		fb, fbW = make([]pixel, termW*termH*2), termW
+	}
+
 	var buf strings.Builder
 	// Worst case per cell: fused fg+bg escape (2×19 bytes) + '▀' (3); plus
 	// a reset and newline per row.
@@ -217,8 +224,8 @@ func (m *MilkdropPreset) render(termW, termH int) string {
 		topRow := row * 2
 		botRow := topRow + 1
 		for col := range termW {
-			top := m.fb[topRow*m.fbW+col]
-			bot := m.fb[botRow*m.fbW+col]
+			top := fb[topRow*fbW+col]
+			bot := fb[botRow*fbW+col]
 
 			tr, tg, tb := hslToRGB(top.h, top.s, top.l)
 			br, bg, bb := hslToRGB(bot.h, bot.s, bot.l)

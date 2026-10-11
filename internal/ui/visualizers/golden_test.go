@@ -28,6 +28,7 @@ func TestGoldenFrames(t *testing.T) {
 	for _, tc := range allVisualizers {
 		for _, sz := range []struct{ w, h int }{{80, 24}, {250, 70}} {
 			v := newFedVisualizer(tc.new)
+			sizeFor(v, sz.w, sz.h)
 			for frame := 1; frame <= 60; frame++ {
 				v.Advance()
 				out := v.View(sz.w, sz.h)

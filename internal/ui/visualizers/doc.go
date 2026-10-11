@@ -20,9 +20,18 @@
 //     when the source had timestamps, or is told the track is
 //     instrumental (for Lyrics, which highlights the line being sung
 //     from the timestamps and falls back to a proportional scroll).
+//   - SizeAware receives the pane size when it is shown and on every
+//     resize while it is, for state laid out by it (the Milkdrop
+//     framebuffers). Init keeps the size.
 //
 // A visualizer opts in by implementing the matching capability interface;
 // the ui package's visualizerModel pushes data to everything that opts in.
+//
+// View runs inside bubbletea's View and must not change what Advance or a
+// later frame sees: a visualizer that needs its state sized implements
+// SizeAware rather than resizing in View, and draws a frame of the
+// requested size from whatever it has (Milkdrop: black) until sized.
+// Scratch buffers and caches derived purely from the inputs are fine.
 //
 // # Current implementations
 //

@@ -93,6 +93,14 @@ func newFedVisualizer(newViz func() Visualizer) Visualizer {
 	return v
 }
 
+// sizeFor gives v the pane size when it lays out state by it, as the ui
+// package does on every resize.
+func sizeFor(v Visualizer, w, h int) {
+	if sa, ok := v.(SizeAware); ok {
+		sa.SetSize(w, h)
+	}
+}
+
 // BenchmarkAdvanceView measures one rendered frame (Advance + View) per
 // visualizer, fed with every input it opts into, at 120x40 and at a large
 // 250x70 terminal.
@@ -102,6 +110,7 @@ func BenchmarkAdvanceView(b *testing.B) {
 		for _, sz := range sizes {
 			b.Run(fmt.Sprintf("%s/%dx%d", tc.name, sz.w, sz.h), func(b *testing.B) {
 				v := newFedVisualizer(tc.new)
+				sizeFor(v, sz.w, sz.h)
 				// Warm up frame-to-frame state (trails, history, caches).
 				for range 30 {
 					v.Advance()

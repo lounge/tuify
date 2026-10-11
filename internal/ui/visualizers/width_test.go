@@ -26,6 +26,7 @@ func TestEveryVisualizerFillsThePaneExactly(t *testing.T) {
 				t.Parallel()
 
 				v := newFedVisualizer(tc.new)
+				sizeFor(v, sz.w, sz.h)
 				for range 3 {
 					v.View(sz.w, sz.h)
 					v.Advance()

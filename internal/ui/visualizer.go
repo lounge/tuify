@@ -22,6 +22,8 @@ type visualizerModel struct {
 	track       trackInfo // the item the visualizers were last initialized for
 	vizList     []visualizers.Visualizer
 	vizIdx      int
+	width       int // the pane size from the last resize; see sizeShown
+	height      int
 	imageURL    string
 	images      asyncLoader[fetchResult]
 	imageCache  boundedCache[string, image.Image]
@@ -109,6 +111,7 @@ func (m *visualizerModel) toggle(t trackInfo) tea.Cmd {
 	if m.shouldSkip(m.vizIdx) {
 		m.cycle(1)
 	}
+	m.sizeShown()
 	m.fetchAssets()
 	return m.tick()
 }
@@ -127,6 +130,27 @@ func (m *visualizerModel) setTrack(t trackInfo) {
 	}
 	m.images.cancelPending()
 	m.lyrics.cancelPending()
+}
+
+// setSize records the pane size. Called from Update on each resize; the
+// visualizer on screen is sized at once, any other when it is shown.
+func (m *visualizerModel) setSize(width, height int) {
+	m.width, m.height = width, height
+	m.sizeShown()
+}
+
+// sizeShown passes the pane size to the visualizer on screen if it lays
+// out state by it (SizeAware), so View finds it sized for the frame it is
+// asked to draw. Only that one is sized, and only while the pane is open:
+// a Milkdrop preset's buffers run to megabytes on a large terminal, so
+// presets nobody is watching are not reallocated on every resize.
+func (m *visualizerModel) sizeShown() {
+	if !m.active {
+		return
+	}
+	if sa, ok := m.viz().(visualizers.SizeAware); ok {
+		sa.SetSize(m.width, m.height)
+	}
 }
 
 // setImageURL records new art for the current track (Spotify can report
@@ -191,6 +215,7 @@ func (m *visualizerModel) cycle(delta int) {
 	if n == 0 {
 		return
 	}
+	defer m.sizeShown() // the one switched to may be sized for another pane
 	orig := m.vizIdx
 	for range n {
 		m.vizIdx = (m.vizIdx + delta + n) % n
