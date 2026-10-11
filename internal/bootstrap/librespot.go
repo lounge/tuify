@@ -225,18 +225,23 @@ func transferToPreferred(parent context.Context, client *spotify.Client, deviceN
 // when it is not. It looks up to resumeChecks times, resumeCheckDelay
 // apart, and stops early once playback runs, the root context ends, a
 // newer reconnect supersedes it, the user switches device, or the user's
-// intent is no longer to play (they paused meanwhile).
+// intent is no longer to play (they paused meanwhile). Those are asked
+// before each check and again once its player-state read is back, since
+// any of them can land while the read is in flight.
 func ensurePlaying(parent context.Context, client *spotify.Client, deviceName, devID string, superseded func() bool) {
+	resumeWanted := func() bool {
+		return !superseded() && !client.DeviceOverridden.Load() && client.PlayIntent() == spotify.PlayIntentPlaying
+	}
 	for check := 1; check <= resumeChecks; check++ {
 		select {
 		case <-time.After(resumeCheckDelay):
 		case <-parent.Done():
 			return
 		}
-		if superseded() || client.DeviceOverridden.Load() || client.PlayIntent() != spotify.PlayIntentPlaying {
+		if !resumeWanted() {
 			return
 		}
-		if resumeIfPaused(parent, client, deviceName, devID, check) {
+		if resumeIfPaused(parent, client, deviceName, devID, check, resumeWanted) {
 			return
 		}
 	}
@@ -244,10 +249,11 @@ func ensurePlaying(parent context.Context, client *spotify.Client, deviceName, d
 }
 
 // resumeIfPaused reads the player state once and resumes playback on
-// devID if it is paused. It reports whether the check is done: playback
-// is running, or it is on another device and none of the handler's
-// business.
-func resumeIfPaused(parent context.Context, client *spotify.Client, deviceName, devID string, check int) bool {
+// devID if it is paused and resuming is still wanted after the read. It
+// reports whether the check is done: playback is running, it is on
+// another device and none of the handler's business, or the user's pause,
+// device switch or a newer reconnect has taken over.
+func resumeIfPaused(parent context.Context, client *spotify.Client, deviceName, devID string, check int, resumeWanted func() bool) bool {
 	ctx, cancel := context.WithTimeout(parent, 10*time.Second)
 	defer cancel()
 	state, err := client.GetPlayerState(ctx)
@@ -263,6 +269,10 @@ func resumeIfPaused(parent context.Context, client *spotify.Client, deviceName, 
 		if check > 1 {
 			log.Printf("[librespot] reconnect: playback resumed on %s", deviceName)
 		}
+		return true
+	}
+	if !resumeWanted() {
+		log.Printf("[librespot] reconnect: pause, device switch or newer reconnect during the check, not resuming")
 		return true
 	}
 	log.Printf("[librespot] reconnect: %s is paused after the transfer, resuming (check %d/%d)", deviceName, check, resumeChecks)

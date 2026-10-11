@@ -25,7 +25,8 @@
 // state and resumes the device if Spotify left it paused, which happens
 // after a broken session. That check runs outside the one-transfer-at-a-
 // time guard, so a librespot restart during it still transfers, and a
-// newer reconnect ends it.
+// newer reconnect ends it. A pause, device switch or newer reconnect that
+// lands while the player-state read is in flight also stops the resume.
 //
 // Icons: useNerdFont resolves the nerd_font setting; when it is omitted,
 // the OS font directories are scanned for an installed Nerd Font. This

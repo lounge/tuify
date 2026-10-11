@@ -31,6 +31,7 @@ type fakeSpotify struct {
 	onLookup  func()   // called while answering each device-list request
 	states    []string // player-state bodies served in order; the last repeats. Empty: 204.
 	stateGets int      // player-state requests
+	onState   func()   // called while answering each player-state request
 	resumes   int      // PUT /v1/me/player/play requests
 }
 
@@ -66,6 +67,9 @@ func (f *fakeSpotify) RoundTrip(req *http.Request) (*http.Response, error) {
 		f.transfers = append(f.transfers, strings.TrimSpace(string(b)))
 	case req.Method == http.MethodGet && req.URL.Path == "/v1/me/player":
 		f.stateGets++
+		if f.onState != nil {
+			f.onState()
+		}
 		if len(f.states) > 0 {
 			status = http.StatusOK
 			body = f.states[0]
@@ -372,4 +376,65 @@ func TestReconnectHandler_RestartDuringCheckStillTransfers(t *testing.T) {
 			t.Errorf("player-state reads = %d, resumes = %d; want %d each from the newer reconnect only", gets, resumes, resumeChecks)
 		}
 	})
+}
+
+// The check reads the player state before it resumes, and the user can
+// pause or switch device, or librespot reconnect again, while that read
+// is in flight. The paused state it then reads is the user's own pause or
+// another device's business, so resuming would override them; the
+// conditions are asked again once the read is back.
+func TestReconnectHandler_ChangeDuringStateReadStopsResume(t *testing.T) {
+	tests := []struct {
+		name          string
+		during        func(client *spotify.Client, handler func(), wg *sync.WaitGroup)
+		wantTransfers int
+		wantResumes   int
+	}{
+		{
+			name:          "pause",
+			during:        func(client *spotify.Client, _ func(), _ *sync.WaitGroup) { client.SetPlayIntent(false) },
+			wantTransfers: 1, wantResumes: 0,
+		},
+		{
+			name:          "device switch",
+			during:        func(client *spotify.Client, _ func(), _ *sync.WaitGroup) { client.DeviceOverridden.Store(true) },
+			wantTransfers: 1, wantResumes: 0,
+		},
+		{
+			// The newer reconnect transfers and checks for itself; every
+			// resume is its own.
+			name: "newer reconnect",
+			during: func(_ *spotify.Client, handler func(), wg *sync.WaitGroup) {
+				wg.Go(handler)
+				// Let it take its generation before the read returns.
+				time.Sleep(time.Millisecond)
+			},
+			wantTransfers: 2, wantResumes: resumeChecks,
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				fake := &fakeSpotify{states: []string{playerState("tuify", false)}}
+				client := spotify.New(&http.Client{Transport: fake}, spotify.WithPreferredDevice("tuify"))
+				client.SetPlayIntent(true)
+				handler := reconnectHandler(t.Context(), client, "tuify")
+				var wg sync.WaitGroup
+				fake.onState = func() {
+					fake.onState = nil // only the first read; fake.mu is held
+					tc.during(client, handler, &wg)
+				}
+
+				wg.Go(handler)
+				wg.Wait()
+
+				if _, transfers := fake.snapshot(); len(transfers) != tc.wantTransfers {
+					t.Errorf("transfers = %d, want %d", len(transfers), tc.wantTransfers)
+				}
+				if _, resumes := fake.resumeCounts(); resumes != tc.wantResumes {
+					t.Errorf("resumes = %d, want %d", resumes, tc.wantResumes)
+				}
+			})
+		})
+	}
 }
