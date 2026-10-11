@@ -16,10 +16,13 @@ import (
 	"github.com/lounge/tuify/internal/testutil"
 )
 
-// searchStub serves /v1/search (artists and tracks) and
+// searchStub serves /v1/search (artists, episodes and tracks) and
 // /v1/artists/{id}/albums as paginated catalogues of `total` rows each.
+// Rows below withheld are served as null, the way Spotify sends an entry
+// it withholds.
 type searchStub struct {
 	total    int
+	withheld int
 	requests atomic.Int32
 }
 
@@ -33,6 +36,8 @@ func (s *searchStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var items []map[string]any
 	for i := offset; i < end; i++ {
 		switch {
+		case i < s.withheld:
+			items = append(items, nil)
 		case strings.HasPrefix(r.URL.Path, "/v1/artists/"):
 			artist := strings.Split(r.URL.Path, "/")[3]
 			id := fmt.Sprintf("%s-album%d", artist, i)
@@ -40,6 +45,9 @@ func (s *searchStub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		case q.Get("type") == "artist":
 			id := fmt.Sprintf("artist%d", i)
 			items = append(items, map[string]any{"id": id, "uri": "spotify:artist:" + id, "name": "Artist " + id})
+		case q.Get("type") == "episode":
+			id := fmt.Sprintf("episode%d", i)
+			items = append(items, map[string]any{"id": id, "uri": "spotify:episode:" + id, "name": "Episode " + id})
 		default:
 			id := fmt.Sprintf("track%d", i)
 			items = append(items, map[string]any{"id": id, "uri": "spotify:track:" + id, "name": "Track " + id})
@@ -270,6 +278,33 @@ func TestSearchView_FetchMorePaginates(t *testing.T) {
 	}
 	if n := stub.requests.Load(); n != 3 {
 		t.Errorf("server saw %d requests, want 3", n)
+	}
+}
+
+// Spotify sends null for an episode or show it withholds, and the client
+// drops it. The offset must still move past it: advancing by the rows
+// kept requested a page of nothing but nulls again and again, and after
+// a partly withheld page repeated the rows that followed the gap.
+func TestSearchView_PagesPastWithheldEntries(t *testing.T) {
+	v, stub := newStubSearchView(t, 25)
+	stub.withheld = 13 // all of page one, three rows of page two
+	typeQuery(t, v, "e:pod")
+	commitSearch(t, v)
+	if len(v.items) != 0 || !v.hasMore || v.offset != 10 {
+		t.Fatalf("withheld page: items=%d hasMore=%v offset=%d, want 0/true/10", len(v.items), v.hasMore, v.offset)
+	}
+
+	applySearchResult(t, v, v.fetchMore())
+	applySearchResult(t, v, v.fetchMore())
+	want := make([]string, 0, 12)
+	for i := 13; i < 25; i++ {
+		want = append(want, fmt.Sprintf("spotify:episode:episode%d", i))
+	}
+	if got := uris(v.items); fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Errorf("episodes = %v, want %v", got, want)
+	}
+	if v.hasMore || v.offset != 25 {
+		t.Errorf("after the last page: hasMore=%v offset=%d, want false/25", v.hasMore, v.offset)
 	}
 }
 

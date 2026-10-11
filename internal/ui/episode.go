@@ -32,7 +32,7 @@ type episodeView struct {
 
 func newEpisodeView(ctx context.Context, client *spotify.Client, showID, showName string, width, height int, vimMode bool) *episodeView {
 	load := func(ctx context.Context, offset int) ([]list.Item, int, bool, error) {
-		episodes, hasMore, err := client.GetShowEpisodes(ctx, showID, offset, 50)
+		episodes, rawCount, hasMore, err := client.GetShowEpisodes(ctx, showID, offset, 50)
 		items := make([]list.Item, 0, len(episodes))
 		for _, e := range episodes {
 			items = append(items, episodeItem{
@@ -40,7 +40,7 @@ func newEpisodeView(ctx context.Context, client *spotify.Client, showID, showNam
 				releaseDate: e.ReleaseDate, duration: e.Duration,
 			})
 		}
-		return items, len(episodes), hasMore, err
+		return items, rawCount, hasMore, err
 	}
 	return &episodeView{
 		lazyList: newLazyList(ctx, load, width, height, vimMode),

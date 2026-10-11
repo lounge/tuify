@@ -227,7 +227,7 @@ func TestGetSavedShows(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	shows, more, err := c.GetSavedShows(context.Background(), 0, 50)
+	shows, _, more, err := c.GetSavedShows(context.Background(), 0, 50)
 	if err != nil {
 		t.Fatalf("GetSavedShows: %v", err)
 	}
@@ -257,7 +257,7 @@ func TestGetShowEpisodes(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	eps, more, err := c.GetShowEpisodes(context.Background(), "show1", 0, 50)
+	eps, _, more, err := c.GetShowEpisodes(context.Background(), "show1", 0, 50)
 	if err != nil {
 		t.Fatalf("GetShowEpisodes: %v", err)
 	}
@@ -294,7 +294,7 @@ func TestGetArtistAlbums(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	albums, more, err := c.GetArtistAlbums(context.Background(), "artist1", 0, 50)
+	albums, _, more, err := c.GetArtistAlbums(context.Background(), "artist1", 0, 50)
 	if err != nil {
 		t.Fatalf("GetArtistAlbums: %v", err)
 	}
@@ -328,7 +328,7 @@ func TestGetAlbumTracks(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	tracks, more, err := c.GetAlbumTracks(context.Background(), "album1", 0, 50)
+	tracks, _, more, err := c.GetAlbumTracks(context.Background(), "album1", 0, 50)
 	if err != nil {
 		t.Fatalf("GetAlbumTracks: %v", err)
 	}
@@ -354,7 +354,7 @@ func TestGetAlbumTracks_EscapesID(t *testing.T) {
 		}
 		json.MarshalWrite(w, map[string]any{"offset": 0, "total": 0, "items": []any{}})
 	})
-	if _, _, err := c.GetAlbumTracks(context.Background(), "a/../b", 0, 50); err != nil {
+	if _, _, _, err := c.GetAlbumTracks(context.Background(), "a/../b", 0, 50); err != nil {
 		t.Fatalf("GetAlbumTracks: %v", err)
 	}
 }
@@ -413,24 +413,63 @@ func TestPagedEndpoints_DropNullEntries(t *testing.T) {
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"offset":0,"total":2,"items":[null,{"id":"e1","uri":"spotify:episode:e1","name":"E"}]}`))
 		})
-		got, _, err := c.GetShowEpisodes(context.Background(), "s", 0, 50)
+		got, raw, _, err := c.GetShowEpisodes(context.Background(), "s", 0, 50)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(got) != 1 || got[0].ID != "e1" {
-			t.Errorf("got %+v, want only e1", got)
+		if len(got) != 1 || got[0].ID != "e1" || raw != 2 {
+			t.Errorf("got %+v raw=%d, want only e1 and raw 2", got, raw)
+		}
+	})
+	// A page of nothing but nulls must still advance the caller: with
+	// the filtered count, the next request asked for the same offset
+	// again while more stayed true.
+	t.Run("show episodes all null", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"offset":0,"total":5,"items":[null,null]}`))
+		})
+		got, raw, more, err := c.GetShowEpisodes(context.Background(), "s", 0, 2)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 0 || raw != 2 || !more {
+			t.Errorf("got %+v raw=%d more=%v, want none, raw 2 and more", got, raw, more)
 		}
 	})
 	t.Run("saved shows", func(t *testing.T) {
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"offset":0,"total":2,"items":[{"show":null},{"show":{"id":"s1","uri":"spotify:show:s1","name":"S"}}]}`))
 		})
-		got, _, err := c.GetSavedShows(context.Background(), 0, 50)
+		got, raw, _, err := c.GetSavedShows(context.Background(), 0, 50)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(got) != 1 || got[0].ID != "s1" {
-			t.Errorf("got %+v, want only s1", got)
+		if len(got) != 1 || got[0].ID != "s1" || raw != 2 {
+			t.Errorf("got %+v raw=%d, want only s1 and raw 2", got, raw)
+		}
+	})
+	t.Run("searched shows", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"shows":{"offset":0,"total":2,"items":[null,{"id":"s1","uri":"spotify:show:s1","name":"S"}]}}`))
+		})
+		got, raw, _, err := c.SearchShows(context.Background(), "q", 0, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "s1" || raw != 2 {
+			t.Errorf("got %+v raw=%d, want only s1 and raw 2", got, raw)
+		}
+	})
+	t.Run("searched episodes", func(t *testing.T) {
+		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"episodes":{"offset":0,"total":2,"items":[null,{"id":"e1","uri":"spotify:episode:e1","name":"E"}]}}`))
+		})
+		got, raw, _, err := c.SearchEpisodes(context.Background(), "q", 0, 50)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].ID != "e1" || raw != 2 {
+			t.Errorf("got %+v raw=%d, want only e1 and raw 2", got, raw)
 		}
 	})
 }

@@ -12,18 +12,18 @@ import (
 // and wraps the outcome in a searchResultMsg.
 func fetchCmd[T any](
 	parent context.Context, epoch uint64, term string,
-	fetch func(ctx context.Context) ([]T, bool, error),
+	fetch func(ctx context.Context) ([]T, int, bool, error),
 	convert func(T) list.Item,
 ) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(parent, listFetchTimeout)
 		defer cancel()
-		results, hasMore, err := fetch(ctx)
+		results, fetched, hasMore, err := fetch(ctx)
 		var items []list.Item
 		for _, r := range results {
 			items = append(items, convert(r))
 		}
-		return searchResultMsg{items: items, hasMore: hasMore, query: term, epoch: epoch, err: err}
+		return searchResultMsg{items: items, fetched: fetched, hasMore: hasMore, query: term, epoch: epoch, err: err}
 	}
 }
 
@@ -50,7 +50,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 	if depth == 1 && prefix == prefixArtist {
 		artistID := v.selectedArtist.id
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Album, bool, error) {
+			func(ctx context.Context) ([]spotify.Album, int, bool, error) {
 				return client.GetArtistAlbums(ctx, artistID, offset, limit)
 			},
 			func(a spotify.Album) list.Item {
@@ -62,7 +62,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 		albumID := v.selectedAlbum.id
 		albumName := v.selectedAlbum.name
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Track, bool, error) {
+			func(ctx context.Context) ([]spotify.Track, int, bool, error) {
 				return client.GetAlbumTracks(ctx, albumID, offset, limit)
 			},
 			func(t spotify.Track) list.Item {
@@ -73,7 +73,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 	if depth == 1 && prefix == prefixShow {
 		showID := v.selectedShow.id
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Episode, bool, error) {
+			func(ctx context.Context) ([]spotify.Episode, int, bool, error) {
 				return client.GetShowEpisodes(ctx, showID, offset, limit)
 			},
 			func(e spotify.Episode) list.Item {
@@ -86,7 +86,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 	switch prefix {
 	case prefixEpisode:
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Episode, bool, error) {
+			func(ctx context.Context) ([]spotify.Episode, int, bool, error) {
 				return client.SearchEpisodes(ctx, term, offset, limit)
 			},
 			func(e spotify.Episode) list.Item {
@@ -95,7 +95,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 		)
 	case prefixAlbum:
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Album, bool, error) {
+			func(ctx context.Context) ([]spotify.Album, int, bool, error) {
 				return client.SearchAlbums(ctx, term, offset, limit)
 			},
 			func(a spotify.Album) list.Item {
@@ -104,7 +104,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 		)
 	case prefixArtist:
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Artist, bool, error) {
+			func(ctx context.Context) ([]spotify.Artist, int, bool, error) {
 				return client.SearchArtists(ctx, term, offset, limit)
 			},
 			func(a spotify.Artist) list.Item {
@@ -113,7 +113,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 		)
 	case prefixShow:
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Show, bool, error) {
+			func(ctx context.Context) ([]spotify.Show, int, bool, error) {
 				return client.SearchShows(ctx, term, offset, limit)
 			},
 			func(s spotify.Show) list.Item {
@@ -122,7 +122,7 @@ func (v searchView) fetchResults(term string, offset int) tea.Cmd {
 		)
 	default: // prefixTrack
 		return fetchCmd(parent, epoch, term,
-			func(ctx context.Context) ([]spotify.Track, bool, error) {
+			func(ctx context.Context) ([]spotify.Track, int, bool, error) {
 				return client.SearchTracks(ctx, term, offset, limit)
 			},
 			func(t spotify.Track) list.Item {

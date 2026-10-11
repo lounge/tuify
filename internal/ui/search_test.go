@@ -309,9 +309,9 @@ func TestFetchCmd_AppliesListFetchTimeout(t *testing.T) {
 	var gotDeadline time.Time
 	var hadDeadline bool
 	cmd := fetchCmd(t.Context(), 1, "q",
-		func(ctx context.Context) ([]string, bool, error) {
+		func(ctx context.Context) ([]string, int, bool, error) {
 			gotDeadline, hadDeadline = ctx.Deadline()
-			return nil, false, nil
+			return nil, 0, false, nil
 		},
 		func(s string) list.Item { return statusItem{text: s} },
 	)

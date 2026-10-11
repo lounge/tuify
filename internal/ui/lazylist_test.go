@@ -2,12 +2,18 @@ package ui
 
 import (
 	"context"
+	"encoding/json/v2"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/lounge/tuify/internal/spotify"
+	"github.com/lounge/tuify/internal/testutil"
 	zone "github.com/lrstanley/bubblezone"
 )
 
@@ -604,4 +610,40 @@ func TestUpdate_PageRoutedToCoveredList(t *testing.T) {
 	if tv.offset != 0 {
 		t.Errorf("page leaked into the track view on top (offset %d)", tv.offset)
 	}
+}
+
+// newWithheldPagesClient returns a client over a three-entry catalogue
+// whose first two entries Spotify withholds: the page at offset 0 holds
+// only null, the page at offset 2 holds entry.
+func newWithheldPagesClient(t *testing.T, null, entry any) *spotify.Client {
+	t.Helper()
+	srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
+		items := []any{null, null}
+		if offset == 2 {
+			items = []any{entry}
+		}
+		_ = json.MarshalWrite(w, map[string]any{"offset": offset, "total": 3, "items": items})
+	}))
+	return spotify.New(&http.Client{Transport: &testutil.RewriteTransport{
+		Base:   srv.Client().Transport,
+		Target: srv.URL,
+	}})
+}
+
+// pageWithFilterOpen loads l's pages with its filter open, which fetches
+// every page, and fails if the list still asks for more after a few: a
+// page of nulls that left the offset in place re-requested itself in a
+// tight loop.
+func pageWithFilterOpen(t *testing.T, l *lazyList) {
+	t.Helper()
+	l.openSearch()
+	cmd := l.fetchMore()
+	for range 3 {
+		if cmd == nil {
+			return
+		}
+		cmd = l.Update(cmd())
+	}
+	t.Fatalf("still fetching after 3 pages, offset %d", l.offset)
 }

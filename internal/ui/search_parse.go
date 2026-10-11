@@ -45,7 +45,10 @@ type searchDebounceMsg struct {
 }
 
 type searchResultMsg struct {
-	items   []list.Item
+	items []list.Item
+	// fetched is the raw page size, which can exceed len(items) when
+	// Spotify withheld entries; the offset advances by it.
+	fetched int
 	hasMore bool
 	query   string
 	epoch   uint64

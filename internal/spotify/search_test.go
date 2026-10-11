@@ -34,7 +34,7 @@ func TestSearchTracks(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	tracks, more, err := c.SearchTracks(context.Background(), "test query", 0, 20)
+	tracks, _, more, err := c.SearchTracks(context.Background(), "test query", 0, 20)
 	if err != nil {
 		t.Fatalf("SearchTracks: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestSearchEpisodes(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	eps, _, err := c.SearchEpisodes(context.Background(), "podcast", 0, 20)
+	eps, _, _, err := c.SearchEpisodes(context.Background(), "podcast", 0, 20)
 	if err != nil {
 		t.Fatalf("SearchEpisodes: %v", err)
 	}
@@ -94,7 +94,7 @@ func TestSearchAlbums(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	albums, _, err := c.SearchAlbums(context.Background(), "album query", 0, 20)
+	albums, _, _, err := c.SearchAlbums(context.Background(), "album query", 0, 20)
 	if err != nil {
 		t.Fatalf("SearchAlbums: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestSearchArtists(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	artists, _, err := c.SearchArtists(context.Background(), "artist query", 0, 20)
+	artists, _, _, err := c.SearchArtists(context.Background(), "artist query", 0, 20)
 	if err != nil {
 		t.Fatalf("SearchArtists: %v", err)
 	}
@@ -152,7 +152,7 @@ func TestSearchShows(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	shows, _, err := c.SearchShows(context.Background(), "show query", 0, 20)
+	shows, _, _, err := c.SearchShows(context.Background(), "show query", 0, 20)
 	if err != nil {
 		t.Fatalf("SearchShows: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestSearchTracks_Pagination(t *testing.T) {
 		json.MarshalWrite(w, response)
 	})
 
-	_, more, err := c.SearchTracks(context.Background(), "query", 0, 1)
+	_, _, more, err := c.SearchTracks(context.Background(), "query", 0, 1)
 	if err != nil {
 		t.Fatalf("SearchTracks: %v", err)
 	}
@@ -212,7 +212,7 @@ func TestSearch_CleansText(t *testing.T) {
 			key:  "tracks",
 			item: map[string]any{"id": "t1", "uri": "spotify:track:t1", "name": evil, "duration_ms": 1000,
 				"artists": []map[string]any{{"name": evil}}, "album": map[string]any{"name": evil}},
-			search: func(c *Client) (any, error) { v, _, err := c.SearchTracks(t.Context(), "q", 0, 1); return v, err },
+			search: func(c *Client) (any, error) { v, _, _, err := c.SearchTracks(t.Context(), "q", 0, 1); return v, err },
 			want:   []Track{{ID: "t1", URI: "spotify:track:t1", Name: clean, Artist: clean, Album: clean, Duration: time.Second}},
 		},
 		{
@@ -220,28 +220,28 @@ func TestSearch_CleansText(t *testing.T) {
 			key:  "albums",
 			item: map[string]any{"id": "a1", "uri": "spotify:album:a1", "name": evil, "release_date": evil,
 				"total_tracks": 2, "artists": []map[string]any{{"name": evil}}},
-			search: func(c *Client) (any, error) { v, _, err := c.SearchAlbums(t.Context(), "q", 0, 1); return v, err },
+			search: func(c *Client) (any, error) { v, _, _, err := c.SearchAlbums(t.Context(), "q", 0, 1); return v, err },
 			want:   []Album{{ID: "a1", URI: "spotify:album:a1", Name: clean, Artist: clean, ReleaseDate: clean, TrackCount: 2}},
 		},
 		{
 			name:   "artists",
 			key:    "artists",
 			item:   map[string]any{"id": "ar1", "uri": "spotify:artist:ar1", "name": evil, "genres": []string{evil, "rock"}},
-			search: func(c *Client) (any, error) { v, _, err := c.SearchArtists(t.Context(), "q", 0, 1); return v, err },
+			search: func(c *Client) (any, error) { v, _, _, err := c.SearchArtists(t.Context(), "q", 0, 1); return v, err },
 			want:   []Artist{{ID: "ar1", URI: "spotify:artist:ar1", Name: clean, Genres: []string{clean, "rock"}}},
 		},
 		{
 			name:   "episodes",
 			key:    "episodes",
 			item:   map[string]any{"id": "e1", "uri": "spotify:episode:e1", "name": evil, "release_date": evil, "duration_ms": 1000},
-			search: func(c *Client) (any, error) { v, _, err := c.SearchEpisodes(t.Context(), "q", 0, 1); return v, err },
+			search: func(c *Client) (any, error) { v, _, _, err := c.SearchEpisodes(t.Context(), "q", 0, 1); return v, err },
 			want:   []Episode{{ID: "e1", URI: "spotify:episode:e1", Name: clean, ReleaseDate: clean, Duration: time.Second}},
 		},
 		{
 			name:   "shows",
 			key:    "shows",
 			item:   map[string]any{"id": "s1", "uri": "spotify:show:s1", "name": evil, "total_episodes": 3},
-			search: func(c *Client) (any, error) { v, _, err := c.SearchShows(t.Context(), "q", 0, 1); return v, err },
+			search: func(c *Client) (any, error) { v, _, _, err := c.SearchShows(t.Context(), "q", 0, 1); return v, err },
 			want:   []Show{{ID: "s1", URI: "spotify:show:s1", Name: clean, TotalEpisodes: 3}},
 		},
 	}
@@ -285,7 +285,7 @@ func TestSearch_StopsAtOffsetCap(t *testing.T) {
 		c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
 			json.MarshalWrite(w, map[string]any{"tracks": map[string]any{"offset": tc.offset, "total": 50000, "items": items}})
 		})
-		_, more, err := c.SearchTracks(context.Background(), "q", tc.offset, tc.n)
+		_, _, more, err := c.SearchTracks(context.Background(), "q", tc.offset, tc.n)
 		if err != nil {
 			t.Fatalf("offset %d: %v", tc.offset, err)
 		}

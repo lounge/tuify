@@ -195,7 +195,10 @@ func (v *searchView) Update(msg tea.Msg) tea.Cmd {
 			v.searchErr = msg.err
 		} else {
 			v.items = append(v.items, msg.items...)
-			v.offset += len(msg.items)
+			// The raw page size, not len(items): a page with withheld
+			// entries would otherwise be requested again from inside
+			// itself, and one of nothing but those forever.
+			v.offset += msg.fetched
 			v.hasMore = msg.hasMore
 		}
 		v.rebuildList()

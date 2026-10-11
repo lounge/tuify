@@ -76,8 +76,9 @@ func (c *Client) GetPlaylistTracks(ctx context.Context, id string, offset, limit
 	return convertTracks(raw), len(page.Items), hasMore(page.Offset, len(page.Items), page.Total), nil
 }
 
-// GetSavedShows returns the user's followed podcast shows.
-func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, bool, error) {
+// GetSavedShows returns the user's followed podcast shows. A show Spotify
+// withholds (a null in the page) is dropped; rawCount still counts it.
+func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) (shows []Show, rawCount int, more bool, err error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/me/shows?limit=%d&offset=%d", limit, offset)
 	var p struct {
 		Offset int `json:"offset"`
@@ -87,44 +88,46 @@ func (c *Client) GetSavedShows(ctx context.Context, offset, limit int) ([]Show, 
 		} `json:"items"`
 	}
 	if err := c.apiGet(ctx, endpoint, &p); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
 	raw := make([]rawShow, len(p.Items))
 	for i, item := range p.Items {
 		raw[i] = item.Show
 	}
-	return convertShows(raw), hasMore(p.Offset, len(p.Items), p.Total), nil
+	return convertShows(raw), len(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
 }
 
-// GetShowEpisodes returns episodes for a given podcast show.
-func (c *Client) GetShowEpisodes(ctx context.Context, showID string, offset, limit int) ([]Episode, bool, error) {
+// GetShowEpisodes returns episodes for a given podcast show. An episode
+// Spotify withholds (a null in the page) is dropped; rawCount still
+// counts it.
+func (c *Client) GetShowEpisodes(ctx context.Context, showID string, offset, limit int) (episodes []Episode, rawCount int, more bool, err error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/shows/%s/episodes?limit=%d&offset=%d", neturl.PathEscape(showID), limit, offset)
 	var p page[rawEpisode]
 	if err := c.apiGet(ctx, endpoint, &p); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
-	return convertEpisodes(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
+	return convertEpisodes(p.Items), len(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
 }
 
 // GetArtistAlbums returns albums and singles by the given artist.
 // Compilation and appears-on releases are excluded.
-func (c *Client) GetArtistAlbums(ctx context.Context, artistID string, offset, limit int) ([]Album, bool, error) {
+func (c *Client) GetArtistAlbums(ctx context.Context, artistID string, offset, limit int) (albums []Album, rawCount int, more bool, err error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/artists/%s/albums?include_groups=album,single&limit=%d&offset=%d",
 		neturl.PathEscape(artistID), limit, offset)
 	var p page[rawAlbum]
 	if err := c.apiGet(ctx, endpoint, &p); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
-	return convertAlbums(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
+	return convertAlbums(p.Items), len(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
 }
 
 // GetAlbumTracks returns tracks from the given album in track order.
-func (c *Client) GetAlbumTracks(ctx context.Context, albumID string, offset, limit int) ([]Track, bool, error) {
+func (c *Client) GetAlbumTracks(ctx context.Context, albumID string, offset, limit int) (tracks []Track, rawCount int, more bool, err error) {
 	endpoint := fmt.Sprintf("https://api.spotify.com/v1/albums/%s/tracks?limit=%d&offset=%d",
 		neturl.PathEscape(albumID), limit, offset)
 	var p page[rawTrack]
 	if err := c.apiGet(ctx, endpoint, &p); err != nil {
-		return nil, false, err
+		return nil, 0, false, err
 	}
-	return convertTracks(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
+	return convertTracks(p.Items), len(p.Items), hasMore(p.Offset, len(p.Items), p.Total), nil
 }

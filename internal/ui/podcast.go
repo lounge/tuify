@@ -27,14 +27,14 @@ type podcastView struct {
 
 func newPodcastView(ctx context.Context, client *spotify.Client, width, height int, vimMode bool) *podcastView {
 	load := func(ctx context.Context, offset int) ([]list.Item, int, bool, error) {
-		shows, hasMore, err := client.GetSavedShows(ctx, offset, 50)
+		shows, rawCount, hasMore, err := client.GetSavedShows(ctx, offset, 50)
 		items := make([]list.Item, 0, len(shows))
 		for _, s := range shows {
 			items = append(items, podcastItem{
 				id: s.ID, uri: s.URI, name: s.Name, episodeCount: s.TotalEpisodes,
 			})
 		}
-		return items, len(shows), hasMore, err
+		return items, rawCount, hasMore, err
 	}
 	return &podcastView{lazyList: newLazyList(ctx, load, width, height, vimMode)}
 }

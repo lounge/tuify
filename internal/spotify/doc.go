@@ -44,9 +44,12 @@
 // Paging: every paged method reports whether another page follows. An
 // empty page never does, whatever Spotify's total says, so a caller that
 // loops on it always terminates; search paging also stops at the
-// endpoint's 1000-result cap, past which Spotify answers 400. Methods that
-// drop entries (GetPlaylists, GetPlaylistTracks) also return the raw page
-// size, which is what a caller must advance its offset by.
+// endpoint's 1000-result cap, past which Spotify answers 400. Every paged
+// method also returns the raw page size, which is what a caller must
+// advance its offset by: entries without an ID (the nulls Spotify sends
+// for withheld items, local files in a playlist) and, for GetPlaylists,
+// playlists the user doesn't own are dropped, so the returned slice can
+// be shorter, or empty while more pages follow.
 //
 // Devices: FindDevice never returns a device Spotify lists without an ID,
 // and its last-resort pick skips restricted devices, which accept no Web
