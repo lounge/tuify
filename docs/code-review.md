@@ -1,0 +1,52 @@
+# Full Codebase Review
+
+Reviewed the current checkout at `489051def3b8080dfd506f758a5b975c5894bb38`. No issue or feature specification was supplied, so behavior was assessed against `AGENTS.md`, the README, and package `doc.go` contracts. The review found eight reproducible defects: four UI issues and four playback, pagination, or rate-limit issues. The report records findings only; it does not change application code.
+
+## Standards
+
+1. **P2 — Milkdrop rendering mutates persistent animation state.** [milkdrop_base.go](../internal/ui/visualizers/milkdrop_base.go#L110) calls `resize` from `View`; `resize` replaces both feedback buffers at lines 118–127. Rendering at a different terminal size therefore erases the animation history, and rendering also changes the dimensions required for subsequent `Advance` calls. This violates `AGENTS.md`'s pure-`View` and Update-only mutation rules. Move simulation sizing into an update path and keep rendering read-only. A regression should render an animated frame at one size, render at another, then confirm that returning to the original size did not alter simulation state.
+
+2. **P2 — The search prompt can break the fixed-height playback bar.** [nowplaying_render.go](../internal/ui/nowplaying_render.go#L37) renders the whole query; Lipgloss wraps it when it exceeds the available width, although the shell reserves a fixed number of rows. In a 40-column terminal, a long query grows the bar from five rows to seven, pushing content out of frame and shifting mouse coordinates for list zones. Keep the full query in state while horizontally scrolling or truncating its displayed form by terminal cell width. Test long ASCII and wide-character queries and verify that the bar height remains fixed.
+
+## Spec
+
+No originating feature spec was supplied. These findings compare current behavior with the repository's documented contracts.
+
+1. **P2 — A successful pause or shuffle can leave the UI stuck on stale optimistic state.** [nowplaying.go](../internal/ui/nowplaying.go#L276) leaves a pending flip active until a poll reports the optimistic value; the success handler preserves that pending flip. If playback is resumed from another Spotify client before the confirming poll, subsequent authoritative reports of “playing” never clear the pending pause. The UI stays paused, progress stops, and Space sends Resume instead of Pause. Shuffle uses the same confirmation logic. Bound confirmation or reconcile successful actions with poll generations. A temporary regression delivered 60 authoritative “playing” polls after a successful pause and observed the pending flip remain set.
+
+2. **P2 — An empty player response leaves old art or lyrics in the visualizer.** [nowplaying.go](../internal/ui/nowplaying.go#L230) handles HTTP 204 by clearing `hasTrack` without clearing `trackURI`. The shell updates the visualizer based on URI changes at [app_update.go](../internal/ui/app_update.go#L235), so an open pane retains the previous track even while now-playing reports that nothing is playing. Clear or reinitialize visualizer state on the transition from a track to no track, and test that resuming the same URI fetches or restores the right data.
+
+3. **P2 — Podcast pagination can repeat the same page indefinitely.** [library.go](../internal/spotify/library.go#L79) drops shows or episodes without IDs but returns no raw page count; [episode.go](../internal/ui/episode.go#L34) and [podcast.go](../internal/ui/podcast.go#L28) advance offsets by the filtered result count. If a page contains only null entries and Spotify reports more results, the offset stays unchanged. Mixed pages also repeat entries after dropped rows. Search for shows and episodes has the same issue: [search.go](../internal/spotify/search.go#L44) returns filtered results and `more`, while [search.go](../internal/ui/search.go#L197) advances by the filtered count. Return and advance by raw page size, as playlist pagination already does. Temporary HTTP-stub checks confirmed that a page of two null episodes produces zero results, `more=true`, and a next offset of zero.
+
+4. **P2 — SDK calls ignore short `Retry-After` cooldowns.** [ratelimit.go](../internal/spotify/ratelimit.go#L106) leaves the shared gate open for delays of ten seconds or less because it assumes callers retry inline. [client.go](../internal/spotify/client.go#L88) creates the SDK client without enabling its retry option, so operations such as device lookup and playback control return the first 429 and a second immediate call hits Spotify again. Retry those SDK requests within a bounded budget or arm the shared cooldown for them. A temporary HTTP-stub check returned two immediate 429 responses and left `RateLimitWait` at zero.
+
+5. **P2 — Concurrent exhausted retry loops escalate one throttle burst multiple times.** [ratelimit.go](../internal/spotify/ratelimit.go#L143) samples the current deadline only after an inline retry loop is exhausted. Concurrent requests that started before a cooldown was armed can therefore each treat themselves as a new burst and increment the exponential streak. Two simultaneous player-state requests, each receiving three short 429 responses, produced a one-minute cooldown and streak of two; the documented burst behavior calls for one throttle. Capture the cooldown generation when the retry loop starts and count simultaneous failures once. Add coverage for overlapping requests that exhaust inline retries.
+
+6. **P2 — A pause, device switch, or newer reconnect during a state lookup can still be overridden.** [librespot.go](../internal/bootstrap/librespot.go#L229) checks the play intent, device override, and reconnect generation before requesting player state. [librespot.go](../internal/bootstrap/librespot.go#L250) then sends Resume after a paused response without checking those conditions again. If the user pauses or switches devices while the request is in flight, or a newer reconnect starts, the old handler can restart playback on librespot anyway. Recheck intent, override, and generation after the lookup and immediately before Resume. A temporary deterministic transport test reproduced a resume in all three cases.
+
+## Validation
+
+`go test ./...`, `go test -race -shuffle=on ./...`, `go vet ./...`, `go build`, `gofmt -l .`, and `golangci-lint run ./...` passed. Temporary overlay or scratch tests reproduced the findings above; those test files were kept outside the repository or removed. No additional confirmed defects were found in the reviewed auth, config, lyrics, theme, terminal-sanitization, audio, and process-lifecycle code.
+
+**Finding count:** Standards: 4 findings, with Milkdrop's impure `View` as the clearest hard-contract violation (P2). Spec: 4 behavioral findings against package and application contracts (worst: P2).
+
+## Status (2026-10-10)
+
+All eight findings fixed, each with a regression test that fails on the old code. Not committed.
+
+- **Standards 1 (Milkdrop `View`).** New optional `visualizers.SizeAware` capability. `visualizerModel` keeps the pane size from the shell's resize handler and sizes only the visualizer on screen: on each resize while the pane is open, when it opens, and when switching presets. `Init` keeps the size. `View` no longer resizes and draws black until sized. Milkdrop golden hashes were regenerated: sizing now happens before the first `Advance`, so every frame moves one step earlier. Frames 9 and 59 under the new harness were checked byte-identical to the old frames 10 and 60.
+- **Standards 2 (search prompt).** `renderSearchPrompt` takes the bar width and keeps the end of the query (`/a:…tail█`), measured in cells. The type prefix stays in place unless it alone is too wide.
+- **Spec 1 (stuck flip).** A successful play/pause or shuffle starts a 3s settle window (`flipSettleWindow`, kept with the flip's number in `pendingFlip`). A poll that still contradicts the flip after the window wins. A new press resets the window.
+- **Spec 2 (204 visualizer).** The shell also treats a `hasTrack` change as a change. `trackURI` is kept on 204 because `withDeviceFlip` resumes inside it. The test checks that resuming the same track brings the cover back from the cache and the lyrics back. Extra fix: `v` now closes an open pane while nothing is playing.
+- **Spec 3 (paging).** Every paged `spotify` method now returns `(items, rawCount, more, err)`, not only the ones that filter, so callers can't advance by the filtered count again. Worse than reported: with a filter open (`lazyList.append`) or a pending search sync, an all-null page re-requested the same offset in a tight loop. Tested at the client, in the podcast and episode loaders (filter open, all-null first page), and in the search view.
+- **Spec 4 (SDK short Retry-After).** Did not enable `sp.WithRetry`. In zmb3 v2.4.3 it never stops retrying, also retries 202, and re-sends a PUT whose body was already read. Instead `doWithRetry` marks its requests with `withInlineRetry`. An unmarked (SDK) short 429 holds every call for exactly its Retry-After, without escalating the streak.
+- **Spec 5 (double escalation).** `doWithRetry` captures the deadline when its loop starts (`rateLimitTransport.mark`) and passes it to `throttled(startUntil)`.
+- **Spec 6 (reconnect resume).** `ensurePlaying` passes `resumeWanted()` (not superseded, no override, intent playing) to `resumeIfPaused`, which checks it again after the player-state read and right before `Resume`.
+
+Follow-up (2026-10-11), after a two-axis review of the fixes:
+
+- Sizing every Milkdrop preset on each resize, pane open or not, held about 7 MB of buffers at 250×70. Only the visualizer on screen is sized now (see Standards 1).
+- Added the missing regression tests: podcast and episode loaders past a withheld page, and resume restoring art and lyrics. Every test above was checked to fail with its fix reverted.
+- Tidying from the review: `pendingFlip` replaces the paired pending/settle fields, `nowPlayingModel.hasPlayableTrack` replaces three copies of the same check, `Model.contentHeight` replaces three copies of the pane height, and `ui/doc.go` gained an "Optimistic playback" section.
+
+Doc updates: `spotify`, `ui`, `ui/visualizers`, `bootstrap` doc.go, and the visualizer capability list in AGENTS.md. Validation: `gofmt -l .` clean, `go vet ./...`, `go build`, `go test -race -shuffle=on ./...` and `golangci-lint run ./...` (0 issues) all pass.
