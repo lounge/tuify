@@ -35,11 +35,13 @@
 // interval past the deadline. A 429 whose Retry-After is missing, zero or
 // negative arms the cooldown; only a positive value of a few seconds is
 // retried inline, and a request whose inline retries are all throttled
-// arms it too, as one throttle. Consecutive 429s escalate
-// the cooldown exponentially (up to one hour) so a persistent throttle
-// backs off instead of retrying at a fixed interval; the streak resets
-// on the first non-429 response. 429s for requests that were in flight
-// together count as one throttle.
+// arms it too, as one throttle. SDK calls (playback control, devices) are
+// not retried inline: a short Retry-After holds every call for exactly
+// that long instead, without counting toward escalation. Consecutive 429s
+// escalate the cooldown exponentially (up to one hour) so a persistent
+// throttle backs off instead of retrying at a fixed interval; the streak
+// resets on the first non-429 response. 429s for requests that were in
+// flight together count as one throttle.
 //
 // Paging: every paged method reports whether another page follows. An
 // empty page never does, whatever Spotify's total says, so a caller that

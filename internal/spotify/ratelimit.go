@@ -1,6 +1,7 @@
 package spotify
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -34,7 +35,9 @@ const (
 	rateLimitMaxBackoff = 1 * time.Hour
 	// rateLimitInlineRetryThreshold matches doWithRetry's retry budget:
 	// 429s with Retry-After at or below this are handled by the inline
-	// retry loop, so we leave the global cooldown unset for those.
+	// retry loop, so we leave the global cooldown unset for those. A
+	// request with no such loop behind it (the SDK path) gets a cooldown
+	// of exactly that Retry-After instead.
 	rateLimitInlineRetryThreshold = 10
 	// rateLimitMaxShift caps the exponential multiplier applied to the
 	// base cooldown so consecutive-429 arithmetic can't overflow. 12 is
@@ -46,7 +49,9 @@ const (
 // On 429 with a missing or large Retry-After it sets the deadline; while a
 // deadline is in the future, RoundTrip returns *RateLimitedError without
 // performing the network call. Both the SDK and our raw HTTP path share
-// the same transport, so a single 429 throttles all subsequent calls.
+// the same transport, so a single 429 throttles all subsequent calls. A
+// short Retry-After is left to the caller's inline retry when the request
+// carries withInlineRetry; any other request sets the deadline to it.
 //
 // Consecutive 429s (without an intervening non-429 response) apply an
 // exponential multiplier to the cooldown, so a persistent throttle backs
@@ -104,8 +109,17 @@ func (t *rateLimitTransport) RoundTrip(req *http.Request) (*http.Response, error
 		}
 	}
 	if hasRetryAfter && wait <= rateLimitInlineRetryThreshold {
-		// Brief throttle with a known short backoff — the caller's inline
-		// retry loop handles this without locking out everything else.
+		if retriesInline(req.Context()) {
+			// Brief throttle with a known short backoff — the caller's
+			// inline retry loop handles this without locking out
+			// everything else.
+			return resp, nil
+		}
+		// Nothing retries this request (the SDK path), so the next call
+		// would go straight back to Spotify: hold every call for the
+		// backoff Spotify asked for. It is short and known, so the
+		// streak does not escalate.
+		t.setUntil(time.Now().Add(time.Duration(wait) * time.Second))
 		return resp, nil
 	}
 	t.arm(sentUntil, time.Duration(wait)*time.Second)
@@ -175,4 +189,20 @@ func (t *rateLimitTransport) wait() time.Duration {
 		return 0
 	}
 	return remaining
+}
+
+// inlineRetryKey is the context key withInlineRetry sets.
+type inlineRetryKey struct{}
+
+// withInlineRetry marks requests made with ctx as retried by their caller
+// when Spotify answers 429 with a short Retry-After, as doWithRetry does,
+// so the transport leaves the shared cooldown unset for them.
+func withInlineRetry(ctx context.Context) context.Context {
+	return context.WithValue(ctx, inlineRetryKey{}, true)
+}
+
+// retriesInline reports whether ctx was marked by withInlineRetry.
+func retriesInline(ctx context.Context) bool {
+	marked, _ := ctx.Value(inlineRetryKey{}).(bool)
+	return marked
 }

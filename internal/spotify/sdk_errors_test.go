@@ -117,6 +117,39 @@ func TestSDKMethods_CooldownIsAPIError429(t *testing.T) {
 	}
 }
 
+// Nothing retries an SDK call inline, so a short Retry-After used to be
+// ignored: the transport left the cooldown unset for an inline retry that
+// never came, and the next call went straight back to Spotify. It now
+// holds every call for the backoff Spotify asked for.
+func TestSDKMethods_ShortRetryAfterHoldsNextCall(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range sdkCalls {
+		t.Run(tc.name, func(t *testing.T) {
+			var hits atomic.Int32
+			c := newTestClient(t, func(w http.ResponseWriter, r *http.Request) {
+				hits.Add(1)
+				w.Header().Set("Retry-After", "5")
+				w.WriteHeader(http.StatusTooManyRequests)
+			})
+
+			if err := tc.call(context.Background(), c); err == nil {
+				t.Fatal("throttled call succeeded")
+			}
+			if got := c.RateLimitWait(); got <= 0 || got > 5*time.Second {
+				t.Errorf("RateLimitWait = %v, want the 5s Retry-After", got)
+			}
+			err := tc.call(context.Background(), c)
+			if _, ok := errors.AsType[*RateLimitedError](err); !ok {
+				t.Errorf("call inside the Retry-After: err = %v, want a cooldown short-circuit", err)
+			}
+			if n := hits.Load(); n != 1 {
+				t.Errorf("server saw %d requests, want 1", n)
+			}
+		})
+	}
+}
+
 // An HTML 502 from a gateway, or an empty error body, reached the SDK as a
 // body it could not decode, so the status was lost and the page itself
 // became the banner text. The transport now gives it Spotify's error

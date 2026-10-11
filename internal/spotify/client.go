@@ -231,8 +231,9 @@ func (e *APIError) Unwrap() error {
 // deadline sleeping through. Returns an *APIError for non-2xx responses;
 // callers can errors.As to inspect the status.
 func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
+	reqCtx := withInlineRetry(ctx)
 	for range 3 {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
 		if err != nil {
 			return nil, 0, err
 		}

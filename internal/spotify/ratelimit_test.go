@@ -1,6 +1,7 @@
 package spotify
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -62,32 +63,68 @@ func TestRateLimitTransport_NoRetryAfterTriggersCooldown(t *testing.T) {
 	})
 }
 
-// TestRateLimitTransport_ShortRetryAfterPassesThrough verifies the inline
-// retry path is preserved: a 429 with a small Retry-After lets doWithRetry
-// retry without locking out everything else.
-func TestRateLimitTransport_ShortRetryAfterPassesThrough(t *testing.T) {
+// TestRateLimitTransport_ShortRetryAfter: a 429 with a small Retry-After
+// leaves the cooldown unset for a request whose caller retries inline
+// (doWithRetry), so it doesn't lock out everything else. Nothing retries
+// an SDK request, whose next call used to go straight back to Spotify:
+// that one holds every call for exactly the Retry-After, without
+// escalating the streak.
+func TestRateLimitTransport_ShortRetryAfter(t *testing.T) {
 	t.Parallel()
 
-	synctest.Test(t, func(t *testing.T) {
-		srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Retry-After", "1")
-			w.WriteHeader(http.StatusTooManyRequests)
-		}))
+	tests := []struct {
+		name     string
+		ctx      func(context.Context) context.Context
+		wantWait time.Duration
+	}{
+		{"inline retry passes through", withInlineRetry, 0},
+		{"no inline retry waits Retry-After", func(ctx context.Context) context.Context { return ctx }, 2 * time.Second},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-		rl := newRateLimitTransport(srv.Client().Transport)
-		client := &http.Client{Transport: rl}
+			synctest.Test(t, func(t *testing.T) {
+				var hits atomic.Int32
+				srv := httptest.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+					hits.Add(1)
+					w.Header().Set("Retry-After", "2")
+					w.WriteHeader(http.StatusTooManyRequests)
+				}))
 
-		req, _ := http.NewRequest(http.MethodGet, srv.URL, nil)
-		resp, err := client.Do(req)
-		if err != nil {
-			t.Fatalf("unexpected err: %v", err)
-		}
-		resp.Body.Close()
+				rl := newRateLimitTransport(srv.Client().Transport)
+				client := &http.Client{Transport: rl}
 
-		if got := rl.wait(); got != 0 {
-			t.Errorf("short Retry-After should not arm cooldown, got wait=%v", got)
-		}
-	})
+				req, _ := http.NewRequestWithContext(tc.ctx(t.Context()), http.MethodGet, srv.URL, nil)
+				resp, err := client.Do(req)
+				if err != nil {
+					t.Fatalf("unexpected err: %v", err)
+				}
+				resp.Body.Close()
+
+				if got := rl.wait(); got != tc.wantWait {
+					t.Errorf("cooldown = %v, want %v", got, tc.wantWait)
+				}
+				if got := rl.consecutive.Load(); got != 0 {
+					t.Errorf("consecutive = %d, want 0: a short, known backoff is no escalation", got)
+				}
+				if tc.wantWait == 0 {
+					return
+				}
+				req, _ = http.NewRequestWithContext(tc.ctx(t.Context()), http.MethodGet, srv.URL, nil)
+				resp, err = client.Do(req)
+				if resp != nil {
+					resp.Body.Close()
+				}
+				if _, ok := errors.AsType[*RateLimitedError](err); !ok {
+					t.Errorf("call inside the Retry-After: err = %v, want *RateLimitedError", err)
+				}
+				if got := hits.Load(); got != 1 {
+					t.Errorf("server saw %d requests, want 1", got)
+				}
+			})
+		})
+	}
 }
 
 // TestRateLimitTransport_LargeRetryAfterCapped verifies a malicious or
