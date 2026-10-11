@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -140,6 +141,55 @@ func TestDoWithRetry_429_ExhaustedRetries(t *testing.T) {
 		c.doWithRetry(t.Context(), "https://api.spotify.com/v1/test")
 		if got := c.RateLimitWait(); got != 2*rateLimitMinBackoff {
 			t.Errorf("second storm cooldown = %v, want %v", got, 2*rateLimitMinBackoff)
+		}
+	})
+}
+
+// Two requests whose inline retries ran out together are one throttle.
+// The loop that finished second used to compare the cooldown the first
+// had just armed with itself, count a second consecutive throttle and
+// double the cooldown to a minute.
+func TestDoWithRetry_429_ParallelExhaustedRetriesEscalateOnce(t *testing.T) {
+	t.Parallel()
+
+	synctest.Test(t, func(t *testing.T) {
+		// Answer requests in pairs, so both loops' attempts are on the
+		// wire before either sees its 429.
+		var (
+			mu      sync.Mutex
+			waiting chan struct{}
+		)
+		c := newBubbleClient(t, func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			if waiting == nil {
+				ch := make(chan struct{})
+				waiting = ch
+				mu.Unlock()
+				<-ch
+			} else {
+				close(waiting)
+				waiting = nil
+				mu.Unlock()
+			}
+			w.Header().Set("Retry-After", "1")
+			w.WriteHeader(http.StatusTooManyRequests)
+		})
+
+		var wg sync.WaitGroup
+		for range 2 {
+			wg.Go(func() {
+				if _, _, err := c.doWithRetry(t.Context(), "https://api.spotify.com/v1/me/player"); err == nil {
+					t.Error("throttled request succeeded")
+				}
+			})
+		}
+		wg.Wait()
+
+		if got := c.rl.consecutive.Load(); got != 1 {
+			t.Errorf("consecutive = %d, want 1", got)
+		}
+		if got := c.RateLimitWait(); got != rateLimitMinBackoff {
+			t.Errorf("cooldown = %v, want %v", got, rateLimitMinBackoff)
 		}
 	})
 }

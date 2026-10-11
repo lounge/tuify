@@ -157,11 +157,18 @@ func (t *rateLimitTransport) arm(sentUntil int64, wait time.Duration) time.Time 
 // throttled records a throttle that an inline retry loop could not clear:
 // three short Retry-After 429s in a row for one request are a sustained
 // throttle, not a blip, so the cooldown is armed and escalated like any
-// consecutive 429. The deadline the loop started under is not known here;
-// a cooldown armed meanwhile by another request is extended, not
+// consecutive 429. startUntil is the deadline in force when the loop
+// started: a cooldown armed since by another request, such as a parallel
+// loop that ran out first, is the same throttle and is extended, not
 // escalated again, as for a burst. Returns the deadline in force.
-func (t *rateLimitTransport) throttled() time.Time {
-	return t.arm(t.until.Load(), 0)
+func (t *rateLimitTransport) throttled(startUntil int64) time.Time {
+	return t.arm(startUntil, 0)
+}
+
+// mark returns the cooldown deadline in force now, for a later throttled
+// call to tell whether a cooldown was armed in between.
+func (t *rateLimitTransport) mark() int64 {
+	return t.until.Load()
 }
 
 func (t *rateLimitTransport) setUntil(deadline time.Time) {

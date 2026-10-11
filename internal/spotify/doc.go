@@ -41,7 +41,8 @@
 // escalate the cooldown exponentially (up to one hour) so a persistent
 // throttle backs off instead of retrying at a fixed interval; the streak
 // resets on the first non-429 response. 429s for requests that were in
-// flight together count as one throttle.
+// flight together, and inline retries that run out together, count as
+// one throttle.
 //
 // Paging: every paged method reports whether another page follows. An
 // empty page never does, whatever Spotify's total says, so a caller that

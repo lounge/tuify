@@ -231,6 +231,11 @@ func (e *APIError) Unwrap() error {
 // deadline sleeping through. Returns an *APIError for non-2xx responses;
 // callers can errors.As to inspect the status.
 func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, error) {
+	// The cooldown in force as the loop starts; see throttled.
+	var startUntil int64
+	if c.rl != nil {
+		startUntil = c.rl.mark()
+	}
 	reqCtx := withInlineRetry(ctx)
 	for range 3 {
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, url, nil)
@@ -292,7 +297,7 @@ func (c *Client) doWithRetry(ctx context.Context, url string) ([]byte, int, erro
 		Endpoint: url,
 	}
 	if c.rl != nil {
-		apiErr.Err = &RateLimitedError{Until: c.rl.throttled()}
+		apiErr.Err = &RateLimitedError{Until: c.rl.throttled(startUntil)}
 	}
 	return nil, http.StatusTooManyRequests, apiErr
 }
