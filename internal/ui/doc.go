@@ -84,6 +84,15 @@
 // list frame's zones can't be hit, and the Enter and "/" keys are ignored
 // for the same reason.
 //
+// # Optimistic playback
+//
+// Play/pause and shuffle flip in the bar before Spotify replies (see
+// pendingFlip in nowplaying.go). A failed reply reverts its own flip and
+// no other. A successful one leaves the flip up until a poll agrees, for
+// at most flipSettleWindow: a poll that still disagrees after that is the
+// state, since another client changed it or the device ignored the
+// command.
+//
 // # Visualizer fetches
 //
 // Album art and lyrics come from third parties (Spotify's image CDN,

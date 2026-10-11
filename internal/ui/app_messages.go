@@ -26,8 +26,8 @@ type playbackOp uint8
 const (
 	opPlayback  playbackOp = iota // play, next, previous, stop: nothing flipped ahead of the reply
 	opSeek                        // clears seekPending; lighter post-action polling
-	opPlayPause                   // reverts playing on failure
-	opShuffle                     // reverts shuffling on failure
+	opPlayPause                   // reverts playing on failure, starts its settle window on success
+	opShuffle                     // reverts shuffling on failure, starts its settle window on success
 )
 
 // playbackResultMsg is used for all device-bound commands. flip is the

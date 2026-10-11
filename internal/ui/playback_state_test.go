@@ -189,8 +189,8 @@ func TestPlaybackResultRevertsOnlyItsOwnPress(t *testing.T) {
 		pending func(np *nowPlayingModel) uint64
 		state   func(np *nowPlayingModel) bool
 	}{
-		{"play/pause", " ", opPlayPause, func(np *nowPlayingModel) uint64 { return np.playPausePending }, func(np *nowPlayingModel) bool { return np.playing }},
-		{"shuffle", "r", opShuffle, func(np *nowPlayingModel) uint64 { return np.shufflePending }, func(np *nowPlayingModel) bool { return np.shuffling }},
+		{"play/pause", " ", opPlayPause, func(np *nowPlayingModel) uint64 { return np.playPauseFlip.seq }, func(np *nowPlayingModel) bool { return np.playing }},
+		{"shuffle", "r", opShuffle, func(np *nowPlayingModel) uint64 { return np.shuffleFlip.seq }, func(np *nowPlayingModel) bool { return np.shuffling }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			m := newIntentTestModel()

@@ -95,7 +95,7 @@ func TestPlayIntent_FailedPauseRestoresPlaying(t *testing.T) {
 	m := newIntentTestModel()
 	m.nowPlaying.hasTrack, m.nowPlaying.playing = true, true
 	m, _ = pressKeys(t, m, runeKey(" "))
-	updated, _ := m.handlePlaybackResult(playbackResultMsg{op: opPlayPause, err: errTest, flip: m.nowPlaying.playPausePending})
+	updated, _ := m.handlePlaybackResult(playbackResultMsg{op: opPlayPause, err: errTest, flip: m.nowPlaying.playPauseFlip.seq})
 	if got := updated.(Model).client.PlayIntent(); got != spotify.PlayIntentPlaying {
 		t.Errorf("intent = %v after the pause failed, want playing", got)
 	}

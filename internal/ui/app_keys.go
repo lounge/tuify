@@ -150,7 +150,7 @@ func (m Model) handlePlaybackKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		m.nowPlaying.playing = !wasPlaying
 		m.client.SetPlayIntent(!wasPlaying)
 		flip := m.nowPlaying.beginFlip()
-		m.nowPlaying.playPausePending = flip
+		m.nowPlaying.playPauseFlip = pendingFlip{seq: flip}
 		return m, m.togglePlayPause(wasPlaying, flip), true
 	case "n":
 		m.nowPlaying.recordUserAction()
@@ -165,7 +165,7 @@ func (m Model) handlePlaybackKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		newShuffle := !m.nowPlaying.shuffling
 		m.nowPlaying.shuffling = newShuffle
 		flip := m.nowPlaying.beginFlip()
-		m.nowPlaying.shufflePending = flip
+		m.nowPlaying.shuffleFlip = pendingFlip{seq: flip}
 		return m, m.toggleShuffle(newShuffle, flip), true
 	case "s":
 		m.nowPlaying.recordUserAction()

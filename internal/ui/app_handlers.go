@@ -42,16 +42,16 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 		// until its reply or the next poll settles it.
 		switch msg.op {
 		case opPlayPause:
-			if msg.flip != 0 && m.nowPlaying.playPausePending == msg.flip {
-				m.nowPlaying.playPausePending = 0
+			if m.nowPlaying.playPauseFlip.is(msg.flip) {
+				m.nowPlaying.playPauseFlip = pendingFlip{}
 				m.nowPlaying.playing = !m.nowPlaying.playing
 				// The command never took effect, so neither did the
 				// intent it recorded.
 				m.client.SetPlayIntent(m.nowPlaying.playing)
 			}
 		case opShuffle:
-			if msg.flip != 0 && m.nowPlaying.shufflePending == msg.flip {
-				m.nowPlaying.shufflePending = 0
+			if m.nowPlaying.shuffleFlip.is(msg.flip) {
+				m.nowPlaying.shuffleFlip = pendingFlip{}
 				m.nowPlaying.shuffling = !m.nowPlaying.shuffling
 			}
 		case opSeek:
@@ -76,6 +76,15 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 			)
 		}
 		return m, errCmd
+	}
+	// Spotify took the command: its flip, if still the pending one, now
+	// waits only flipSettleWindow for a poll to agree.
+	switch msg.op {
+	case opPlayPause:
+		m.nowPlaying.playPauseFlip.accept(msg.flip, time.Now())
+	case opShuffle:
+		m.nowPlaying.shuffleFlip.accept(msg.flip, time.Now())
+	case opSeek, opPlayback:
 	}
 	if seek {
 		return m, tea.Tick(500*time.Millisecond, func(t time.Time) tea.Msg { return delayedPollMsg{} })

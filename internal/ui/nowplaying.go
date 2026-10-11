@@ -19,6 +19,12 @@ const (
 	// the poll rate increases to catch the track change quickly.
 	nearEndThresholdMs = 15000
 
+	// flipSettleWindow is how long after Spotify accepted a play/pause or
+	// shuffle command a poll that contradicts the optimistic flip is still
+	// taken for the API lagging behind. Past it the poll is the state:
+	// another client changed it, or the device ignored the command.
+	flipSettleWindow = 3 * time.Second
+
 	// nowPlayingPadding is the total horizontal padding (left + right) used
 	// in the now-playing area. Kept in sync with Padding(0, 1) in renderGradient.
 	nowPlayingPadding = 2
@@ -85,11 +91,11 @@ type nowPlayingModel struct {
 	// flipSeq, the reply carries it back (playbackResultMsg.flip) and a
 	// failure reverts the flip only while that number is still the pending
 	// one. So two quick presses, the first of which fails, leave the second
-	// flip in place. 0 means no flip is pending.
-	seekPending      bool
-	playPausePending uint64
-	shufflePending   uint64
-	flipSeq          uint64
+	// flip in place. See pendingFlip for how a success settles it.
+	seekPending   bool
+	playPauseFlip pendingFlip
+	shuffleFlip   pendingFlip
+	flipSeq       uint64
 
 	// Polling
 	lastUserAction time.Time // zero value means no action yet; pollInterval treats this as idle
@@ -153,7 +159,7 @@ func (m *nowPlayingModel) setDeviceOverride(overridden bool, reason string) {
 	}
 }
 
-// beginFlip numbers an optimistic flip; see playPausePending.
+// beginFlip numbers an optimistic flip; see pendingFlip.
 func (m *nowPlayingModel) beginFlip() uint64 {
 	m.flipSeq++
 	return m.flipSeq
@@ -230,8 +236,8 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 		m.hasTrack = false
 		m.playing = false
 		m.deviceName = ""
-		m.playPausePending = 0
-		m.shufflePending = 0
+		m.playPauseFlip = pendingFlip{}
+		m.shuffleFlip = pendingFlip{}
 		m.setDeviceOverride(false, "nothing playing anywhere")
 		return nil
 	}
@@ -270,12 +276,20 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 	m.hasTrack = true
 
 	// Track changed — pending play/pause is stale, accept fresh state.
-	if m.playPausePending != 0 && msg.state.TrackURI != prevURI {
-		m.playPausePending = 0
+	if msg.state.TrackURI != prevURI {
+		m.playPauseFlip = pendingFlip{}
 	}
-	if m.playPausePending != 0 {
+	// A settled flip the poll still contradicts was overridden; accept it.
+	now := time.Now()
+	if msg.state.Playing != m.playing && m.playPauseFlip.settled(now) {
+		m.playPauseFlip = pendingFlip{}
+	}
+	if msg.state.Shuffling != m.shuffling && m.shuffleFlip.settled(now) {
+		m.shuffleFlip = pendingFlip{}
+	}
+	if m.playPauseFlip.pending() {
 		if msg.state.Playing == m.playing {
-			m.playPausePending = 0
+			m.playPauseFlip = pendingFlip{}
 			m.progressMs = msg.state.ProgressMs
 		}
 	} else {
@@ -295,9 +309,9 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 			}
 		}
 	}
-	if m.shufflePending != 0 {
+	if m.shuffleFlip.pending() {
 		if msg.state.Shuffling == m.shuffling {
-			m.shufflePending = 0
+			m.shuffleFlip = pendingFlip{}
 		}
 	} else {
 		m.shuffling = msg.state.Shuffling
@@ -318,9 +332,9 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 
 	// Detect external state changes (from Spotify client, not tuify)
 	// and boost polling so follow-up changes are caught quickly.
-	externalChange := (m.playPausePending == 0 && m.playing != prevPlaying) ||
+	externalChange := (!m.playPauseFlip.pending() && m.playing != prevPlaying) ||
 		(prevURI != "" && m.trackURI != prevURI) ||
-		(m.shufflePending == 0 && m.shuffling != prevShuffling)
+		(!m.shuffleFlip.pending() && m.shuffling != prevShuffling)
 	if externalChange {
 		log.Printf("[poll] external change detected, boosting poll rate")
 		m.recordUserAction()
@@ -392,4 +406,35 @@ func (m *nowPlayingModel) setStatus(msg string, isError, spinning bool, ttl time
 	return tea.Tick(ttl, func(t time.Time) tea.Msg {
 		return clearStatusMsg{seq: seq}
 	})
+}
+
+// pendingFlip is an optimistic play/pause or shuffle flip waiting for a
+// poll to agree. seq is the number beginFlip gave it, 0 when none is
+// pending. settleBy is zero while the command is in flight; Spotify
+// accepting it sets it flipSettleWindow ahead, and a poll that still
+// contradicts the flip after that ends it.
+type pendingFlip struct {
+	seq      uint64
+	settleBy time.Time
+}
+
+// pending reports whether a flip is waiting for a poll to agree.
+func (f *pendingFlip) pending() bool { return f.seq != 0 }
+
+// is reports whether seq, the flip number a reply carries, is the
+// pending flip.
+func (f *pendingFlip) is(seq uint64) bool { return seq != 0 && f.seq == seq }
+
+// accept starts the settle window when the reply for flip seq reports
+// success, unless a later press has replaced that flip.
+func (f *pendingFlip) accept(seq uint64, now time.Time) {
+	if f.is(seq) {
+		f.settleBy = now.Add(flipSettleWindow)
+	}
+}
+
+// settled reports whether the pending flip's settle window has passed,
+// so a poll that contradicts it is the state.
+func (f *pendingFlip) settled(now time.Time) bool {
+	return f.pending() && !f.settleBy.IsZero() && now.After(f.settleBy)
 }

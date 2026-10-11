@@ -109,20 +109,20 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 			setup: func(np *nowPlayingModel) {
 				// Playing X, then the user pressed space: optimistic pause.
 				np.trackURI, np.hasTrack, np.progressMs = trackX, true, 4000
-				np.playing, np.playPausePending = false, 1
+				np.playing, np.playPauseFlip.seq = false, 1
 			},
 			steps: []npStep{
 				{msg: playerStateMsg{state: pstate(trackX, true, 5000)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					wantPlayback(t, np, false, 4000)
-					if np.playPausePending == 0 {
-						t.Error("stale playing=true cleared playPausePending")
+					if np.playPauseFlip.seq == 0 {
+						t.Error("stale playing=true cleared playPauseFlip.seq")
 					}
 					wantNoResume(t, r)
 				}},
 				{msg: playerStateMsg{state: pstate(trackX, false, 5100)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					wantPlayback(t, np, false, 5100)
-					if np.playPausePending != 0 {
-						t.Error("confirming state did not clear playPausePending")
+					if np.playPauseFlip.seq != 0 {
+						t.Error("confirming state did not clear playPauseFlip.seq")
 					}
 				}},
 				{msg: playerStateMsg{state: pstate(trackX, true, 9000)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
@@ -132,15 +132,50 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 			},
 		},
 		{
+			name: "pending pause holds within its settle window",
+			setup: func(np *nowPlayingModel) {
+				np.trackURI, np.hasTrack, np.progressMs = trackX, true, 4000
+				np.playing, np.playPauseFlip.seq = false, 1
+				np.playPauseFlip.settleBy = time.Now().Add(time.Minute) // Spotify accepted it just now
+			},
+			steps: []npStep{
+				{msg: playerStateMsg{state: pstate(trackX, true, 5000)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
+					wantPlayback(t, np, false, 4000)
+					if np.playPauseFlip.seq == 0 {
+						t.Error("a poll inside the settle window cleared playPauseFlip.seq")
+					}
+				}},
+			},
+		},
+		{
+			// Another client resumed before a poll confirmed the pause, or
+			// the device ignored it. Waiting for "paused" left the UI paused
+			// for good, with space sending Resume to a playing player.
+			name: "settled pending pause yields to the polled state",
+			setup: func(np *nowPlayingModel) {
+				np.trackURI, np.hasTrack, np.progressMs = trackX, true, 4000
+				np.playing, np.playPauseFlip.seq = false, 1
+				np.playPauseFlip.settleBy = time.Now().Add(-time.Millisecond)
+			},
+			steps: []npStep{
+				{msg: playerStateMsg{state: pstate(trackX, true, 9000)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
+					wantPlayback(t, np, true, 9000)
+					if np.playPauseFlip.seq != 0 {
+						t.Error("settled flip still pending after a contradicting poll")
+					}
+				}},
+			},
+		},
+		{
 			name: "pending pause is dropped when the track changes",
 			setup: func(np *nowPlayingModel) {
 				np.trackURI, np.hasTrack, np.progressMs = trackX, true, 4000
-				np.playing, np.playPausePending = false, 1
+				np.playing, np.playPauseFlip.seq = false, 1
 			},
 			steps: []npStep{
 				{msg: playerStateMsg{state: pstate(trackY, true, 700)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					wantPlayback(t, np, true, 700)
-					if np.playPausePending != 0 {
+					if np.playPauseFlip.seq != 0 {
 						t.Error("track change must drop the stale pending play/pause")
 					}
 				}},
@@ -150,22 +185,37 @@ func TestHandlePlayerState_Sequences(t *testing.T) {
 			name: "pending shuffle reconciles on confirmation",
 			setup: func(np *nowPlayingModel) {
 				np.trackURI, np.hasTrack, np.playing = trackX, true, true
-				np.shuffling, np.shufflePending = true, 1 // user pressed r
+				np.shuffling, np.shuffleFlip.seq = true, 1 // user pressed r
 			},
 			steps: []npStep{
 				{msg: playerStateMsg{state: withShuffle(pstate(trackX, true, 1000), false)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
-					if !np.shuffling || np.shufflePending == 0 {
-						t.Errorf("stale shuffle=false applied: shuffling=%v pending=%v", np.shuffling, np.shufflePending)
+					if !np.shuffling || np.shuffleFlip.seq == 0 {
+						t.Errorf("stale shuffle=false applied: shuffling=%v pending=%v", np.shuffling, np.shuffleFlip.seq)
 					}
 				}},
 				{msg: playerStateMsg{state: withShuffle(pstate(trackX, true, 2000), true)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
-					if !np.shuffling || np.shufflePending != 0 {
-						t.Errorf("confirmation not reconciled: shuffling=%v pending=%v", np.shuffling, np.shufflePending)
+					if !np.shuffling || np.shuffleFlip.seq != 0 {
+						t.Errorf("confirmation not reconciled: shuffling=%v pending=%v", np.shuffling, np.shuffleFlip.seq)
 					}
 				}},
 				{msg: playerStateMsg{state: withShuffle(pstate(trackX, true, 3000), false)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
 					if np.shuffling {
 						t.Error("external shuffle-off after reconciliation was not applied")
+					}
+				}},
+			},
+		},
+		{
+			name: "settled pending shuffle yields to the polled state",
+			setup: func(np *nowPlayingModel) {
+				np.trackURI, np.hasTrack, np.playing = trackX, true, true
+				np.shuffling, np.shuffleFlip.seq = true, 1
+				np.shuffleFlip.settleBy = time.Now().Add(-time.Millisecond)
+			},
+			steps: []npStep{
+				{msg: playerStateMsg{state: withShuffle(pstate(trackX, true, 1000), false)}, check: func(t *testing.T, np *nowPlayingModel, r *episodeResumeMsg) {
+					if np.shuffling || np.shuffleFlip.seq != 0 {
+						t.Errorf("settled shuffle kept against the poll: shuffling=%v pending=%v", np.shuffling, np.shuffleFlip.seq)
 					}
 				}},
 			},

@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 	"testing/synctest"
+	"time"
 
 	"github.com/charmbracelet/bubbles/list"
 	tea "github.com/charmbracelet/bubbletea"
@@ -96,28 +97,61 @@ func TestHandlePlaybackResult_FailureRevertsOnlyItsOwnFlip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			m := newTestModelWithClient("")
 			// The user paused and turned shuffle on; neither reply is in yet.
-			m.nowPlaying.playing, m.nowPlaying.playPausePending = false, m.nowPlaying.beginFlip()
-			m.nowPlaying.shuffling, m.nowPlaying.shufflePending = true, m.nowPlaying.beginFlip()
+			m.nowPlaying.playing, m.nowPlaying.playPauseFlip.seq = false, m.nowPlaying.beginFlip()
+			m.nowPlaying.shuffling, m.nowPlaying.shuffleFlip.seq = true, m.nowPlaying.beginFlip()
 			var flip uint64
 			switch tt.op {
 			case opPlayPause:
-				flip = m.nowPlaying.playPausePending
+				flip = m.nowPlaying.playPauseFlip.seq
 			case opShuffle:
-				flip = m.nowPlaying.shufflePending
+				flip = m.nowPlaying.shuffleFlip.seq
 			case opPlayback, opSeek:
 			}
 
 			updated, _ := m.handlePlaybackResult(playbackResultMsg{op: tt.op, err: errTest, flip: flip})
 			np := updated.(Model).nowPlaying
-			if np.playing != tt.wantPlaying || (np.playPausePending != 0) != tt.wantPlayPending {
-				t.Errorf("playing=%v playPausePending=%v, want %v/%v",
-					np.playing, np.playPausePending, tt.wantPlaying, tt.wantPlayPending)
+			if np.playing != tt.wantPlaying || (np.playPauseFlip.seq != 0) != tt.wantPlayPending {
+				t.Errorf("playing=%v playPauseFlip.seq=%v, want %v/%v",
+					np.playing, np.playPauseFlip.seq, tt.wantPlaying, tt.wantPlayPending)
 			}
-			if np.shuffling != tt.wantShuffling || (np.shufflePending != 0) != tt.wantShufflePending {
-				t.Errorf("shuffling=%v shufflePending=%v, want %v/%v",
-					np.shuffling, np.shufflePending, tt.wantShuffling, tt.wantShufflePending)
+			if np.shuffling != tt.wantShuffling || (np.shuffleFlip.seq != 0) != tt.wantShufflePending {
+				t.Errorf("shuffling=%v shuffleFlip.seq=%v, want %v/%v",
+					np.shuffling, np.shuffleFlip.seq, tt.wantShuffling, tt.wantShufflePending)
 			}
 		})
+	}
+}
+
+// A command Spotify accepted starts the settle window of its own flip, so
+// a poll that keeps contradicting it is eventually believed. A reply for a
+// flip the user has since replaced with another press leaves the newer
+// flip waiting on its own reply.
+func TestHandlePlaybackResult_SuccessStartsOwnSettleWindow(t *testing.T) {
+	m := newTestModelWithClient("")
+	first := m.nowPlaying.beginFlip()
+	m.nowPlaying.playing, m.nowPlaying.playPauseFlip.seq = false, m.nowPlaying.beginFlip()
+	m.nowPlaying.shuffling, m.nowPlaying.shuffleFlip.seq = true, m.nowPlaying.beginFlip()
+
+	updated, _ := m.handlePlaybackResult(playbackResultMsg{op: opPlayPause, flip: first})
+	m = updated.(Model)
+	if !m.nowPlaying.playPauseFlip.settleBy.IsZero() {
+		t.Error("a superseded flip's reply started the pending flip's settle window")
+	}
+
+	before := time.Now()
+	updated, _ = m.handlePlaybackResult(playbackResultMsg{op: opPlayPause, flip: m.nowPlaying.playPauseFlip.seq})
+	m = updated.(Model)
+	if got := m.nowPlaying.playPauseFlip.settleBy; got.Before(before.Add(flipSettleWindow)) {
+		t.Errorf("playPauseFlip.settleBy = %v, want at least %v after the reply", got.Sub(before), flipSettleWindow)
+	}
+	if !m.nowPlaying.shuffleFlip.settleBy.IsZero() {
+		t.Error("play/pause reply started the shuffle flip's settle window")
+	}
+
+	// A new press is a new command in flight: its window starts over.
+	m, _ = pressKeys(t, m, runeKey(" "))
+	if !m.nowPlaying.playPauseFlip.settleBy.IsZero() {
+		t.Error("a new press kept the previous flip's settle deadline")
 	}
 }
 
