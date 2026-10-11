@@ -101,7 +101,9 @@
 // visualizers and records the track; opening the pane fetches what is
 // not cached, and a fetch already in flight for the same image or track
 // is left to finish rather than restarted. An item that is not a track
-// or episode (an ad, a local file) puts the pane in its "No track" state.
+// or episode (an ad, a local file), or nothing playing at all, puts the
+// pane in its "No track" state; playback coming back sets it up again,
+// from the caches when it is the same track.
 //
 // The image and lyrics loaders (asyncLoader in visualizer_cache.go) run
 // each fetch on a goroutine that sends exactly one result on that

@@ -191,7 +191,9 @@ func (m Model) handleNavigationKey(msg tea.KeyMsg) (Model, tea.Cmd, bool) {
 		if m.miniMode {
 			return m, nil, true
 		}
-		if m.nowPlaying.hasTrack && isPlayableURI(m.nowPlaying.trackURI) {
+		// Opening needs something to show; closing never does, or a pane
+		// left open when playback stopped could only be closed with Back.
+		if m.visualizer.active || m.nowPlaying.hasPlayableTrack() {
 			cmd := m.visualizer.toggle(m.nowPlaying.trackInfo())
 			return m, cmd, true
 		}

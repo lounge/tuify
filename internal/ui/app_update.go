@@ -229,15 +229,19 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Re-init the visualizer on a track change. Album art and lyrics are
 	// fetched only while the pane is open (see visualizerModel.setTrack);
-	// an item that is not a track or episode (an ad, a local file) puts
-	// the pane in its "No track" state rather than leaving the previous
-	// track's art and lyrics up.
+	// an item that is not a track or episode (an ad, a local file), or
+	// nothing playing at all, puts the pane in its "No track" state rather
+	// than leaving the previous track's art and lyrics up. Nothing playing
+	// keeps trackURI (withDevice resumes inside it), so playback coming
+	// back is a change too, even to the same item.
+	playable := m.nowPlaying.hasPlayableTrack()
+	changed := m.nowPlaying.trackURI != prevURI || m.nowPlaying.hasTrack != prevHasTrack
 	switch {
-	case m.nowPlaying.trackURI != prevURI && isPlayableURI(m.nowPlaying.trackURI):
+	case changed && playable:
 		m.visualizer.setTrack(m.nowPlaying.trackInfo())
-	case m.nowPlaying.trackURI != prevURI:
+	case changed:
 		m.visualizer.clearTrack()
-	case m.nowPlaying.imageURL != m.visualizer.imageURL && isPlayableURI(m.nowPlaying.trackURI):
+	case m.nowPlaying.imageURL != m.visualizer.imageURL && playable:
 		m.visualizer.setImageURL(m.nowPlaying.imageURL)
 	}
 	if cmd := m.windowTitle(prevURI, prevHasTrack); cmd != nil {
@@ -269,7 +273,7 @@ func (m Model) handleStateUpdate(msg tea.Msg) (tea.Model, tea.Cmd) {
 // on those transitions only, not on every poll.
 func (m Model) windowTitle(prevURI string, prevHasTrack bool) tea.Cmd {
 	np := m.nowPlaying
-	shown := np.hasTrack && isPlayableURI(np.trackURI)
+	shown := np.hasPlayableTrack()
 	wasShown := prevHasTrack && isPlayableURI(prevURI)
 	switch {
 	case shown && (np.trackURI != prevURI || !wasShown):

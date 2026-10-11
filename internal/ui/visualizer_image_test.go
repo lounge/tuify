@@ -3,6 +3,7 @@ package ui
 import (
 	"bytes"
 	"image"
+	"image/color"
 	"image/png"
 	"net/http"
 	"net/http/httptest"
@@ -13,6 +14,23 @@ func encodePNG(t *testing.T, w, h int) []byte {
 	t.Helper()
 	var buf bytes.Buffer
 	if err := png.Encode(&buf, image.NewGray(image.Rect(0, 0, w, h))); err != nil {
+		t.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// encodeColorPNG encodes a w×h PNG of colour c, for art that has to show
+// against the pane's background.
+func encodeColorPNG(t *testing.T, w, h int, c color.RGBA) []byte {
+	t.Helper()
+	img := image.NewRGBA(image.Rect(0, 0, w, h))
+	for y := range h {
+		for x := range w {
+			img.SetRGBA(x, y, c)
+		}
+	}
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, img); err != nil {
 		t.Fatal(err)
 	}
 	return buf.Bytes()

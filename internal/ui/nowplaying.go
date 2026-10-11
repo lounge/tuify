@@ -187,6 +187,12 @@ func (m *nowPlayingModel) trackInfo() trackInfo {
 	}
 }
 
+// hasPlayableTrack reports whether a track or episode is reported, playing
+// or paused: not nothing at all, and not an ad or local file.
+func (m *nowPlayingModel) hasPlayableTrack() bool {
+	return m.hasTrack && isPlayableURI(m.trackURI)
+}
+
 // Lifecycle
 
 func (m *nowPlayingModel) Init() tea.Cmd {

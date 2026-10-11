@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"image/color"
 	"net/http"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
+
+	"github.com/lounge/tuify/internal/spotify"
 )
 
 // fetchCounter serves album art at /art/* (blocking until release is
@@ -117,4 +120,61 @@ func TestUpdate_NonPlayableItemClearsVisualizer(t *testing.T) {
 	if got := m.visualizer.View(40, 5); !strings.Contains(got, "No track") {
 		t.Errorf("visualizer view = %q, want the No track state", got)
 	}
+}
+
+// Nothing playing anywhere (HTTP 204) keeps trackURI, so the URI-change
+// check left the last track's art and lyrics in the pane while the bar
+// said "No track playing". Playback coming back to that same track must
+// put its art and lyrics back, and the pane must still close with v.
+func TestUpdate_NothingPlayingClearsVisualizer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		f := &fetchCounter{png: encodeColorPNG(t, 8, 8, color.RGBA{R: 200, G: 40, B: 40, A: 255})}
+		const cover = "200;40;40" // the cover's colour in the frame's escapes
+		m := newIntentTestModel()
+		m.visualizer = newLyricsTestModel(t, f)
+		playing := func(progressMs int) *spotify.PlayerState {
+			s := pstate("spotify:track:a", true, progressMs)
+			s.ImageURL = "https://img.test/art/a"
+			return s
+		}
+		// shown lets the fetches land and runs the cover's 150-frame
+		// dissolve to the end, then returns the art and lyrics frames.
+		shown := func() (art, words string) {
+			synctest.Wait()
+			for range 200 {
+				m.visualizer.advance(0)
+			}
+			return m.visualizer.View(40, 10), lyricsViz(t, m.visualizer).View(40, 10)
+		}
+
+		m = applyState(t, m, playing(1000))
+		m, _ = pressKeys(t, m, runeKey("v"))
+		art, words := shown()
+		if !m.visualizer.active || !strings.Contains(art, cover) {
+			t.Fatalf("setup: pane active=%v, cover drawn=%v, want the open pane showing it", m.visualizer.active, strings.Contains(art, cover))
+		}
+
+		m = applyState(t, m, nil)
+		if m.visualizer.trackID != "" {
+			t.Errorf("nothing playing: visualizer track %q, want cleared", m.visualizer.trackID)
+		}
+		if got := m.visualizer.View(40, 5); !strings.Contains(got, "No track") {
+			t.Errorf("visualizer view = %q, want the No track state", got)
+		}
+
+		m = applyState(t, m, playing(2000))
+		if gotArt, gotWords := shown(); gotArt != art || gotWords != words {
+			t.Errorf("playback back on the same track: art restored=%v, lyrics restored=%v", gotArt == art, gotWords == words)
+		}
+		if n := f.images.Load(); n != 1 {
+			t.Errorf("%d art downloads, want 1 (the cached cover reused)", n)
+		}
+
+		m = applyState(t, m, nil)
+		m, _ = pressKeys(t, m, runeKey("v"))
+		if m.visualizer.active {
+			t.Error("v did not close the pane while nothing is playing")
+		}
+		synctest.Wait()
+	})
 }
