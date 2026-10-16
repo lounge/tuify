@@ -46,7 +46,8 @@ const (
 	PlayIntentUnknown PlayIntent = iota
 	// PlayIntentPlaying: the user started playback or it was seen running.
 	PlayIntentPlaying
-	// PlayIntentPaused: the user paused or stopped playback.
+	// PlayIntentPaused: the user paused or stopped playback, or it has
+	// stayed paused long enough to be their doing.
 	PlayIntentPaused
 )
 
@@ -96,9 +97,10 @@ func New(httpClient *http.Client, opts ...Option) *Client {
 }
 
 // SetPlayIntent records whether the user wants playback running. The UI
-// sets it from the user's own play, pause and stop actions and from polls
-// that report playback running; not from a poll that reports it paused,
-// since a dropped librespot session looks exactly like that.
+// sets it from the user's own play, pause and stop actions, from polls
+// that report playback running, and from polls that keep reporting it
+// paused or stopped for a while; not from the first such poll, since a
+// dropped librespot session looks exactly like that until the reconnect.
 func (c *Client) SetPlayIntent(playing bool) {
 	v := PlayIntentPaused
 	if playing {

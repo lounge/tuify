@@ -47,7 +47,7 @@ func (m Model) handlePlaybackResult(msg playbackResultMsg) (tea.Model, tea.Cmd) 
 				m.nowPlaying.playing = !m.nowPlaying.playing
 				// The command never took effect, so neither did the
 				// intent it recorded.
-				m.client.SetPlayIntent(m.nowPlaying.playing)
+				m.nowPlaying.setPlayIntent(m.nowPlaying.playing)
 			}
 		case opShuffle:
 			if m.nowPlaying.shuffleFlip.is(msg.flip) {

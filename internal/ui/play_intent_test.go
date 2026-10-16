@@ -2,6 +2,7 @@ package ui
 
 import (
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/lounge/tuify/internal/spotify"
@@ -9,8 +10,9 @@ import (
 
 // The librespot reconnect handler reads the play intent to decide whether
 // to resume after a dropped session, so the UI must record the user's own
-// play/pause actions and playback seen running, but never take a paused
-// poll as intent: a broken session reports exactly that.
+// play/pause actions and playback seen running, and take a paused poll as
+// intent only once the pause lasts: a broken session reports exactly that
+// until the reconnect, but a pause made in another client must stop it.
 
 func applyMsg(t *testing.T, m Model, msg tea.Msg) Model {
 	t.Helper()
@@ -59,7 +61,7 @@ func TestPlayIntent_PlayingAnItemPlays(t *testing.T) {
 	}
 }
 
-func TestPlayIntent_PollsOnlyRecordPlaying(t *testing.T) {
+func TestPlayIntent_BriefPauseKeepsPlaying(t *testing.T) {
 	m := newIntentTestModel()
 	if got := m.client.PlayIntent(); got != spotify.PlayIntentUnknown {
 		t.Fatalf("fresh intent = %v, want unknown", got)
@@ -74,6 +76,40 @@ func TestPlayIntent_PollsOnlyRecordPlaying(t *testing.T) {
 	m = applyMsg(t, m, playerStateMsg{state: nil})
 	if got := m.client.PlayIntent(); got != spotify.PlayIntentPlaying {
 		t.Errorf("after paused and empty polls intent = %v, want still playing", got)
+	}
+}
+
+// A pause made in another Spotify client, or playback stopped there, must
+// keep a later reconnect from starting playback on tuify.
+func TestPlayIntent_LastingPauseRecordsPaused(t *testing.T) {
+	for name, state := range map[string]*spotify.PlayerState{
+		"paused":  pstate(intentTrack, false, 2000),
+		"nothing": nil,
+	} {
+		t.Run(name, func(t *testing.T) {
+			m := newIntentTestModel()
+			m = applyMsg(t, m, playerStateMsg{state: pstate(intentTrack, true, 1000)})
+			m = applyMsg(t, m, playerStateMsg{state: state})
+			m.nowPlaying.pausedSince = m.nowPlaying.pausedSince.Add(-pauseIntentGrace)
+			m = applyMsg(t, m, playerStateMsg{state: state})
+			if got := m.client.PlayIntent(); got != spotify.PlayIntentPaused {
+				t.Errorf("intent = %v after a lasting pause, want paused", got)
+			}
+		})
+	}
+}
+
+// Asking for playback restarts the pause clock: a poll that lands before
+// the request takes effect must not count the pause from before it.
+func TestPlayIntent_UserPlayRestartsPauseClock(t *testing.T) {
+	m := newIntentTestModel()
+	m.nowPlaying.trackURI = intentTrack
+	m.nowPlaying.hasTrack = true
+	m.nowPlaying.pausedSince = time.Now().Add(-2 * pauseIntentGrace)
+	m, _ = pressKeys(t, m, runeKey("n"))
+	m = applyMsg(t, m, playerStateMsg{state: pstate(intentTrack, false, 2000)})
+	if got := m.client.PlayIntent(); got != spotify.PlayIntentPlaying {
+		t.Errorf("intent = %v after next and a paused poll, want playing", got)
 	}
 }
 

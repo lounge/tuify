@@ -15,8 +15,9 @@
 // coordinates manual-switch awareness between the UI and the librespot
 // reconnect handler. The atomic play intent (SetPlayIntent, PlayIntent)
 // does the same for whether the user wants playback running: the UI
-// records play, pause and stop and playback seen running, and the
-// reconnect handler reads it to decide whether to resume.
+// records play, pause and stop, playback seen running, and playback seen
+// paused or stopped for a while (so a pause made in another Spotify client
+// counts), and the reconnect handler reads it to decide whether to resume.
 //
 // Errors: non-2xx responses surface as *APIError (carrying status and
 // truncated body) from every Client method, whether the call went

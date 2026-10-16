@@ -25,6 +25,14 @@ const (
 	// another client changed it, or the device ignored the command.
 	flipSettleWindow = 3 * time.Second
 
+	// pauseIntentGrace is how long polls must keep finding playback paused
+	// or stopped before the UI takes that as the user's play intent. A
+	// dropped librespot session reports the same state until the reconnect
+	// transfers and resumes, which takes well under this, while a pause the
+	// user made outside tuify's keys (another Spotify client) lasts longer
+	// and must keep a later reconnect from starting playback.
+	pauseIntentGrace = time.Minute
+
 	// nowPlayingPadding is the total horizontal padding (left + right) used
 	// in the now-playing area. Kept in sync with Padding(0, 1) in renderGradient.
 	nowPlayingPadding = 2
@@ -85,6 +93,11 @@ type nowPlayingModel struct {
 	durationMs    int
 	deviceName    string
 	volumePercent int // active device volume 0–100; 100 when no data
+
+	// pausedSince is when polls first found playback paused or stopped
+	// since it last ran or the user asked for it; zero while it plays.
+	// See notePaused.
+	pausedSince time.Time
 
 	// Pending optimistic updates awaiting API confirmation. Play/pause and
 	// shuffle flip ahead of the reply; each flip takes a number from
@@ -156,6 +169,28 @@ func (m *nowPlayingModel) setDeviceOverride(overridden bool, reason string) {
 		log.Printf("[device] override set: %s", reason)
 	} else {
 		log.Printf("[device] override cleared: %s", reason)
+	}
+}
+
+// setPlayIntent records the user's play intent on the client, read by the
+// librespot reconnect handler, and restarts notePaused's clock.
+func (m *nowPlayingModel) setPlayIntent(playing bool) {
+	m.pausedSince = time.Time{}
+	m.client.SetPlayIntent(playing)
+}
+
+// notePaused handles a poll that found playback paused or stopped. Such a
+// poll becomes the play intent only once playback has stayed that way for
+// pauseIntentGrace: a dropped librespot session looks the same until the
+// reconnect resumes it, but a pause made in another Spotify client must
+// not be undone by a later reconnect.
+func (m *nowPlayingModel) notePaused(now time.Time) {
+	if m.pausedSince.IsZero() {
+		m.pausedSince = now
+		return
+	}
+	if now.Sub(m.pausedSince) >= pauseIntentGrace {
+		m.client.SetPlayIntent(false)
 	}
 }
 
@@ -245,6 +280,7 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 		m.playPauseFlip = pendingFlip{}
 		m.shuffleFlip = pendingFlip{}
 		m.setDeviceOverride(false, "nothing playing anywhere")
+		m.notePaused(time.Now())
 		return nil
 	}
 
@@ -302,9 +338,12 @@ func (m *nowPlayingModel) handlePlayerState(msg playerStateMsg) tea.Cmd {
 		m.playing = msg.state.Playing
 		if m.playing {
 			// Playback seen running is the user's intent whoever started
-			// it. A paused report is not: a dropped librespot session
-			// reports exactly that, and the reconnect must still resume.
-			m.client.SetPlayIntent(true)
+			// it. A paused report counts only once it lasts: a dropped
+			// librespot session reports exactly that, and the reconnect
+			// must still resume.
+			m.setPlayIntent(true)
+		} else {
+			m.notePaused(now)
 		}
 		if !m.seekPending {
 			// Until the API catches up to a cached resume position, keep
