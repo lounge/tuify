@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -504,13 +505,23 @@ func TestScheduleRestart_RetriesFailedLaunchUntilStop(t *testing.T) {
 
 // fakeLibrespot writes body as an executable shell script and returns its
 // path. Tests that use it are skipped on Windows.
+//
+// The script is written holding syscall.ForkLock for reading. Parallel
+// tests fork children all the time, and a child forked while the script
+// is still open for writing keeps that fd until it execs; running the
+// script meanwhile fails on Linux with ETXTBSY, "text file busy"
+// (golang/go#22315). A fork holds ForkLock for writing, so none can start
+// while the fd is open.
 func fakeLibrespot(t *testing.T, body string) string {
 	t.Helper()
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a shell script as the fake librespot")
 	}
 	script := filepath.Join(t.TempDir(), "librespot")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\n"+body), 0o700); err != nil { //nolint:gosec // the fake binary must be executable
+	syscall.ForkLock.RLock()
+	err := os.WriteFile(script, []byte("#!/bin/sh\n"+body), 0o700) //nolint:gosec // the fake binary must be executable
+	syscall.ForkLock.RUnlock()
+	if err != nil {
 		t.Fatal(err)
 	}
 	return script
@@ -693,14 +704,7 @@ func (b *slowLog) String() string {
 //
 // Not parallel: it redirects the global logger.
 func TestLaunch_LogsOutputWrittenBeforeExit(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("uses a shell script as the fake librespot")
-	}
-	script := filepath.Join(t.TempDir(), "librespot")
-	body := "#!/bin/sh\ni=0\nwhile [ $i -lt 300 ]; do echo \"line $i\" >&2; i=$((i+1)); done\necho 'FATAL: last words' >&2\nexit 1\n"
-	if err := os.WriteFile(script, []byte(body), 0o700); err != nil { //nolint:gosec // the fake binary must be executable
-		t.Fatal(err)
-	}
+	script := fakeLibrespot(t, "i=0\nwhile [ $i -lt 300 ]; do echo \"line $i\" >&2; i=$((i+1)); done\necho 'FATAL: last words' >&2\nexit 1\n")
 
 	var logs slowLog
 	prev := log.Writer()
